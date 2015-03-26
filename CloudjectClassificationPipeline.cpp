@@ -471,11 +471,11 @@ void CloudjectClassificationPipelineBase<T>::getTestCloudjects(boost::shared_ptr
 // ----------------------------------------------------------------------------
 
 CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::CloudjectClassificationPipeline()
-: CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>(), m_bPerCategoryRed(false), m_bPerFoldQuantization(false)
+: CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>(), m_bCentersStratification(false), m_bPerStrateReduction(false), m_bGlobalQuantization(false)
 {
 }
 
-CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::CloudjectClassificationPipeline(const CloudjectClassificationPipeline<pcl::PFHRGBSignature250>& rhs) : CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>(rhs), m_bPerCategoryRed(false), m_bPerFoldQuantization(false)
+CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::CloudjectClassificationPipeline(const CloudjectClassificationPipeline<pcl::PFHRGBSignature250>& rhs) : CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>(rhs), m_bCentersStratification(false), m_bPerStrateReduction(false), m_bGlobalQuantization(false)
 {
     *this = rhs;
 }
@@ -486,138 +486,30 @@ CloudjectClassificationPipeline<pcl::PFHRGBSignature250>& CloudjectClassificatio
     {
         m_q = rhs.m_q;
         m_C = rhs.m_C;
-        m_bPerCategoryRed = rhs.m_bPerCategoryRed;
-        m_bPerFoldQuantization = rhs.m_bPerFoldQuantization;
+        
+        m_bGlobalQuantization = rhs.m_bGlobalQuantization;
+        
+        m_bCentersStratification = rhs. m_bCentersStratification;
+        m_bPerStrateReduction = rhs.m_bPerStrateReduction;
     }
     
     return *this;
 }
 
-//void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::bowSampleFromCloudjects(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, int q, cv::Mat& W, cv::Mat& Q)
-//{
-//    cv::Mat X, c;
-//    std::map<std::string,cv::Mat> XMap, cMap;
-//    
-//    int numInstances = 0;
-//    int numPointInstances = 0;
-//    std::map<std::string,int> numInstancesMap;
-//    std::map<std::string,int> numPointInstancesMap; // total no. descriptor points (no. rows of X and c actually)
-//
-//    std::list<Cloudject::Ptr>::iterator it;
-//    for (it = cloudjects->begin(); it != cloudjects->end(); ++it)
-//    {
-//        (*it)->allocate();
-//    
-//        // General couting
-//        numInstances ++;
-//        numPointInstances += (*it)->getNumOfDescriptorPoints();
-//        
-//        // Category counting
-//        std::set<std::string> labels = (*it)->getRegionLabels();
-//        std::set<std::string>::iterator jt;
-//        for (jt = labels.begin(); jt != labels.end(); ++jt)
-//        {
-//            numInstancesMap[*jt]++;
-//            numPointInstancesMap[*jt] += (*it)->getNumOfDescriptorPoints();
-//        }
-//    }
-//    
-//    for (int k = 0; k < m_Categories.size(); k++)
-//    {
-//        XMap[m_Categories[k]].create(numPointInstancesMap[m_Categories[k]], 250, cv::DataType<float>::type);
-//        cMap[m_Categories[k]].create(numPointInstancesMap[m_Categories[k]], 1, cv::DataType<int>::type);
-//    }
-//    
-//    std::map<std::string,int> jPtrMap; // counter for descriptors
-//    std::map<std::string,int> iPtrMap; // counter (id) for cloudjects
-//    for (it = cloudjects->begin(); (it != cloudjects->end()); ++it)
-//    {
-//        pcl::PointCloud<pcl::PFHRGBSignature250>* pDescriptor = ((pcl::PointCloud<pcl::PFHRGBSignature250>*) (*it)->getDescriptor());
-//        std::set<std::string> labels = (*it)->getRegionLabels();
-//        
-//        std::set<std::string>::iterator jt;
-//        for (jt = labels.begin(); jt != labels.end(); ++jt)
-//        {
-//            for (int p = 0; (p < pDescriptor->points.size()); p++)
-//            {
-//                cv::Mat row (1, 250, cv::DataType<float>::type, pDescriptor->points[p].histogram);
-//                row.copyTo(XMap[*jt].row(jPtrMap[*jt]));
-//                
-//                cMap[*jt].at<int>(jPtrMap[*jt],0) = iPtrMap[*jt];
-//                
-//                jPtrMap[*jt]++;
-//            }
-//        
-//            iPtrMap[*jt]++;
-//        }
-//    }
-//    
-//    // Find quantization vectors
-//    std::vector<cv::Mat> QVec (m_Categories.size());
-//    for (int k = 0; k < m_Categories.size(); k++)
-//    {
-//        cv::Mat u;
-//        cv::kmeans(XMap[m_Categories[k]], q, u, cv::TermCriteria(), 3, cv::KMEANS_PP_CENTERS, QVec[k]);
-//    }
-//    cv::vconcat(QVec,Q);
-//
-//    XMap.clear();
-//    cMap.clear();
-//    
-//    X.create(numPointInstances, 250, cv::DataType<float>::type);
-//    c.create(numPointInstances,   1, cv::DataType<int>::type);
-//    
-//    int jPtr = 0; // counter for descriptors
-//    int iPtr = 0; // counter (id) for cloudjects
-//    for (it = cloudjects->begin(); (it != cloudjects->end()); ++it)
-//    {
-//        pcl::PointCloud<pcl::PFHRGBSignature250>* pDescriptor = ((pcl::PointCloud<pcl::PFHRGBSignature250>*) (*it)->getDescriptor());
-//        
-//        for (int p = 0; (p < pDescriptor->points.size()); p++)
-//        {
-//            cv::Mat row (1, 250, cv::DataType<float>::type, pDescriptor->points[p].histogram);
-//            row.copyTo(X.row(jPtr));
-//            
-//            c.at<int>(jPtr,0) = iPtr;
-//            
-//            jPtr++;
-//        }
-//        iPtr++;
-////        (*it)->release();
-//    }
-//    
-//    W.create(numInstances, Q.rows, cv::DataType<float>::type);
-//    for (int i = 0; i < X.rows; i++)
-//    {
-//        int closestQIdx;
-//        float closestDist = std::numeric_limits<float>::max();
-//        for (int k = 0; k < Q.rows; k++)
-//        {
-//            cv::Scalar d = cv::norm(X.row(i), Q.row(k), cv::NORM_L2);
-//            if (d.val[0] < closestDist)
-//            {
-//                closestQIdx = k;
-//                closestDist = d.val[0];
-//            }
-//        }
-//        
-//        W.at<float>(c.at<int>(i,0), closestQIdx)++;
-//    }
-//    
-//    
-////    Waux[k].create(numInstances[k], q, cv::DataType<float>::type);
-////    for (int i = 0; i < Waux[k].rows; i++)
-////    {
-////        int cIdx = c[k].at<int>(i,0);
-////        Waux[k].at<float>(cIdx, u[k].at<int>(i,0))++;
-////    }
-////    
-////    
-////    cv::Mat X, c;
-////    X.create(numPointInstances, 250, cv::DataType<float>::type);
-////    c.create(numPointInstances,   1, cv::DataType<int>::type);
-//}
+void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::setPerFoldQuantization(bool bGlobalQuantization)
+{
+    m_bGlobalQuantization = bGlobalQuantization;
+}
 
+void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::setCentersStratification(bool bCentersStratification)
+{
+    m_bCentersStratification = bCentersStratification;
+}
+
+void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::setPerCategoryReduction(bool bPerStrateReduction)
+{
+    m_bPerStrateReduction = bPerStrateReduction;
+}
 
 void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::cloudjectsToPointsSample(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, cv::Mat& X, cv::Mat& c)
 {
@@ -762,30 +654,40 @@ float CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::validate()
     
     m_qValPerfs.resize(m_qValParam.size());
 
-    std::vector<cv::Mat> QVec (1);
-    if (!m_bPerFoldQuantization)
+    std::vector<cv::Mat> gQ (m_qValParam.size());
+    if (m_bGlobalQuantization)
     {
-        QVec.resize(m_qValParam.size());
+        // Centers determined using K-Means++ in {validation U training} data.
+        
+        // This contamination is used only for the selection of number of quantization
+        // centers. Normalization, dim reduction, and classifiers' parameters selections
+        // are not affected. Reasons are: hypothesis that with this contamination
+        // the selection of #centers will not be affected (bc all parameters are equally
+        // benfited), and 10x speed increase.
+        
         for (int i = 0; i < m_qValParam.size(); i++)
         {
-            if (!m_bPerCategoryRed)
+            if (!m_bCentersStratification)
             {
+                // Centers are selected among all the points without taking into
+                // account categories
                 cv::Mat X, c;
-                cloudjectsToPointsSample(m_InputCloudjects, X, c); // c is discarded
-                bow(X, m_qValParam[i], QVec[i]);
+                cloudjectsToPointsSample(m_InputCloudjects, X, c);
+                bow(X, m_qValParam[i], gQ[i]);
             }
             else
             {
+                // Centers are selected in such a way we ensure a minimum number
+                // of centers for each class (the parameters divided by the number
+                // of categories)
                 std::map<std::string,cv::Mat> XMap;
                 cloudjectsToPointsSample(m_InputCloudjects, XMap);
-                bow(XMap, m_qValParam[i], QVec[i]);
+                bow(XMap, floor(m_qValParam[i] / m_Categories.size()) + 1, gQ[i]);
             }
-            
         }
     }
     
     std::vector<cv::Mat> S (m_qValParam.size());
-    
     for (int t = 0; t < m_NumFolds; t++)
     {
         // Partitionate the data
@@ -796,7 +698,7 @@ float CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::validate()
         getTestCloudjects(m_InputCloudjects, t, *cloudjectsTe);
 
         std::map<std::string,cv::Mat> XTrMap;
-        if (m_bPerFoldQuantization)
+        if (!m_bGlobalQuantization)
             cloudjectsToPointsSample(cloudjectsTr, XTrMap);
         
         // Create the training sample and quantize
@@ -813,12 +715,18 @@ float CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::validate()
         
         for (int i = 0; i < m_qValParam.size(); i++)
         {
-            if (m_bPerFoldQuantization)
-                bow(XTrMap, m_qValParam[i], QVec[0]);
+            cv::Mat Q;
+            if (!m_bGlobalQuantization)
+            {
+                if (!m_bCentersStratification)
+                    bow(XTr, m_qValParam[i], Q);
+                else
+                    bow(XTrMap, m_qValParam[i], Q);
+            }
             
             cv::Mat WTr, WTe;
-            bow(XTr, cTr, m_bPerFoldQuantization ? QVec[0] : QVec[i], WTr);
-            bow(XTe, cTe, m_bPerFoldQuantization ? QVec[0] : QVec[i], WTe);
+            bow(XTr, cTr, (m_bGlobalQuantization ? gQ[i] : Q), WTr);
+            bow(XTe, cTe, (m_bGlobalQuantization ? gQ[i] : Q), WTe);
             
             cv::Mat WnTr, WnTe;
             std::vector<cv::Mat> parameters;
@@ -826,17 +734,17 @@ float CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::validate()
             normalize(WTe, parameters, WnTe);
             
             cv::Mat WpTr, WpTe;
-            if (!m_bPerCategoryRed)
-            {
-                cv::PCA PCA;
-                CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::reduce(WnTr, WpTr, PCA);
-                CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::reduce(WnTe, PCA, WpTe);
-            }
-            else
+            if (m_bCentersStratification && m_bPerStrateReduction)
             {
                 std::vector<cv::PCA> PCAs;
                 reduce(WnTr, m_qValParam[i] / m_Categories.size(), WpTr, PCAs);
                 reduce(WnTe, PCAs, WpTe);
+            }
+            else
+            {
+                cv::PCA PCA;
+                CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::reduce(WnTr, WpTr, PCA);
+                CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::reduce(WnTe, PCA, WpTe);
             }
             
             cv::Mat P = CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::validate(WpTr, WpTe, YTr, YTe);
@@ -874,109 +782,6 @@ float CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::validate()
     
     return m_BestValPerformance;
 }
-
-//float CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::validate()
-//{
-//    // Input data already set
-//    assert (m_InputCloudjects->size() > 0);
-//    
-//    cv::Mat Y;
-//    getLabels(m_InputCloudjects, m_Categories, Y);
-//    
-//    createValidationPartitions(Y, m_NumFolds, m_Partitions);
-//    
-//    m_ClassifierParams.resize(Y.cols);
-//    
-//    m_qValPerfs.resize(m_qValParam.size());
-//    
-//    std::vector<cv::Mat> S (m_qValParam.size());
-//    
-//    for (int t = 0; t < m_NumFolds; t++)
-//    {
-//        // Partitionate the data
-//        
-//        boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjectsTr (new std::list<Cloudject::Ptr>);
-//        boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjectsTe (new std::list<Cloudject::Ptr>);
-//        getTrainingCloudjects(m_InputCloudjects, t, *cloudjectsTr);
-//        getTestCloudjects(m_InputCloudjects, t, *cloudjectsTe);
-//        
-//        // Create per-category samples to train BoW and find quantization centers
-//        
-//        std::map<std::string,cv::Mat> XTrMap;
-//        cloudjectsToPointsSample(cloudjectsTr, XTrMap);
-//        
-//        // Create the training sample and quantize
-//        
-//        cv::Mat XTr, XTe, cTr, cTe;
-//        cloudjectsToPointsSample(cloudjectsTr, XTr, cTr);
-//        cloudjectsToPointsSample(cloudjectsTe, XTe, cTe);
-//        
-//        // Get the partitioned data labels
-//        
-//        cv::Mat YTr, YTe;
-//        getLabels(cloudjectsTr, m_Categories, YTr);
-//        getLabels(cloudjectsTe, m_Categories, YTe);
-//        
-//        for (int i = 0; i < m_qValParam.size(); i++)
-//        {
-//            cv::Mat Q;
-//            bow(XTrMap, m_qValParam[i], Q);
-//            
-//            cv::Mat WTr, WTe;
-//            bow(XTr, cTr, Q, WTr);
-//            bow(XTe, cTe, Q, WTe);
-//            
-//            cv::Mat WnTr, WnTe;
-//            std::vector<cv::Mat> parameters;
-//            normalize(WTr, WnTr, parameters);
-//            normalize(WTe, parameters, WnTe);
-//            
-//            cv::Mat WpTr, WpTe;
-//            if (!m_bPerCategoryRed)
-//            {
-//                cv::PCA PCA;
-//                CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::reduce(WnTr, WpTr, PCA);
-//                CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::reduce(WnTe, PCA, WpTe);
-//            }
-//            else
-//            {
-//                std::vector<cv::PCA> PCAs;
-//                reduce(WnTr, m_qValParam[i] / m_Categories.size(), WpTr, PCAs);
-//                reduce(WnTe, PCAs, WpTe);
-//            }
-//            
-//            cv::Mat P = CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::validate(WpTr, WpTe, YTr, YTe);
-//            
-//            if (t == 0) S[i] = (P/m_NumFolds);
-//            else S[i] += (P/m_NumFolds);
-//        }
-//    }
-//    
-//    m_qValPerfs.resize(m_qValParam.size());
-//    for (int i = 0; i < m_qValParam.size(); i++)
-//    {
-//        m_qValPerfs[i] = .0f;
-//        
-//        std::vector<std::vector<float> > classifierParamsTmp (Y.cols);
-//        for (int j = 0; j < Y.cols; j++)
-//        {
-//            double minVal, maxVal;
-//            cv::Point minIdx, maxIdx;
-//            cv::minMaxLoc(S[i].col(j), &minVal, &maxVal, &minIdx, &maxIdx);
-//            
-//            m_qValPerfs[i] += (maxVal / Y.cols);
-//        }
-//        
-//        if (m_qValPerfs[i] > m_BestValPerformance)
-//        {
-//            m_BestValPerformance = m_qValPerfs[i];
-//            m_q = m_qValParam[i]; // can be used in the training without explicit specification
-//        }
-//    }
-//    
-//    return m_BestValPerformance;
-//}
-
 
 std::vector<float> CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::getQuantizationValidationPerformances()
 {
@@ -1073,17 +878,6 @@ void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::reduce(cv::Mat X,
         CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::reduce(roi, PCAs[i], XrVec[i]);
     }
     cv::hconcat(XrVec, Xr);
-}
-                    
-void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::setPerCategoryReduction(bool bPerCategoryRed)
-{
-    m_bPerCategoryRed = bPerCategoryRed;
-}
-
-                    
-void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::setPerFoldQuantization(bool bPerFoldQuantization)
-{
-    m_bPerFoldQuantization = bPerFoldQuantization;
 }
 
 template class CloudjectClassificationPipeline<pcl::PFHRGBSignature250>;

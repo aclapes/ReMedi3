@@ -104,6 +104,7 @@ public:
     
     int getQuantizationParameter();
     
+    void setCentersStratification(bool bCentersStratification = true);
     void setPerCategoryReduction(bool bPerCategoryRed = true);
     void setPerFoldQuantization(bool bPerCategoryRed = true);
     
@@ -121,8 +122,10 @@ private:
     
     cv::Mat m_C; // the q vectors actually
     
-    bool m_bPerFoldQuantization;
-    bool m_bPerCategoryRed;
+    bool m_bGlobalQuantization;
+    
+    bool m_bCentersStratification;
+    bool m_bPerStrateReduction;
     
     void cloudjectsToPointsSample(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, cv::Mat& X, cv::Mat& c);
     void cloudjectsToPointsSample(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, std::map<std::string,cv::Mat>& X);
