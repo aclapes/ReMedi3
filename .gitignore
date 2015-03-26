@@ -4,11 +4,24 @@
 *.o
 *.obj
 
+<<<<<<< HEAD
+=======
+# Precompiled Headers
+*.gch
+*.pch
+
+>>>>>>> 77bbc91d2b2edb6097d40255733d394ca524c437
 # Compiled Dynamic libraries
 *.so
 *.dylib
 *.dll
 
+<<<<<<< HEAD
+=======
+# Fortran module files
+*.mod
+
+>>>>>>> 77bbc91d2b2edb6097d40255733d394ca524c437
 # Compiled Static libraries
 *.lai
 *.la
@@ -19,6 +32,7 @@
 *.exe
 *.out
 *.app
+<<<<<<< HEAD
 
 # OSX
 .DS_Store
@@ -32,3 +46,5 @@ build/
 
 # PCL
 *.pcd
+=======
+>>>>>>> 77bbc91d2b2edb6097d40255733d394ca524c437
