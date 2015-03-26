@@ -686,7 +686,7 @@ void remedi::getTrainingCloudjectsWithDescriptor(std::vector<Sequence<ColorDepth
         }
     }
     
-    std::cout << "Created a sample of " << cloudjects.size() << " cloudjects (in " << t.elapsed() << " secs.)" << std::endl;
+    std::cout << "Created a training sample of " << cloudjects.size() << " cloudjects (in " << t.elapsed() << " secs.)" << std::endl;
     
 #ifdef DEBUG_TRAINING_CONSTRUCTION_SELECTION
     std::list<Cloudject::Ptr>::iterator ct;
@@ -731,75 +731,71 @@ void remedi::getTrainingCloudjectsWithDescriptor(std::vector<Sequence<ColorDepth
 
 void remedi::getTestCloudjectsWithDescriptor(std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> partitions, int p, const Groundtruth& gt, std::string descriptorType, std::list<Cloudject::Ptr>& cloudjects)
 {
-//    cloudjects.clear();
-//    
-//    for (int s = 0; s < sequences.size(); s++)
-//    {
-//        if (partitions[s] == p)
-//        {
-//            std::string resultsParent = string(PARENT_PATH) + string(RESULTS_SUBDIR)
-//            + sequences[s]->getName() + "/" + string(KINECT_SUBSUBDIR);
-//            
-//            sequences[s]->restart();
-//            while(sequences[s]->hasNextFrames())
-//            {
-//                sequences[s]->next();
-//                std::vector<std::string> fids = sequences[s]->getFramesFilenames();
-//                
-//                for (int v = 0; v < sequences[s]->getNumOfViews(); v++)
-//                {
-//                    std::vector<ForegroundRegion> regionsF;
-//                    remedi::io::readPredictionRegions(resultsParent + string(CLOUDJECTS_DIRNAME)
-//                                                      + sequences[s]->getViewName(v), fids[v], regionsF, true);
-//                    
-//                    std::map<std::string,std::map<std::string,GroundtruthRegion> > annotationsF = gt.at(sequences[s]->getName()).at(sequences[s]->getViewName(v)).at(fids[v]);
-//                    
-//                    // Check the labels of the predictions to use them as
-//                    // training in a supervised learning setup
-//                    
-//                    std::vector<ForegroundRegion> regionsTeF;
-//                    for (int i = 0; i < regionsF.size(); i++)
-//                    {
-////                        cv::namedWindow("overlaps");
-////                        cv::Mat drawableImg (480, 640, CV_8UC3, cv::Scalar(0));
-//                        
-//                        std::map<std::string,GroundtruthRegion>::iterator it;
-//                        for (it = annotationsF.begin(); it != annotationsF.end(); ++it)
-//                        {
-////                            cv::Rect r1 = regionsF[i].getRect();
-////                            cv::Rect r2 = it->second.getRect();
-//                            
-////                            cv::rectangle(drawableImg, cv::Point(r1.x,r1.y), cv::Point(r1.x + r1.width - 1, r1.y + r1.height - 1), cv::Scalar(1,0,0));
-////                            cv::rectangle(drawableImg, cv::Point(r2.x,r2.y), cv::Point(r2.x + r2.width - 1, r2.y + r2.height - 1), cv::Scalar(0,1,0));
-//                            
-////                            float inc = rectangleInclusion(r1,r2);
-////                            std::cout << inc << std::endl;
-////                            
-////                            cv::imshow("overlaps", drawableImg);
-////                            cv::waitKey();
-//                            
-//                            float mf = weightedOverlapBetweenRegions(regionsF[i], it->second);
-//
-//                            if (mf > 1.f/4)
-//                                regionsF[i].addLabel(it->second.getCategory());
-//                        }
-////                        std::cout << std::endl;
-//
-//                        if (!regionsF[i].isLabel("arms") && !regionsF[i].isLabel("others"))
-//                            regionsTeF.push_back(regionsF[i]);
-//                    }
-//                    
-//                    // Read the cloudjects representing the selected regions
-//                    std::vector<Cloudject::Ptr> cloudjectsTeF;
-//                    remedi::io::readCloudjectsWithDescriptor(resultsParent + string(CLOUDJECTS_DIRNAME) + sequences[s]->getViewName(v), fids[v], regionsTeF, descriptorType, cloudjectsTeF, true);
-//                    
-//                    // Assign the already prepared labels and push
-//                    for (int i = 0; i < cloudjectsTeF.size(); i++)
-//                        cloudjects.push_back(cloudjectsTeF[i]);
-//                }
-//            }
-//        }
-//    }
+    cloudjects.clear();
+    
+    std::cout << "Creating the sample of testing cloudjects .." << std::endl;
+    boost::timer t;
+    
+    for (int s = 0; s < sequences.size(); s++)
+    {
+        if (partitions[s] == p)
+        {
+            std::string resultsParent = string(PARENT_PATH) + string(RESULTS_SUBDIR)
+            + sequences[s]->getName() + "/" + string(KINECT_SUBSUBDIR);
+            
+            std::cout << resultsParent << std::endl;
+            
+            sequences[s]->restart();
+            while(sequences[s]->hasNextFrames())
+            {
+                sequences[s]->next();
+                std::vector<std::string> fids = sequences[s]->getFramesFilenames();
+                
+                for (int v = 0; v < sequences[s]->getNumOfViews(); v++)
+                {
+                    // Iterate over the foreground regions in this frame F
+                    std::vector<ForegroundRegion> regionsF;
+                    remedi::io::readPredictionRegions(resultsParent + string(CLOUDJECTS_DIRNAME)
+                                                      + sequences[s]->getViewName(v), fids[v], regionsF, true);
+                    
+                    std::map<std::string,std::map<std::string,GroundtruthRegion> > annotationsF = gt.at(sequences[s]->getName()).at(sequences[s]->getViewName(v)).at(fids[v]);
+                    
+                    std::vector<ForegroundRegion> regionsTeF;
+                    for (int i = 0; i < regionsF.size(); i++)
+                    {
+                        regionsF[i].allocateMask();
+                        
+                        std::map<std::string,std::map<std::string,GroundtruthRegion> >::iterator it;
+                        for (it = annotationsF.begin(); it != annotationsF.end(); ++it)
+                        {
+                            std::map<std::string,GroundtruthRegion>::iterator jt;
+                            for (jt = it->second.begin(); jt != it->second.end(); ++jt)
+                            {
+                                GroundtruthRegion a = jt->second;
+                                a.allocateMask();
+                                float wovl = weightedOverlapBetweenRegions(regionsF[i], a);
+                                a.releaseMask();
+                                
+                                if (wovl > .01f) regionsF[i].addLabel(jt->second.getCategory());
+                            }
+                        }
+                        
+                        regionsTeF.push_back(regionsF[i]);
+                    }
+                    
+                    // Read the cloudjects representing the selected regions
+                    std::vector<Cloudject::Ptr> cloudjectsTeF;
+                    remedi::io::mockreadCloudjectsWithDescriptor(resultsParent + string(CLOUDJECTS_DIRNAME) + sequences[s]->getViewName(v), fids[v], regionsTeF, descriptorType, cloudjectsTeF, true);
+                    
+                    // Assign the already prepared labels and push
+                    for (int i = 0; i < cloudjectsTeF.size(); i++)
+                        cloudjects.push_back(cloudjectsTeF[i]);
+                }
+            }
+        }
+    }
+    
+    std::cout << "Created a test sample of " << cloudjects.size() << " cloudjects (in " << t.elapsed() << " secs.)" << std::endl;
 }
 
 void remedi::getTestSequences(std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> partitions, int p, std::vector<Sequence<ColorDepthFrame>::Ptr>& sequencesTe)
