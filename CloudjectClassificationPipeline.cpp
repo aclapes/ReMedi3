@@ -60,7 +60,6 @@ CloudjectClassificationPipelineBase<T>& CloudjectClassificationPipelineBase<T>::
         
         m_DimRedVariance = rhs.m_DimRedVariance;
         m_DimRedNumFeatures = rhs.m_DimRedNumFeatures;
-        m_PCA = rhs.m_PCA;
         
         m_ClassifierType = rhs.m_ClassifierType;
         m_ClassifierValParams = rhs.m_ClassifierValParams;
@@ -78,6 +77,12 @@ void CloudjectClassificationPipelineBase<T>::setInputCloudjects(boost::shared_pt
 {
     m_InputCloudjects = cloudjects;
     m_Categories = categories;
+}
+
+template<typename T>
+boost::shared_ptr<std::list<Cloudject::Ptr> > CloudjectClassificationPipelineBase<T>::getInputCloudjects()
+{
+    return m_InputCloudjects;
 }
 
 template<typename T>
@@ -211,130 +216,145 @@ void CloudjectClassificationPipelineBase<T>::setClassifierValidationParameters(s
 }
 
 template<typename T>
-float CloudjectClassificationPipelineBase<T>::validate(cv::Mat X, cv::Mat Y)
+cv::Mat CloudjectClassificationPipelineBase<T>::validate(cv::Mat XTr, cv::Mat XTe, cv::Mat YTr, cv::Mat YTe)
 {
     std::vector<std::vector<float> > classifierValCombs;
     expandParameters(m_ClassifierValParams, classifierValCombs);
     
-    // If not indicated explicitly the number of dims to keep after reduction
-    if (m_DimRedNumFeatures == 0)
-        m_DimRedNumFeatures = (int) (sqrtf(X.rows)); // just try to avoid the curse of dim
+    cv::Mat P (classifierValCombs.size(), YTr.cols, cv::DataType<float>::type);
     
-    std::vector<cv::Mat> P (m_NumFolds);
-    // Model selection
-    for (int t = 0; t < m_NumFolds; t++)
+    for (int i = 0; i < classifierValCombs.size(); i++)
     {
-        cv::Mat XTr, YTr, XTe, YTe;
-        getTrainingFold(X, Y, t, XTr, YTr);
-        getTestFold(X, Y, t, XTe, YTe);
-        
-        cv::Mat XnTr, XnTe;
-        std::vector<cv::Mat> normParameters;
-        normalize(XTr, XnTr, normParameters);
-        normalize(XTe, normParameters, XnTe);
-        
-        cv::Mat XpTr, XpTe;
-        if (m_DimRedVariance > 0 || m_DimRedNumFeatures > 0)
+        for (int j = 0; j < YTr.cols; j++)
         {
-            if (m_DimRedVariance > 0)
-            {
-//                std::cout << cv::Mat(XnTr, cv::Rect(0,0,XnTr.cols,5)) << std::endl;
-                m_PCA.computeVar(XnTr, cv::Mat(), CV_PCA_DATA_AS_ROW, m_DimRedVariance);
-//                std::cout<< m_PCA.eigenvectors << std::endl;
-//                std::cout<< m_PCA.eigenvalues << std::endl;
-            }
-            else
-                m_PCA(XnTr, cv::noArray(), CV_PCA_DATA_AS_ROW,
-                      (m_DimRedNumFeatures < XnTr.cols) ? m_DimRedNumFeatures : XnTr.cols);
-
-            XpTr = m_PCA.project(XnTr);
-            XpTe = m_PCA.project(XnTe);
-        }
-        else
-        {
-            XpTr = XnTr; // no projection, just normalization
-            XpTe = XnTe;
-        }
-        
-        P[t].create(classifierValCombs.size(), YTr.cols, cv::DataType<float>::type);
-        for (int i = 0; i < classifierValCombs.size(); i++)
-        {
-            for (int j = 0; j < YTr.cols; j++)
-            {
-                CvSVM::CvSVM svm;
-                svm.train(XpTr, YTr.col(j), cv::Mat(), cv::Mat(),
-                          CvSVMParams(CvSVM::C_SVC, CvSVM::RBF, 0, classifierValCombs[i][0], 0, classifierValCombs[i][1], 0, 0, 0,
-                                      cvTermCriteria(CV_TERMCRIT_ITER+CV_TERMCRIT_EPS, 500, 1e-4)));
-                
-                cv::Mat fTe; // predictions
-                svm.predict(XpTe, fTe);
-
-                float acc = accuracy(YTe.col(j), fTe);
-                P[t].at<float>(i,j) = acc;
-            }
+            CvSVM::CvSVM svm;
+            svm.train(XTr, YTr.col(j), cv::Mat(), cv::Mat(),
+                      CvSVMParams(CvSVM::C_SVC, CvSVM::RBF, 0, classifierValCombs[i][0], 0, classifierValCombs[i][1], 0, 0, 0, cvTermCriteria(CV_TERMCRIT_ITER+CV_TERMCRIT_EPS, 500, 1e-4)));
+            
+            cv::Mat fTe; // predictions
+            svm.predict(XTe, fTe);
+            
+            float acc = accuracy(YTe.col(j), fTe);
+            P.at<float>(i,j) = acc;
         }
     }
     
-    cv::Mat S (classifierValCombs.size(), Y.cols, cv::DataType<float>::type, cv::Scalar(0));
-    for (int t = 0; t < m_NumFolds; t++)
-        S += (P[t] / m_NumFolds);
-
+    return P;
     
-    float avgValAcc = 0;
-    
-    double minVal, maxVal;
-    cv::Point minIdx, maxIdx;
-    
-    std::vector<std::vector<float> > classifierParamsTmp (Y.cols);
-    for (int j = 0; j < Y.cols; j++)
-    {
-        cv::minMaxLoc(S.col(j), &minVal, &maxVal, &minIdx, &maxIdx);
-       
-        avgValAcc += (maxVal / Y.cols);
-        classifierParamsTmp[j] = classifierValCombs[maxIdx.y];
-    }
-    
-    if (avgValAcc > m_BestValPerformance)
-        m_ClassifierParams = classifierParamsTmp;
-    
-    return avgValAcc;
+//    // Update the performance average
+//    if (m_P.empty())
+//    {
+//        m_P.create(classifierValCombs.size(), YTr.cols, cv::DataType<float>::type);
+//        m_P.setTo(0);
+//    }
+//    m_P += (P / m_NumFolds);
+//    
+//    // Calculate
+//    float valAcc = 0; // average among categories
+//    
+//    std::vector<std::vector<float> > classifierParamsTmp (YTr.cols);
+//    for (int j = 0; j < YTr.cols; j++)
+//    {
+//        double minVal, maxVal;
+//        cv::Point minIdx, maxIdx;
+//        cv::minMaxLoc(m_P.col(j), &minVal, &maxVal, &minIdx, &maxIdx);
+//        
+//        valAcc += (maxVal / YTr.cols);
+//        classifierParamsTmp[j] = classifierValCombs[maxIdx.y];
+//    }
+//    
+//    if (valAcc > m_BestValPerformance)
+//        m_ClassifierParams = classifierParamsTmp;
+//    
+//    return valAcc;
 }
+
+//template<typename T>
+//float CloudjectClassificationPipelineBase<T>::validate(cv::Mat X, cv::Mat Y)
+//{
+//    std::vector<std::vector<float> > classifierValCombs;
+//    expandParameters(m_ClassifierValParams, classifierValCombs);
+//    
+//    // If not indicated explicitly the number of dims to keep after reduction
+//    if (m_DimRedNumFeatures == 0)
+//        m_DimRedNumFeatures = (int) (sqrtf(X.rows)); // just try to avoid the curse of dim
+//    
+//    std::vector<cv::Mat> P (m_NumFolds);
+//    // Model selection
+//    for (int t = 0; t < m_NumFolds; t++)
+//    {
+//        cv::Mat XTr, YTr, XTe, YTe;
+//        getTrainingFold(X, Y, t, XTr, YTr);
+//        getTestFold(X, Y, t, XTe, YTe);
+//        
+//        cv::Mat XnTr, XnTe;
+//        std::vector<cv::Mat> normParameters;
+//        normalize(XTr, XnTr, normParameters);
+//        normalize(XTe, normParameters, XnTe);
+//        
+//        cv::Mat XpTr, XpTe;
+//
+//        
+//        P[t].create(classifierValCombs.size(), YTr.cols, cv::DataType<float>::type);
+//        for (int i = 0; i < classifierValCombs.size(); i++)
+//        {
+//            for (int j = 0; j < YTr.cols; j++)
+//            {
+//                CvSVM::CvSVM svm;
+//                svm.train(XpTr, YTr.col(j), cv::Mat(), cv::Mat(),
+//                          CvSVMParams(CvSVM::C_SVC, CvSVM::RBF, 0, classifierValCombs[i][0], 0, classifierValCombs[i][1], 0, 0, 0,
+//                                      cvTermCriteria(CV_TERMCRIT_ITER+CV_TERMCRIT_EPS, 500, 1e-4)));
+//                
+//                cv::Mat fTe; // predictions
+//                svm.predict(XpTe, fTe);
+//
+//                float acc = accuracy(YTe.col(j), fTe);
+//                P[t].at<float>(i,j) = acc;
+//            }
+//        }
+//    }
+//    
+//    cv::Mat S (classifierValCombs.size(), Y.cols, cv::DataType<float>::type, cv::Scalar(0));
+//    for (int t = 0; t < m_NumFolds; t++)
+//        S += (P[t] / m_NumFolds);
+//
+//    
+//    float avgValAcc = 0;
+//    
+//    double minVal, maxVal;
+//    cv::Point minIdx, maxIdx;
+//    
+//    std::vector<std::vector<float> > classifierParamsTmp (Y.cols);
+//    for (int j = 0; j < Y.cols; j++)
+//    {
+//        cv::minMaxLoc(S.col(j), &minVal, &maxVal, &minIdx, &maxIdx);
+//       
+//        avgValAcc += (maxVal / Y.cols);
+//        classifierParamsTmp[j] = classifierValCombs[maxIdx.y];
+//    }
+//    
+//    if (avgValAcc > m_BestValPerformance)
+//        m_ClassifierParams = classifierParamsTmp;
+//    
+//    return avgValAcc;
+//}
 
 template<typename T>
 void CloudjectClassificationPipelineBase<T>::train(cv::Mat X, cv::Mat Y)
 {
     // Final model training
-    cv::Mat Xn;
-    normalize(X, Xn, m_NormParams);
-    
-    cv::Mat Xp;
-    if (m_DimRedVariance > 0 || m_DimRedNumFeatures > 0)
-    {
-        if (m_DimRedVariance > 0)
-            m_PCA.computeVar(Xn, cv::noArray(), CV_PCA_DATA_AS_ROW, m_DimRedVariance);
-        else
-            m_PCA(Xn, cv::noArray(), CV_PCA_DATA_AS_ROW, m_DimRedNumFeatures);
-        
-        Xp = m_PCA.project(Xn);
-    }
-    else
-    {
-        Xp = Xn;
-    }
-    
     m_ClassifierModels.resize(Y.cols, NULL);
     for (int i = 0; i < Y.cols; i++)
     {
         if (m_ClassifierType == "svmrbf")
         {
             CvSVM* svm = new CvSVM;
-            svm->train(Xp, Y.col(i), cv::Mat(), cv::Mat(),
+            svm->train(X, Y.col(i), cv::Mat(), cv::Mat(),
                        CvSVMParams(CvSVM::C_SVC, CvSVM::RBF, 0, m_ClassifierParams[i][0], 0, m_ClassifierParams[i][1], 0, 0, 0, cvTermCriteria(CV_TERMCRIT_ITER+CV_TERMCRIT_EPS, 500, 1e-4)));
             m_ClassifierModels[i] = (void*) svm;
         }
     }
-    
-    m_InputCloudjects = boost::shared_ptr<std::list<Cloudject::Ptr> >(); // no longer needed
+//    m_InputCloudjects = boost::shared_ptr<std::list<Cloudject::Ptr> >(); // no longer needed
 }
 
 // Protected methods
@@ -342,25 +362,16 @@ void CloudjectClassificationPipelineBase<T>::train(cv::Mat X, cv::Mat Y)
 template<typename T>
 void CloudjectClassificationPipelineBase<T>::predict(cv::Mat X, cv::Mat& P, cv::Mat& F)
 {
-    cv::Mat Xn;
-    normalize(X, m_NormParams, Xn);
-    
-    cv::Mat Xp;
-    if (m_DimRedVariance > 0 || m_DimRedNumFeatures > 0)
-        Xp = m_PCA.project(Xn);
-    else
-        Xp = Xn;
-    
-    P.create(Xp.rows, m_ClassifierModels.size(), cv::DataType<int>::type);
-    F.create(Xp.rows, m_ClassifierModels.size(), cv::DataType<float>::type);
+    P.create(X.rows, m_ClassifierModels.size(), cv::DataType<int>::type);
+    F.create(X.rows, m_ClassifierModels.size(), cv::DataType<float>::type);
     for (int j = 0; j < m_ClassifierModels.size(); j++)
     {
         if (m_ClassifierType == "svmrbf")
         {
-            for (int i = 0; i < Xp.rows; i++)
+            for (int i = 0; i < X.rows; i++)
             {
-                P.at<int>(i,j) = ((CvSVM*) m_ClassifierModels[j])->predict(Xp.row(i));
-                F.at<float>(i,j) = ((CvSVM*) m_ClassifierModels[j])->predict(Xp.row(i), true);
+                P.at<int>(i,j)   = ((CvSVM*) m_ClassifierModels[j])->predict(X.row(i));
+                F.at<float>(i,j) = ((CvSVM*) m_ClassifierModels[j])->predict(X.row(i), true);
             }
         }
     }
@@ -405,20 +416,54 @@ void CloudjectClassificationPipelineBase<T>::createValidationPartitions(cv::Mat 
     cvpartition(groups, numFolds, 42, partitions); // stratification
 }
 
-// Private methods
-
 template<typename T>
-void CloudjectClassificationPipelineBase<T>::getTrainingFold(cv::Mat X, cv::Mat Y, int t, cv::Mat& XTr, cv::Mat& YTr)
+void CloudjectClassificationPipelineBase<T>::reduce(cv::Mat X, cv::Mat& Xr, cv::PCA& pca)
 {
-    cvx::indexMat(X, XTr, m_Partitions != t);
-    cvx::indexMat(Y, YTr, m_Partitions != t);
+    if (m_DimRedNumFeatures == 0 && m_DimRedVariance == 0)
+    {
+        Xr = X;
+    }
+    else
+    {
+        if (m_DimRedNumFeatures > 0)
+            pca(X, cv::noArray(), CV_PCA_DATA_AS_ROW, m_DimRedNumFeatures);
+        else if (m_DimRedVariance > 0)
+            pca.computeVar(X, cv::Mat(), CV_PCA_DATA_AS_ROW, m_DimRedVariance);
+        Xr = pca.project(X);
+    }
 }
 
 template<typename T>
-void CloudjectClassificationPipelineBase<T>::getTestFold(cv::Mat X, cv::Mat Y, int t, cv::Mat& XTe, cv::Mat& YTe)
+void CloudjectClassificationPipelineBase<T>::reduce(cv::Mat X, cv::PCA pca, cv::Mat& Xr)
 {
-    cvx::indexMat(X, XTe, m_Partitions == t);
-    cvx::indexMat(Y, YTe, m_Partitions == t);
+    if (m_DimRedNumFeatures == 0 && m_DimRedVariance == 0)
+        Xr = X;
+    else
+        Xr = pca.project(X);
+}
+
+template<typename T>
+void CloudjectClassificationPipelineBase<T>::getTrainingCloudjects(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, int t, std::list<Cloudject::Ptr>& cloudjectsTr)
+{
+    cloudjectsTr.clear();
+
+    int i = 0;
+    std::list<Cloudject::Ptr>::iterator it;
+    for (it = cloudjects->begin(); it != cloudjects->end(); ++it, ++i)
+        if (m_Partitions.at<int>(i,0) != t)
+            cloudjectsTr.push_back(*it);
+}
+
+template<typename T>
+void CloudjectClassificationPipelineBase<T>::getTestCloudjects(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, int t, std::list<Cloudject::Ptr>& cloudjectsTe)
+{
+    cloudjectsTe.clear();
+    
+    int i = 0;
+    std::list<Cloudject::Ptr>::iterator it;
+    for (it = cloudjects->begin(); it != cloudjects->end(); ++it, ++i)
+        if (m_Partitions.at<int>(i,0) == t)
+            cloudjectsTe.push_back(*it);
 }
 
 // ----------------------------------------------------------------------------
@@ -426,12 +471,11 @@ void CloudjectClassificationPipelineBase<T>::getTestFold(cv::Mat X, cv::Mat Y, i
 // ----------------------------------------------------------------------------
 
 CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::CloudjectClassificationPipeline()
-: CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>()
+: CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>(), m_bPerCategoryRed(false), m_bPerFoldQuantization(false)
 {
 }
 
-CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::CloudjectClassificationPipeline(const CloudjectClassificationPipeline<pcl::PFHRGBSignature250>& rhs)
-: CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>(rhs)
+CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::CloudjectClassificationPipeline(const CloudjectClassificationPipeline<pcl::PFHRGBSignature250>& rhs) : CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>(rhs), m_bPerCategoryRed(false), m_bPerFoldQuantization(false)
 {
     *this = rhs;
 }
@@ -442,167 +486,245 @@ CloudjectClassificationPipeline<pcl::PFHRGBSignature250>& CloudjectClassificatio
     {
         m_q = rhs.m_q;
         m_C = rhs.m_C;
+        m_bPerCategoryRed = rhs.m_bPerCategoryRed;
+        m_bPerFoldQuantization = rhs.m_bPerFoldQuantization;
     }
     
     return *this;
 }
 
-void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::bowSampleFromCloudjects(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, int q, cv::Mat& W, cv::Mat& Q)
-{
-    cv::Mat X, c;
-    std::map<std::string,cv::Mat> XMap, cMap;
-    
-    int numInstances = 0;
-    int numPointInstances = 0;
-    std::map<std::string,int> numInstancesMap;
-    std::map<std::string,int> numPointInstancesMap; // total no. descriptor points (no. rows of X and c actually)
+//void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::bowSampleFromCloudjects(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, int q, cv::Mat& W, cv::Mat& Q)
+//{
+//    cv::Mat X, c;
+//    std::map<std::string,cv::Mat> XMap, cMap;
+//    
+//    int numInstances = 0;
+//    int numPointInstances = 0;
+//    std::map<std::string,int> numInstancesMap;
+//    std::map<std::string,int> numPointInstancesMap; // total no. descriptor points (no. rows of X and c actually)
+//
+//    std::list<Cloudject::Ptr>::iterator it;
+//    for (it = cloudjects->begin(); it != cloudjects->end(); ++it)
+//    {
+//        (*it)->allocate();
+//    
+//        // General couting
+//        numInstances ++;
+//        numPointInstances += (*it)->getNumOfDescriptorPoints();
+//        
+//        // Category counting
+//        std::set<std::string> labels = (*it)->getRegionLabels();
+//        std::set<std::string>::iterator jt;
+//        for (jt = labels.begin(); jt != labels.end(); ++jt)
+//        {
+//            numInstancesMap[*jt]++;
+//            numPointInstancesMap[*jt] += (*it)->getNumOfDescriptorPoints();
+//        }
+//    }
+//    
+//    for (int k = 0; k < m_Categories.size(); k++)
+//    {
+//        XMap[m_Categories[k]].create(numPointInstancesMap[m_Categories[k]], 250, cv::DataType<float>::type);
+//        cMap[m_Categories[k]].create(numPointInstancesMap[m_Categories[k]], 1, cv::DataType<int>::type);
+//    }
+//    
+//    std::map<std::string,int> jPtrMap; // counter for descriptors
+//    std::map<std::string,int> iPtrMap; // counter (id) for cloudjects
+//    for (it = cloudjects->begin(); (it != cloudjects->end()); ++it)
+//    {
+//        pcl::PointCloud<pcl::PFHRGBSignature250>* pDescriptor = ((pcl::PointCloud<pcl::PFHRGBSignature250>*) (*it)->getDescriptor());
+//        std::set<std::string> labels = (*it)->getRegionLabels();
+//        
+//        std::set<std::string>::iterator jt;
+//        for (jt = labels.begin(); jt != labels.end(); ++jt)
+//        {
+//            for (int p = 0; (p < pDescriptor->points.size()); p++)
+//            {
+//                cv::Mat row (1, 250, cv::DataType<float>::type, pDescriptor->points[p].histogram);
+//                row.copyTo(XMap[*jt].row(jPtrMap[*jt]));
+//                
+//                cMap[*jt].at<int>(jPtrMap[*jt],0) = iPtrMap[*jt];
+//                
+//                jPtrMap[*jt]++;
+//            }
+//        
+//            iPtrMap[*jt]++;
+//        }
+//    }
+//    
+//    // Find quantization vectors
+//    std::vector<cv::Mat> QVec (m_Categories.size());
+//    for (int k = 0; k < m_Categories.size(); k++)
+//    {
+//        cv::Mat u;
+//        cv::kmeans(XMap[m_Categories[k]], q, u, cv::TermCriteria(), 3, cv::KMEANS_PP_CENTERS, QVec[k]);
+//    }
+//    cv::vconcat(QVec,Q);
+//
+//    XMap.clear();
+//    cMap.clear();
+//    
+//    X.create(numPointInstances, 250, cv::DataType<float>::type);
+//    c.create(numPointInstances,   1, cv::DataType<int>::type);
+//    
+//    int jPtr = 0; // counter for descriptors
+//    int iPtr = 0; // counter (id) for cloudjects
+//    for (it = cloudjects->begin(); (it != cloudjects->end()); ++it)
+//    {
+//        pcl::PointCloud<pcl::PFHRGBSignature250>* pDescriptor = ((pcl::PointCloud<pcl::PFHRGBSignature250>*) (*it)->getDescriptor());
+//        
+//        for (int p = 0; (p < pDescriptor->points.size()); p++)
+//        {
+//            cv::Mat row (1, 250, cv::DataType<float>::type, pDescriptor->points[p].histogram);
+//            row.copyTo(X.row(jPtr));
+//            
+//            c.at<int>(jPtr,0) = iPtr;
+//            
+//            jPtr++;
+//        }
+//        iPtr++;
+////        (*it)->release();
+//    }
+//    
+//    W.create(numInstances, Q.rows, cv::DataType<float>::type);
+//    for (int i = 0; i < X.rows; i++)
+//    {
+//        int closestQIdx;
+//        float closestDist = std::numeric_limits<float>::max();
+//        for (int k = 0; k < Q.rows; k++)
+//        {
+//            cv::Scalar d = cv::norm(X.row(i), Q.row(k), cv::NORM_L2);
+//            if (d.val[0] < closestDist)
+//            {
+//                closestQIdx = k;
+//                closestDist = d.val[0];
+//            }
+//        }
+//        
+//        W.at<float>(c.at<int>(i,0), closestQIdx)++;
+//    }
+//    
+//    
+////    Waux[k].create(numInstances[k], q, cv::DataType<float>::type);
+////    for (int i = 0; i < Waux[k].rows; i++)
+////    {
+////        int cIdx = c[k].at<int>(i,0);
+////        Waux[k].at<float>(cIdx, u[k].at<int>(i,0))++;
+////    }
+////    
+////    
+////    cv::Mat X, c;
+////    X.create(numPointInstances, 250, cv::DataType<float>::type);
+////    c.create(numPointInstances,   1, cv::DataType<int>::type);
+//}
 
-    std::list<Cloudject::Ptr>::iterator it;
-    for (it = cloudjects->begin(); it != cloudjects->end(); ++it)
-    {
-        (*it)->allocate();
+
+void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::cloudjectsToPointsSample(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, cv::Mat& X, cv::Mat& c)
+{
+    c.create(cloudjects->size(), 1, cv::DataType<int>::type);
+
+    int numPointsInstances = 0;
     
-        // General couting
-        numInstances ++;
-        numPointInstances += (*it)->getNumOfDescriptorPoints();
+    int i = 0;
+    std::list<Cloudject::Ptr>::iterator cjIt;
+    for (cjIt = cloudjects->begin(); cjIt != cloudjects->end(); ++cjIt, ++i)
+    {
+        (*cjIt)->allocate();
+        
+        c.at<int>(i,0) = ((pcl::PointCloud<pcl::PFHRGBSignature250>*) (*cjIt)->getDescriptor())->points.size();
+        numPointsInstances += c.at<int>(i,0);
+    }
+    
+    // Create a sample of cloudjects' PFHRGB descriptors (all concatenated)
+    X.create(numPointsInstances, 250, cv::DataType<float>::type);
+    
+    int j = 0; // counter for descriptors
+    for (cjIt = cloudjects->begin(); cjIt != cloudjects->end(); ++cjIt)
+    {
+        pcl::PointCloud<pcl::PFHRGBSignature250>* pDescriptor = ((pcl::PointCloud<pcl::PFHRGBSignature250>*) (*cjIt)->getDescriptor());
+        for (int k = 0; k < pDescriptor->points.size(); k++)
+        {
+            cv::Mat row (1, 250, cv::DataType<float>::type, pDescriptor->points[k].histogram);
+            row.copyTo(X.row(j++));
+        }
+        (*cjIt)->release();
+    }
+}
+
+void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::cloudjectsToPointsSample(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, std::map<std::string,cv::Mat>& X)
+{
+    X.clear();
+    
+    std::map<std::string,int> numPointInstancesMap; // total no. descriptor points (no. rows of X and c actually)
+    
+    std::list<Cloudject::Ptr>::iterator cjIt;
+    for (cjIt = cloudjects->begin(); cjIt != cloudjects->end(); ++cjIt)
+    {
+        (*cjIt)->allocate(); // release before finishing the method calling
         
         // Category counting
-        std::set<std::string> labels = (*it)->getRegionLabels();
-        std::set<std::string>::iterator jt;
-        for (jt = labels.begin(); jt != labels.end(); ++jt)
-        {
-            numInstancesMap[*jt]++;
-            numPointInstancesMap[*jt] += (*it)->getNumOfDescriptorPoints();
-        }
+        std::set<std::string> labels = (*cjIt)->getRegionLabels();
+        std::set<std::string>::iterator lblIt;
+        for (lblIt = labels.begin(); lblIt != labels.end(); ++lblIt)
+            numPointInstancesMap[*lblIt] += (*cjIt)->getNumOfDescriptorPoints();
     }
     
     for (int k = 0; k < m_Categories.size(); k++)
-    {
-        XMap[m_Categories[k]].create(numPointInstancesMap[m_Categories[k]], 250, cv::DataType<float>::type);
-        cMap[m_Categories[k]].create(numPointInstancesMap[m_Categories[k]], 1, cv::DataType<int>::type);
-    }
+        X[m_Categories[k]].create(numPointInstancesMap[m_Categories[k]], 250, cv::DataType<float>::type);
     
-    std::map<std::string,int> jPtrMap; // counter for descriptors
-    std::map<std::string,int> iPtrMap; // counter (id) for cloudjects
-    for (it = cloudjects->begin(); (it != cloudjects->end()); ++it)
+    std::map<std::string,int> ptrsMap; // counter for descriptors
+    for (cjIt = cloudjects->begin(); cjIt != cloudjects->end(); ++cjIt)
     {
-        pcl::PointCloud<pcl::PFHRGBSignature250>* pDescriptor = ((pcl::PointCloud<pcl::PFHRGBSignature250>*) (*it)->getDescriptor());
-        std::set<std::string> labels = (*it)->getRegionLabels();
+        pcl::PointCloud<pcl::PFHRGBSignature250>* pDescriptor = ((pcl::PointCloud<pcl::PFHRGBSignature250>*) (*cjIt)->getDescriptor());
+        std::set<std::string> labels = (*cjIt)->getRegionLabels();
         
-        std::set<std::string>::iterator jt;
-        for (jt = labels.begin(); jt != labels.end(); ++jt)
+        std::set<std::string>::iterator lblIt;
+        for (lblIt = labels.begin(); lblIt != labels.end(); ++lblIt)
         {
             for (int p = 0; (p < pDescriptor->points.size()); p++)
             {
                 cv::Mat row (1, 250, cv::DataType<float>::type, pDescriptor->points[p].histogram);
-                row.copyTo(XMap[*jt].row(jPtrMap[*jt]));
-                
-                cMap[*jt].at<int>(jPtrMap[*jt],0) = iPtrMap[*jt];
-                
-                jPtrMap[*jt]++;
+                row.copyTo( X[*lblIt].row( ptrsMap[*lblIt]++ ) );
             }
-        
-            iPtrMap[*jt]++;
         }
+        
+        (*cjIt)->release(); // here the release
     }
-    
+}
+
+void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::bow(cv::Mat X, int q, cv::Mat& Q)
+{
+    // Find quantization vectors
+    cv::Mat u;
+    cv::kmeans(X, q, u, cv::TermCriteria(), 3, cv::KMEANS_PP_CENTERS, Q);
+}
+
+void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::bow(std::map<std::string,cv::Mat> X, int q, cv::Mat& Q)
+{
     // Find quantization vectors
     std::vector<cv::Mat> QVec (m_Categories.size());
+    
     for (int k = 0; k < m_Categories.size(); k++)
     {
         cv::Mat u;
-        cv::kmeans(XMap[m_Categories[k]], q, u, cv::TermCriteria(), 3, cv::KMEANS_PP_CENTERS, QVec[k]);
+        cv::kmeans(X[m_Categories[k]], q, u, cv::TermCriteria(), 3, cv::KMEANS_PP_CENTERS, QVec[k]);
     }
+    
     cv::vconcat(QVec,Q);
-
-    XMap.clear();
-    cMap.clear();
-    
-    X.create(numPointInstances, 250, cv::DataType<float>::type);
-    c.create(numPointInstances,   1, cv::DataType<int>::type);
-    
-    int jPtr = 0; // counter for descriptors
-    int iPtr = 0; // counter (id) for cloudjects
-    for (it = cloudjects->begin(); (it != cloudjects->end()); ++it)
-    {
-        pcl::PointCloud<pcl::PFHRGBSignature250>* pDescriptor = ((pcl::PointCloud<pcl::PFHRGBSignature250>*) (*it)->getDescriptor());
-        
-        for (int p = 0; (p < pDescriptor->points.size()); p++)
-        {
-            cv::Mat row (1, 250, cv::DataType<float>::type, pDescriptor->points[p].histogram);
-            row.copyTo(X.row(jPtr));
-            
-            c.at<int>(jPtr,0) = iPtr;
-            
-            jPtr++;
-        }
-        iPtr++;
-//        (*it)->release();
-    }
-    
-    W.create(numInstances, Q.rows, cv::DataType<float>::type);
-    for (int i = 0; i < X.rows; i++)
-    {
-        int closestQIdx;
-        float closestDist = std::numeric_limits<float>::max();
-        for (int k = 0; k < Q.rows; k++)
-        {
-            cv::Scalar d = cv::norm(X.row(i), Q.row(k), cv::NORM_L2);
-            if (d.val[0] < closestDist)
-            {
-                closestQIdx = k;
-                closestDist = d.val[0];
-            }
-        }
-        
-        W.at<float>(c.at<int>(i,0), closestQIdx)++;
-    }
-    
-    
-//    Waux[k].create(numInstances[k], q, cv::DataType<float>::type);
-//    for (int i = 0; i < Waux[k].rows; i++)
-//    {
-//        int cIdx = c[k].at<int>(i,0);
-//        Waux[k].at<float>(cIdx, u[k].at<int>(i,0))++;
-//    }
-//    
-//    
-//    cv::Mat X, c;
-//    X.create(numPointInstances, 250, cv::DataType<float>::type);
-//    c.create(numPointInstances,   1, cv::DataType<int>::type);
 }
 
-void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::bowSampleFromCloudjects(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, cv::Mat Q, cv::Mat& W)
+void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::bow(cv::Mat X, cv::Mat c, cv::Mat Q, cv::Mat& W)
 {
-    int numInstances = 0;
+    // Indexing vector, associating X rows to global instance
+    std::vector<cv::Mat> countings (c.rows);
+    for (int i = 0; i < c.rows; i++)
+        countings[i] = cv::Mat(c.at<int>(i,0), 1, c.type(), cv::Scalar(i));
     
-    std::list<Cloudject::Ptr>::iterator it;
-    for (it = cloudjects->begin(); it != cloudjects->end(); ++it)
-        numInstances += ((pcl::PointCloud<pcl::PFHRGBSignature250>*) (*it)->getDescriptor())->points.size();
+    cv::Mat I;
+    cv::vconcat(countings, I);
     
-    
-    // Create a sample of cloudjects' PFHRGB descriptors (all concatenated)
-    cv::Mat X (numInstances, 250, cv::DataType<float>::type);
-    cv::Mat c (numInstances, 1, cv::DataType<int>::type);
-    
-    int j = 0; // counter for descriptors
-    int i = 0; // counter (id) for cloudjects
-    for (it = cloudjects->begin(); it != cloudjects->end(); ++it, ++i)
-    {
-        pcl::PointCloud<pcl::PFHRGBSignature250>* pDescriptor = ((pcl::PointCloud<pcl::PFHRGBSignature250>*) (*it)->getDescriptor());
-        for (int k = 0; k < pDescriptor->points.size(); k++)
-        {
-            cv::Mat row (1, 250, cv::DataType<float>::type, pDescriptor->points[k].histogram);
-            row.copyTo(X.row(j));
-            // Track to which cloudject and partition the PFHRGB descriptor belongs
-            c.at<int>(j,0) = i;
-            
-            j++;
-        }
-    }
-    
-    // Use previously computed quantization vectors
-    W.create(cloudjects->size(), Q.rows, cv::DataType<float>::type);
+    // Word construction
+    W.create(c.rows, Q.rows, cv::DataType<float>::type);
     for (int i = 0; i < X.rows; i++)
     {
         int closestQIdx;
@@ -617,7 +739,7 @@ void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::bowSampleFromClou
             }
         }
         
-        W.at<float>(c.at<int>(i,0), closestQIdx)++;
+        W.at<float>(I.at<int>(i,0), closestQIdx)++;
     }
 }
 
@@ -639,23 +761,222 @@ float CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::validate()
     m_ClassifierParams.resize(Y.cols);
     
     m_qValPerfs.resize(m_qValParam.size());
+
+    std::vector<cv::Mat> QVec (1);
+    if (!m_bPerFoldQuantization)
+    {
+        QVec.resize(m_qValParam.size());
+        for (int i = 0; i < m_qValParam.size(); i++)
+        {
+            if (!m_bPerCategoryRed)
+            {
+                cv::Mat X, c;
+                cloudjectsToPointsSample(m_InputCloudjects, X, c); // c is discarded
+                bow(X, m_qValParam[i], QVec[i]);
+            }
+            else
+            {
+                std::map<std::string,cv::Mat> XMap;
+                cloudjectsToPointsSample(m_InputCloudjects, XMap);
+                bow(XMap, m_qValParam[i], QVec[i]);
+            }
+            
+        }
+    }
+    
+    std::vector<cv::Mat> S (m_qValParam.size());
+    
+    for (int t = 0; t < m_NumFolds; t++)
+    {
+        // Partitionate the data
+        
+        boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjectsTr (new std::list<Cloudject::Ptr>);
+        boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjectsTe (new std::list<Cloudject::Ptr>);
+        getTrainingCloudjects(m_InputCloudjects, t, *cloudjectsTr);
+        getTestCloudjects(m_InputCloudjects, t, *cloudjectsTe);
+
+        std::map<std::string,cv::Mat> XTrMap;
+        if (m_bPerFoldQuantization)
+            cloudjectsToPointsSample(cloudjectsTr, XTrMap);
+        
+        // Create the training sample and quantize
+        
+        cv::Mat XTr, XTe, cTr, cTe;
+        cloudjectsToPointsSample(cloudjectsTr, XTr, cTr);
+        cloudjectsToPointsSample(cloudjectsTe, XTe, cTe);
+        
+        // Get the partitioned data labels
+        
+        cv::Mat YTr, YTe;
+        getLabels(cloudjectsTr, m_Categories, YTr);
+        getLabels(cloudjectsTe, m_Categories, YTe);
+        
+        for (int i = 0; i < m_qValParam.size(); i++)
+        {
+            if (m_bPerFoldQuantization)
+                bow(XTrMap, m_qValParam[i], QVec[0]);
+            
+            cv::Mat WTr, WTe;
+            bow(XTr, cTr, m_bPerFoldQuantization ? QVec[0] : QVec[i], WTr);
+            bow(XTe, cTe, m_bPerFoldQuantization ? QVec[0] : QVec[i], WTe);
+            
+            cv::Mat WnTr, WnTe;
+            std::vector<cv::Mat> parameters;
+            normalize(WTr, WnTr, parameters);
+            normalize(WTe, parameters, WnTe);
+            
+            cv::Mat WpTr, WpTe;
+            if (!m_bPerCategoryRed)
+            {
+                cv::PCA PCA;
+                CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::reduce(WnTr, WpTr, PCA);
+                CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::reduce(WnTe, PCA, WpTe);
+            }
+            else
+            {
+                std::vector<cv::PCA> PCAs;
+                reduce(WnTr, m_qValParam[i] / m_Categories.size(), WpTr, PCAs);
+                reduce(WnTe, PCAs, WpTe);
+            }
+            
+            cv::Mat P = CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::validate(WpTr, WpTe, YTr, YTe);
+            
+//            std::cout << P << std::endl;
+            if (t == 0) S[i] = (P/m_NumFolds);
+            else S[i] += (P/m_NumFolds);
+        }
+    }
+    
+    
+    m_qValPerfs.resize(m_qValParam.size());
     for (int i = 0; i < m_qValParam.size(); i++)
     {
-        // Bag-of-words aggregation since PFHRGBSignature is a local descriptor
-        cv::Mat W, C;
-        bowSampleFromCloudjects(m_InputCloudjects, m_qValParam[i], W, C);
+        std::cout << S[i] << std::endl;
+
+        m_qValPerfs[i] = .0f;
         
-        // Eventually train
-        m_qValPerfs[i] = CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::validate(W,Y);
+        std::vector<std::vector<float> > classifierParamsTmp (Y.cols);
+        for (int j = 0; j < Y.cols; j++)
+        {
+            double minVal, maxVal;
+            cv::Point minIdx, maxIdx;
+            cv::minMaxLoc(S[i].col(j), &minVal, &maxVal, &minIdx, &maxIdx);
+
+            m_qValPerfs[i] += (maxVal / Y.cols);
+        }
+        
         if (m_qValPerfs[i] > m_BestValPerformance)
         {
-            m_q = m_qValParam[i];
             m_BestValPerformance = m_qValPerfs[i];
+            m_q = m_qValParam[i]; // can be used in the training without explicit specification
         }
     }
     
     return m_BestValPerformance;
 }
+
+//float CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::validate()
+//{
+//    // Input data already set
+//    assert (m_InputCloudjects->size() > 0);
+//    
+//    cv::Mat Y;
+//    getLabels(m_InputCloudjects, m_Categories, Y);
+//    
+//    createValidationPartitions(Y, m_NumFolds, m_Partitions);
+//    
+//    m_ClassifierParams.resize(Y.cols);
+//    
+//    m_qValPerfs.resize(m_qValParam.size());
+//    
+//    std::vector<cv::Mat> S (m_qValParam.size());
+//    
+//    for (int t = 0; t < m_NumFolds; t++)
+//    {
+//        // Partitionate the data
+//        
+//        boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjectsTr (new std::list<Cloudject::Ptr>);
+//        boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjectsTe (new std::list<Cloudject::Ptr>);
+//        getTrainingCloudjects(m_InputCloudjects, t, *cloudjectsTr);
+//        getTestCloudjects(m_InputCloudjects, t, *cloudjectsTe);
+//        
+//        // Create per-category samples to train BoW and find quantization centers
+//        
+//        std::map<std::string,cv::Mat> XTrMap;
+//        cloudjectsToPointsSample(cloudjectsTr, XTrMap);
+//        
+//        // Create the training sample and quantize
+//        
+//        cv::Mat XTr, XTe, cTr, cTe;
+//        cloudjectsToPointsSample(cloudjectsTr, XTr, cTr);
+//        cloudjectsToPointsSample(cloudjectsTe, XTe, cTe);
+//        
+//        // Get the partitioned data labels
+//        
+//        cv::Mat YTr, YTe;
+//        getLabels(cloudjectsTr, m_Categories, YTr);
+//        getLabels(cloudjectsTe, m_Categories, YTe);
+//        
+//        for (int i = 0; i < m_qValParam.size(); i++)
+//        {
+//            cv::Mat Q;
+//            bow(XTrMap, m_qValParam[i], Q);
+//            
+//            cv::Mat WTr, WTe;
+//            bow(XTr, cTr, Q, WTr);
+//            bow(XTe, cTe, Q, WTe);
+//            
+//            cv::Mat WnTr, WnTe;
+//            std::vector<cv::Mat> parameters;
+//            normalize(WTr, WnTr, parameters);
+//            normalize(WTe, parameters, WnTe);
+//            
+//            cv::Mat WpTr, WpTe;
+//            if (!m_bPerCategoryRed)
+//            {
+//                cv::PCA PCA;
+//                CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::reduce(WnTr, WpTr, PCA);
+//                CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::reduce(WnTe, PCA, WpTe);
+//            }
+//            else
+//            {
+//                std::vector<cv::PCA> PCAs;
+//                reduce(WnTr, m_qValParam[i] / m_Categories.size(), WpTr, PCAs);
+//                reduce(WnTe, PCAs, WpTe);
+//            }
+//            
+//            cv::Mat P = CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::validate(WpTr, WpTe, YTr, YTe);
+//            
+//            if (t == 0) S[i] = (P/m_NumFolds);
+//            else S[i] += (P/m_NumFolds);
+//        }
+//    }
+//    
+//    m_qValPerfs.resize(m_qValParam.size());
+//    for (int i = 0; i < m_qValParam.size(); i++)
+//    {
+//        m_qValPerfs[i] = .0f;
+//        
+//        std::vector<std::vector<float> > classifierParamsTmp (Y.cols);
+//        for (int j = 0; j < Y.cols; j++)
+//        {
+//            double minVal, maxVal;
+//            cv::Point minIdx, maxIdx;
+//            cv::minMaxLoc(S[i].col(j), &minVal, &maxVal, &minIdx, &maxIdx);
+//            
+//            m_qValPerfs[i] += (maxVal / Y.cols);
+//        }
+//        
+//        if (m_qValPerfs[i] > m_BestValPerformance)
+//        {
+//            m_BestValPerformance = m_qValPerfs[i];
+//            m_q = m_qValParam[i]; // can be used in the training without explicit specification
+//        }
+//    }
+//    
+//    return m_BestValPerformance;
+//}
+
 
 std::vector<float> CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::getQuantizationValidationPerformances()
 {
@@ -669,61 +990,100 @@ int CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::getQuantizationPar
 
 void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::train()
 {
-    cv::Mat Y;
-    getLabels(m_InputCloudjects, m_Categories, Y);
-    
-    // Bag-of-words aggregation since PFHRGBSignature is a local descriptor
-    cv::Mat W, Q;
-    bowSampleFromCloudjects(m_InputCloudjects, m_q, W, m_C);
-    
-    // Eventually train
-    CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::train(W,Y);
+//    cv::Mat Y;
+//    getLabels(m_InputCloudjects, m_Categories, Y);
+//    
+//    // Bag-of-words aggregation since PFHRGBSignature is a local descriptor
+//    cv::Mat W, Q;
+//    bowSampleFromCloudjects(m_InputCloudjects, m_q, W, m_C);
+//    
+//    // Eventually train
+//    CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::train(W,Y);
 }
 
 std::vector<float> CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::predict(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, std::list<std::vector<int> >& predictions, std::list<std::vector<float> >& distsToMargin)
 {
-    cv::Mat Y;
-    getLabels(cloudjects, m_Categories, Y);
-    
-    // Bag-of-words aggregation since PFHRGBSignature is a local descriptor
-    cv::Mat W, Q;
-    bowSampleFromCloudjects(cloudjects, m_C, W);
-    
-    assert (cloudjects->size() == W.rows); // a word per cloudject
-    
-    // Eventually predict
-    cv::Mat P,F;
-    CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::predict(W,P,F);
-    
-    cvx::convert(P, predictions);
-    cvx::convert(F, distsToMargin);
-    
-    // Prepare the output
-    std::vector<float> accs = CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::evaluate(Y,P);
-    
-    return accs;
+//    cv::Mat Y;
+//    getLabels(cloudjects, m_Categories, Y);
+//    
+//    // Bag-of-words aggregation since PFHRGBSignature is a local descriptor
+//    cloudjectsToPointsSample(<#boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects#>, <#std::map<std::string, cv::Mat> &X#>)
+//    cv::Mat W, Q;
+//    bowSampleFromCloudjects(cloudjects, m_C, W);
+//    
+//    assert (cloudjects->size() == W.rows); // a word per cloudject
+//    
+//    // Eventually predict
+//    cv::Mat P,F;
+//    CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::predict(W,P,F);
+//    
+//    cvx::convert(P, predictions);
+//    cvx::convert(F, distsToMargin);
+//    
+//    // Prepare the output
+//    std::vector<float> accs = CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::evaluate(Y,P);
+//    
+//    return accs;
 }
 
 std::vector<int> CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::predict(Cloudject::Ptr cloudject, std::vector<float>& distsToMargin)
 {
-    boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects (new std::list<Cloudject::Ptr>);
-    cloudjects->push_back(cloudject);
+//    boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects (new std::list<Cloudject::Ptr>);
+//    cloudjects->push_back(cloudject);
+//    
+//    cv::Mat W, Q;
+//    bowSampleFromCloudjects(cloudjects, m_C, W);
+//    
+//    assert (W.rows == 1);
+//    
+//    // Eventually predict
+//    cv::Mat P,F;
+//    CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::predict(W,P,F);
+//    
+//    cv::Mat f = F.row(0);
+//    distsToMargin = std::vector<float>(f.begin<float>(), f.end<float>());
+//    
+//    cv::Mat p = P.row(0);
+//    std::vector<int> predictions ( p.begin<int>(), p.end<int>());
+//    return predictions;
+}
+            
+void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::reduce(cv::Mat X, int q, cv::Mat& Xr, std::vector<cv::PCA>& PCAs)
+{
+    int m = X.cols / q;
+    PCAs.resize(q);
     
-    cv::Mat W, Q;
-    bowSampleFromCloudjects(cloudjects, m_C, W);
-    
-    assert (W.rows == 1);
-    
-    // Eventually predict
-    cv::Mat P,F;
-    CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::predict(W,P,F);
-    
-    cv::Mat f = F.row(0);
-    distsToMargin = std::vector<float>(f.begin<float>(), f.end<float>());
-    
-    cv::Mat p = P.row(0);
-    std::vector<int> predictions ( p.begin<int>(), p.end<int>());
-    return predictions;
+    std::vector<cv::Mat> XrVec (q);
+    for (int i = 0; i < q; i++)
+    {
+        cv::Mat roi (X, cv::Rect(i*m, 0, m, X.rows));
+        CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::reduce(roi, XrVec[i], PCAs[i]);
+    }
+    cv::hconcat(XrVec, Xr);
+}
+            
+void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::reduce(cv::Mat X, std::vector<cv::PCA> PCAs, cv::Mat& Xr)
+{
+    int m = X.cols / PCAs.size();
+
+    std::vector<cv::Mat> XrVec (PCAs.size());
+    for (int i = 0; i < PCAs.size(); i++)
+    {
+        cv::Mat roi (X, cv::Rect(i*m, 0, m, X.rows));
+        CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::reduce(roi, PCAs[i], XrVec[i]);
+    }
+    cv::hconcat(XrVec, Xr);
+}
+                    
+void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::setPerCategoryReduction(bool bPerCategoryRed)
+{
+    m_bPerCategoryRed = bPerCategoryRed;
+}
+
+                    
+void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::setPerFoldQuantization(bool bPerFoldQuantization)
+{
+    m_bPerFoldQuantization = bPerFoldQuantization;
 }
 
 template class CloudjectClassificationPipeline<pcl::PFHRGBSignature250>;
@@ -736,5 +1096,4 @@ template void CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::setC
 template void CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::setValidation(int numFolds);
 template void CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::setClassifierValidationParameters(std::vector<std::vector<float> > classifierParams);
 template void CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::train(cv::Mat X, cv::Mat Y);
-template float CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::validate(cv::Mat X, cv::Mat Y);
 template void CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::predict(cv::Mat X, cv::Mat& P, cv::Mat& F);

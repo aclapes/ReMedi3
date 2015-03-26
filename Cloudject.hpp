@@ -283,7 +283,6 @@ public:
 //            m_pCloud->clear();
             m_pCloud = pcl::PointCloud<pcl::PointXYZRGB>::Ptr(new pcl::PointCloud<pcl::PointXYZRGB>);
         
-        m_DescriptorType = "";
         destroy();
     }
     

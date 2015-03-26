@@ -294,7 +294,7 @@ int run()
     
     
     std::vector<int> quantValParams;
-    quantValParams += 5;//10, 50, 100, 500;
+    quantValParams += 15;//10, 50, 100, 500;
     
     std::vector<std::vector<float> > svmrbfValParams;
     std::vector<float> gammaValParams, reglValParams;
@@ -314,7 +314,7 @@ int run()
 
         pipelines[t]->setNormalization(CCPIPELINE_NORM_L2);
 //        pipelines[t]->setDimRedVariance(0.9);
-//        pipelines[t]->setDimRedNumFeatures(70);
+        pipelines[t]->setDimRedNumFeatures(15);
         pipelines[t]->setClassifierType("svmrbf");
         
         pipelines[t]->setValidation(10);

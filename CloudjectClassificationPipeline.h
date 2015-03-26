@@ -31,6 +31,7 @@ public:
     ~CloudjectClassificationPipelineBase();
     
     void setInputCloudjects(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, std::vector<const char*> categories);
+    boost::shared_ptr<std::list<Cloudject::Ptr> > getInputCloudjects();
     
     void setDimRedVariance(double var);
     void setDimRedNumFeatures(int n);
@@ -54,7 +55,6 @@ protected:
     
     double m_DimRedVariance;
     int m_DimRedNumFeatures;
-    cv::PCA m_PCA;
     
     std::string m_ClassifierType;
     std::vector<std::vector<float> > m_ClassifierValParams;
@@ -66,20 +66,23 @@ protected:
     void getLabels(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, std::vector<const char*> categories, cv::Mat& Y);
     void createValidationPartitions(cv::Mat Y, int numFolds, cv::Mat& partitions);
     
-    float validate(cv::Mat X, cv::Mat Y);
+    cv::Mat validate(cv::Mat XTr, cv::Mat XTe, cv::Mat YTr, cv::Mat YTe);
     void train(cv::Mat X, cv::Mat Y);
     void predict(cv::Mat X, cv::Mat& P, cv::Mat& F);
     
     std::vector<float> evaluate(cv::Mat Y, cv::Mat F);
     
-private:
     void normalize(cv::Mat X, cv::Mat& Xn, std::vector<cv::Mat>& parameters); // train
     void normalize(cv::Mat X, std::vector<cv::Mat> parameters, cv::Mat& Xn); // test
-//    void reduce(cv::Mat M, cv::Mat& Mr, cv::Mat& eigenvectors, cv::Mat& centers); // train
-//    void reduce(cv::Mat M, cv::Mat eigenvectors, cv::Mat centers, cv::Mat& Mr); // test
     
-    void getTrainingFold(cv::Mat X, cv::Mat Y, int t, cv::Mat& XTr, cv::Mat& YTr);
-    void getTestFold(cv::Mat X, cv::Mat Y, int t, cv::Mat& XTe, cv::Mat& YTe);
+    void reduce(cv::Mat X, cv::Mat& Xr, cv::PCA& pca); // train
+    void reduce(cv::Mat X, cv::PCA pca, cv::Mat& Xr); // test
+    
+    void getTrainingCloudjects(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, int t, std::list<Cloudject::Ptr>& cloudjectsTr);
+    void getTestCloudjects(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, int t, std::list<Cloudject::Ptr>& cloudjectsTe);
+    
+private:
+    cv::Mat m_P; // Validation parameters [P]erformance
 };
 
 template<typename T>
@@ -101,6 +104,9 @@ public:
     
     int getQuantizationParameter();
     
+    void setPerCategoryReduction(bool bPerCategoryRed = true);
+    void setPerFoldQuantization(bool bPerCategoryRed = true);
+    
     void train();
     
     std::vector<float> predict(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, std::list<std::vector<int> >& predictions, std::list<std::vector<float> >& distsToMargin);
@@ -114,9 +120,24 @@ private:
     cv::vector<float> m_qValPerfs;
     
     cv::Mat m_C; // the q vectors actually
-        
-    void bowSampleFromCloudjects(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, int q, cv::Mat& W, cv::Mat& Q);
-    void bowSampleFromCloudjects(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, cv::Mat Q, cv::Mat& W);
+    
+    bool m_bPerFoldQuantization;
+    bool m_bPerCategoryRed;
+    
+    void cloudjectsToPointsSample(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, cv::Mat& X, cv::Mat& c);
+    void cloudjectsToPointsSample(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, std::map<std::string,cv::Mat>& X);
+    
+    // train bow
+    void bow(cv::Mat X, int q, cv::Mat& Q);
+    void bow(std::map<std::string,cv::Mat> X, int q, cv::Mat& Q);
+    // test bow
+    void bow(cv::Mat X, cv::Mat c, cv::Mat Q, cv::Mat& W);
+
+//    void bowSampleFromCloudjects(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, int q, cv::Mat& W, cv::Mat& Q);
+//    void bowSampleFromCloudjects(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, cv::Mat Q, cv::Mat& W);
+    
+    void reduce(cv::Mat X, int q, cv::Mat& Xr, std::vector<cv::PCA>& pcas); // train
+    void reduce(cv::Mat X, std::vector<cv::PCA> pcas, cv::Mat& Xr); // test
 };
 
 #endif /* defined(__remedi3__CloudjectClassificationPipeline__) */
