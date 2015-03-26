@@ -800,6 +800,73 @@ void remedi::getTestCloudjectsWithDescriptor(std::vector<Sequence<ColorDepthFram
 //            }
 //        }
 //    }
+    
+    cloudjects.clear();
+    
+    std::cout << "Creating the sample of testing cloudjects .." << std::endl;
+    boost::timer t;
+    
+    for (int s = 0; s < sequences.size(); s++)
+    {
+        if (partitions[s] == p)
+        {
+            std::string resultsParent = string(PARENT_PATH) + string(RESULTS_SUBDIR)
+            + sequences[s]->getName() + "/" + string(KINECT_SUBSUBDIR);
+            
+            std::cout << resultsParent << std::endl;
+            
+            sequences[s]->restart();
+            while(sequences[s]->hasNextFrames())
+            {
+                sequences[s]->next();
+                std::vector<std::string> fids = sequences[s]->getFramesFilenames();
+    
+                for (int v = 0; v < sequences[s]->getNumOfViews(); v++)
+                {
+                    // Iterate over the foreground regions in this frame F
+                    
+                    std::vector<ForegroundRegion> regionsF;
+                    remedi::io::readPredictionRegions(resultsParent + string(CLOUDJECTS_DIRNAME)
+                                                      + sequences[s]->getViewName(v), fids[v], regionsF, true);
+                    
+                    std::map<std::string,std::map<std::string,GroundtruthRegion> > annotationsF = gt.at(sequences[s]->getName()).at(sequences[s]->getViewName(v)).at(fids[v]);
+                    
+                    std::vector<ForegroundRegion> regionsTeF;
+                    for (int i = 0; i < regionsF.size(); i++)
+                    {
+                        regionsF[i].allocateMask();
+                        
+                        std::map<std::string,std::map<std::string,GroundtruthRegion> >::iterator it;
+                        for (it = annotationsF.begin(); it != annotationsF.end(); ++it)
+                        {
+                            std::map<std::string,GroundtruthRegion>::iterator jt;
+                            for (jt = it->second.begin(); jt != it->second.end(); ++jt)
+                            {
+                                GroundtruthRegion a = jt->second;
+                                a.allocateMask();
+                                float wovl = weightedOverlapBetweenRegions(regionsF[i], a);
+                                a.releaseMask();
+                                
+                                if (wovl > .01f) regionsF[i].addLabel(jt->second.getCategory());
+                            }
+                        }
+                        
+                        regionsTeF.push_back(regionsF[i]);
+                    }
+                    
+                    // Read the cloudjects representing the selected regions
+                    std::vector<Cloudject::Ptr> cloudjectsTeF;
+                    remedi::io::mockreadCloudjectsWithDescriptor(resultsParent + string(CLOUDJECTS_DIRNAME) + sequences[s]->getViewName(v), fids[v], regionsTeF, descriptorType, cloudjectsTeF, true);
+                    
+                    // Assign the already prepared labels and push
+                    for (int i = 0; i < cloudjectsTeF.size(); i++)
+                        cloudjects.push_back(cloudjectsTeF[i]);
+                }
+            }
+        }
+    }
+    
+    std::cout << "Created a sample of " << cloudjects.size() << " cloudjects (in " << t.elapsed() << " secs.)" << std::endl;
 }
 
 void remedi::getTestSequences(std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> partitions, int p, std::vector<Sequence<ColorDepthFrame>::Ptr>& sequencesTe)

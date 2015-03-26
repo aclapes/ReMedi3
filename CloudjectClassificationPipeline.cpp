@@ -578,7 +578,10 @@ void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::bowSampleFromClou
     
     std::list<Cloudject::Ptr>::iterator it;
     for (it = cloudjects->begin(); it != cloudjects->end(); ++it)
+    {
+        (*it)->allocate();
         numInstances += ((pcl::PointCloud<pcl::PFHRGBSignature250>*) (*it)->getDescriptor())->points.size();
+    }
     
     
     // Create a sample of cloudjects' PFHRGB descriptors (all concatenated)
@@ -599,6 +602,7 @@ void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::bowSampleFromClou
             
             j++;
         }
+        (*it)->release();
     }
     
     // Use previously computed quantization vectors

@@ -321,12 +321,8 @@ int run()
         pipelines[t]->setQuantizationValidationParameters(quantValParams);
         pipelines[t]->setClassifierValidationParameters(svmrbfValParams);
         
-//        for (int i = 0; i < 10; i++)
-//        {
-            pipelines[t]->validate(); // model selection
-            // get the performances of the different quantizations
-            std::cout << cv::Mat(pipelines[t]->getQuantizationValidationPerformances()) << std::endl;
-//        }
+        pipelines[t]->validate(); // model selection
+        std::cout << cv::Mat(pipelines[t]->getQuantizationValidationPerformances()) << std::endl;
         
         pipelines[t]->train(); // use the best parameters found in the model selection
         
