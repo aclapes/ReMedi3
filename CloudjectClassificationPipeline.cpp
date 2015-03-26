@@ -496,7 +496,7 @@ CloudjectClassificationPipeline<pcl::PFHRGBSignature250>& CloudjectClassificatio
     return *this;
 }
 
-void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::setPerFoldQuantization(bool bGlobalQuantization)
+void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::setGlobalQuantization(bool bGlobalQuantization)
 {
     m_bGlobalQuantization = bGlobalQuantization;
 }
@@ -617,6 +617,7 @@ void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::bow(cv::Mat X, cv
     
     // Word construction
     W.create(c.rows, Q.rows, cv::DataType<float>::type);
+    W.setTo(0);
     for (int i = 0; i < X.rows; i++)
     {
         int closestQIdx;
@@ -682,7 +683,8 @@ float CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::validate()
                 // of categories)
                 std::map<std::string,cv::Mat> XMap;
                 cloudjectsToPointsSample(m_InputCloudjects, XMap);
-                bow(XMap, floor(m_qValParam[i] / m_Categories.size()) + 1, gQ[i]);
+                int sq = floor(m_qValParam[i] / m_Categories.size());
+                bow(XMap, (sq == 0) ? 1 : sq, gQ[i]);
             }
         }
     }
@@ -762,8 +764,6 @@ float CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::validate()
         std::cout << S[i] << std::endl;
 
         m_qValPerfs[i] = .0f;
-        
-        std::vector<std::vector<float> > classifierParamsTmp (Y.cols);
         for (int j = 0; j < Y.cols; j++)
         {
             double minVal, maxVal;

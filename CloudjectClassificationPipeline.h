@@ -104,9 +104,10 @@ public:
     
     int getQuantizationParameter();
     
+    void setGlobalQuantization(bool bGlobalQuantization = true);
+
     void setCentersStratification(bool bCentersStratification = true);
     void setPerCategoryReduction(bool bPerCategoryRed = true);
-    void setPerFoldQuantization(bool bPerCategoryRed = true);
     
     void train();
     

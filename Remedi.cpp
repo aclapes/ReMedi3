@@ -519,7 +519,7 @@ void remedi::getTrainingCloudjectsWithDescriptor(std::vector<Sequence<ColorDepth
     std::cout << "Creating the sample of training cloudjects .." << std::endl;
     boost::timer t;
     
-    for (int s = 0; s < 3/*sequences.size()*/; s++)
+    for (int s = 0; s < sequences.size(); s++)
     {
         if (partitions[s] != p)
         {
