@@ -795,6 +795,9 @@ void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::train()
 {
     assert (m_InputCloudjects->size() > 0);
     
+    cv::Mat Y;
+    getLabels(m_InputCloudjects, m_Categories, Y);
+    
     cv::Mat X, c;
     cloudjectsToPointsSample(m_InputCloudjects, X, c);
     
@@ -826,6 +829,8 @@ void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::train()
         m_PCAs.resize(1);
         CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::reduce(Wn, Wp, m_PCAs[0]);
     }
+    
+    CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::train(Wp,Y);
 }
 
 std::vector<float> CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::predict(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, std::list<std::vector<int> >& predictions, std::list<std::vector<float> >& distsToMargin)
