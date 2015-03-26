@@ -294,12 +294,12 @@ int run()
     
     
     std::vector<int> quantValParams;
-    quantValParams += 5;//10, 50, 100, 500;
+    quantValParams += 5, 10, 15;
     
     std::vector<std::vector<float> > svmrbfValParams;
     std::vector<float> gammaValParams, reglValParams;
-    gammaValParams += 1e-4, 1e-2, 1e-1, 1, 10; //1e-4, 1e-3, 1e-2, 5e-2, 1e-1, 0.5, 1, 5, 10; // rbf kernel's gamma
-    reglValParams += 1e-4, 1e-2, 1e-1, 1, 10, 100;//1e-4, 1e-3, 1e-2, 1e-1, 0.5, 1, 5, 10, 50, 100, 1000; // regularization CValue
+    gammaValParams += 1e-4, 1e-3, 1e-2, 5e-2, 1e-1, 0.5, 1, 5, 10; // rbf kernel's gamma
+    reglValParams += 1e-4, 1e-3, 1e-2, 1e-1, 0.5, 1, 5, 10, 50, 100, 1000; // regularization CValue
     svmrbfValParams += gammaValParams, reglValParams;
     
     // Train classifiers and measure recognition accuracy
@@ -321,12 +321,12 @@ int run()
         pipelines[t]->setQuantizationValidationParameters(quantValParams);
         pipelines[t]->setClassifierValidationParameters(svmrbfValParams);
         
-        for (int i = 0; i < 10; i++)
-        {
+//        for (int i = 0; i < 10; i++)
+//        {
             pipelines[t]->validate(); // model selection
             // get the performances of the different quantizations
             std::cout << cv::Mat(pipelines[t]->getQuantizationValidationPerformances()) << std::endl;
-        }
+//        }
         
         pipelines[t]->train(); // use the best parameters found in the model selection
         
