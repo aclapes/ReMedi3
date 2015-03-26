@@ -485,7 +485,9 @@ CloudjectClassificationPipeline<pcl::PFHRGBSignature250>& CloudjectClassificatio
     if (this != &rhs)
     {
         m_q = rhs.m_q;
-        m_C = rhs.m_C;
+        m_Q = rhs.m_Q;
+        
+        m_PCAs = rhs.m_PCAs;
         
         m_bGlobalQuantization = rhs.m_bGlobalQuantization;
         
@@ -645,15 +647,11 @@ float CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::validate()
 {
     // Input data already set
     assert (m_InputCloudjects->size() > 0);
-    
+    m_qValPerfs.resize(m_qValParam.size());
+
     cv::Mat Y;
     getLabels(m_InputCloudjects, m_Categories, Y);
-    
     createValidationPartitions(Y, m_NumFolds, m_Partitions);
-    
-    m_ClassifierParams.resize(Y.cols);
-    
-    m_qValPerfs.resize(m_qValParam.size());
 
     std::vector<cv::Mat> gQ (m_qValParam.size());
     if (m_bGlobalQuantization)
@@ -795,15 +793,39 @@ int CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::getQuantizationPar
 
 void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::train()
 {
-//    cv::Mat Y;
-//    getLabels(m_InputCloudjects, m_Categories, Y);
-//    
-//    // Bag-of-words aggregation since PFHRGBSignature is a local descriptor
-//    cv::Mat W, Q;
-//    bowSampleFromCloudjects(m_InputCloudjects, m_q, W, m_C);
-//    
-//    // Eventually train
-//    CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::train(W,Y);
+    assert (m_InputCloudjects->size() > 0);
+    
+    cv::Mat X, c;
+    cloudjectsToPointsSample(m_InputCloudjects, X, c);
+    
+    if (!m_bCentersStratification)
+    {
+        bow(X, m_q, m_Q);
+    }
+    else
+    {
+        std::map<std::string,cv::Mat> XMap;
+        cloudjectsToPointsSample(m_InputCloudjects, XMap);
+        int sq = m_q / m_Categories.size();
+        bow(XMap, (sq == 0) ? 1 : sq, m_Q);
+    }
+    
+    cv::Mat W;
+    bow(X, c, m_Q, W);
+    
+    cv::Mat Wn;
+    normalize(W, Wn, m_NormParams);
+    
+    cv::Mat Wp;
+    if (m_bCentersStratification && m_bPerStrateReduction)
+    {
+        reduce(Wn, m_q / m_Categories.size(), Wp, m_PCAs);
+    }
+    else
+    {
+        m_PCAs.resize(1);
+        CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::reduce(Wn, Wp, m_PCAs[0]);
+    }
 }
 
 std::vector<float> CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::predict(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, std::list<std::vector<int> >& predictions, std::list<std::vector<float> >& distsToMargin)

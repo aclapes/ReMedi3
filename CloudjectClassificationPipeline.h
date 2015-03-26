@@ -121,7 +121,8 @@ private:
     cv::vector<int> m_qValParam;
     cv::vector<float> m_qValPerfs;
     
-    cv::Mat m_C; // the q vectors actually
+    std::vector<cv::PCA> m_PCAs;
+    cv::Mat m_Q; // the q vectors actually
     
     bool m_bGlobalQuantization;
     
@@ -130,6 +131,8 @@ private:
     
     void cloudjectsToPointsSample(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, cv::Mat& X, cv::Mat& c);
     void cloudjectsToPointsSample(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, std::map<std::string,cv::Mat>& X);
+    
+    std::vector<cv::PCA> PCAs;
     
     // train bow
     void bow(cv::Mat X, int q, cv::Mat& Q);
