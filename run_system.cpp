@@ -319,17 +319,21 @@ int run()
         
         pipelines[t]->setGlobalQuantization();
         pipelines[t]->setCentersStratification();
+        pipelines[t]->setPerCategoryReduction();
         
         pipelines[t]->setValidation(10);
         pipelines[t]->setQuantizationValidationParameters(quantValParams);
         pipelines[t]->setClassifierValidationParameters(svmrbfValParams);
         
-        for (int i = 0; i < 10; i++)
-        {
-            pipelines[t]->validate(); // model selection
-            // get the performances of the different quantizations
-            std::cout << cv::Mat(pipelines[t]->getQuantizationValidationPerformances()) << std::endl;
-        }
+        pipelines[t]->validate(); // model selection
+        
+        // get the performances of the different quantizations
+        std::vector<float> quantValPerfs = (pipelines[t]->getQuantizationValidationPerformances());
+        std::cout << cv::Mat(quantValPerfs) << std::endl;
+        
+        int quantParam = pipelines[t]->getQuantizationParameter();
+//        std::vector<std::vector<float> > classifParams = pipelines[t]->get
+       
         
         pipelines[t]->train(); // use the best parameters found in the model selection
         

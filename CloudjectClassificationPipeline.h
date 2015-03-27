@@ -41,7 +41,9 @@ public:
 
     void setValidation(int numFolds);
     void setClassifierValidationParameters(std::vector<std::vector<float> > classifierParams);
-    
+
+    void setClassifierParameters(std::vector<std::vector<float> > classifierParams);
+
 protected:
 
     boost::shared_ptr<std::list<Cloudject::Ptr> > m_InputCloudjects;
@@ -66,7 +68,10 @@ protected:
     void getLabels(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, std::vector<const char*> categories, cv::Mat& Y);
     void createValidationPartitions(cv::Mat Y, int numFolds, cv::Mat& partitions);
     
-    cv::Mat validate(cv::Mat XTr, cv::Mat XTe, cv::Mat YTr, cv::Mat YTe);
+    void validate(cv::Mat XTr, cv::Mat XTe, cv::Mat YTr, cv::Mat YTe);
+    std::vector<std::vector<float> > getValidationParametersCombinations();
+    cv::Mat getValidationPerformances();
+    
     void train(cv::Mat X, cv::Mat Y);
     void predict(cv::Mat X, cv::Mat& P, cv::Mat& F);
     
@@ -82,7 +87,8 @@ protected:
     void getTestCloudjects(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, int t, std::list<Cloudject::Ptr>& cloudjectsTe);
     
 private:
-    cv::Mat m_P; // Validation parameters [P]erformance
+    std::vector<std::vector<float> > m_ClassifiersValParamCombs;
+    cv::Mat m_ClassifiersValPerfs; // Validation parameters [P]erformance
 };
 
 template<typename T>
@@ -103,6 +109,7 @@ public:
     std::vector<float> getQuantizationValidationPerformances();
     
     int getQuantizationParameter();
+    void setQuantizationParameter(int q);
     
     void setGlobalQuantization(bool bGlobalQuantization = true);
 
@@ -144,7 +151,7 @@ private:
 //    void bowSampleFromCloudjects(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, cv::Mat Q, cv::Mat& W);
     
     void reduce(cv::Mat X, int q, cv::Mat& Xr, std::vector<cv::PCA>& pcas); // train
-    void reduce(cv::Mat X, std::vector<cv::PCA> pcas, cv::Mat& Xr); // test
+    void reduce(cv::Mat X, const std::vector<cv::PCA>& pcas, cv::Mat& Xr); // test
 };
 
 #endif /* defined(__remedi3__CloudjectClassificationPipeline__) */

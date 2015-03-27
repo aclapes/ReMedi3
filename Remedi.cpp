@@ -24,6 +24,7 @@ namespace fs = boost::filesystem;
 
 //#define DEBUG_TRAINING_CONSTRUCTION_OVERLAPS
 //#define DEBUG_TRAINING_CONSTRUCTION_SELECTION
+#define DO_VISUALIZE_DETECTIONS
 
 ReMedi::ReMedi()
 : m_fID(0),
@@ -519,7 +520,7 @@ void remedi::getTrainingCloudjectsWithDescriptor(std::vector<Sequence<ColorDepth
     std::cout << "Creating the sample of training cloudjects .." << std::endl;
     boost::timer t;
     
-    for (int s = 0; s < sequences.size(); s++)
+    for (int s = 0; s < 4/*sequences.size()*/; s++)
     {
         if (partitions[s] != p)
         {
