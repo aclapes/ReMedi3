@@ -346,6 +346,7 @@ int run()
         std::list<std::vector<float> > distsToMargin; // not used for now
         std::vector<float> osacc = pipelines[t]->predict(pCloudjectsTe, predictions, distsToMargin);
         std::copy(osacc.begin(), osacc.end(), std::ostream_iterator<float>(std::cout, " "));
+        std::cout << std::endl;
 
         std::vector<Sequence<ColorDepthFrame>::Ptr> sequencesTe;
         remedi::getTestSequences(sequences, sequencesSids, t, sequencesTe);

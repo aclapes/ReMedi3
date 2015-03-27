@@ -890,7 +890,7 @@ void ReMedi::detect(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences,
             m_pRegisterer->setDefaultCamera(pVis, vp[v]);
         }
 #endif
-        
+        std::cout << "[" << std::endl;
         sequences[s]->restart();
         while (sequences[s]->hasNextFrames())
         {
@@ -905,8 +905,6 @@ void ReMedi::detect(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences,
             
             vector<string> fids = sequences[s]->getFramesFilenames();
             
-            std::cout << fids[0] << std::endl;
-
             // Prepare the interactors from the different views
             
             std::vector<ColorPointCloudPtr> interactors (sequences[s]->getNumOfViews());
@@ -979,7 +977,8 @@ void ReMedi::detect(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences,
                 evaluateFrame(gt.at(sequences[s]->getName()).at(sequences[s]->getViewName(v)).at(fids[v]),
                               dt.at(sequences[s]->getName()).at(sequences[s]->getViewName(v)).at(fids[v]),
                               tp, fp, fn);
-                std::cout << std::to_string(tp) << "," << std::to_string(fp) << "," << std::to_string(fn) << std::endl;
+                std::cout << std::to_string(tp) << "\t" << std::to_string(fp) << "\t" << std::to_string(fn);
+                std::cout << ((v < sequences[s]->getNumOfViews() - 1) ?  "\t" : ";\n");
             }
             
 #ifdef DO_VISUALIZE_DETECTIONS
@@ -1013,6 +1012,7 @@ void ReMedi::detect(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences,
             pVis->spinOnce();
 #endif
         }
+        std::cout << "];" << std::endl;
     }
 }
 
