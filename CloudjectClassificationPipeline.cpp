@@ -49,7 +49,7 @@ CloudjectClassificationPipelineBase<T>& CloudjectClassificationPipelineBase<T>::
 {
     if (this != &rhs)
     {
-        m_InputCloudjects = rhs.m_InputCloudjects;
+        m_InputMockCloudjects = rhs.m_InputMockCloudjects;
         m_Categories = rhs.m_Categories;
         
         m_NormType = rhs.m_NormType;
@@ -76,17 +76,17 @@ CloudjectClassificationPipelineBase<T>& CloudjectClassificationPipelineBase<T>::
 }
 
 template<typename T>
-void CloudjectClassificationPipelineBase<T>::setInputCloudjects(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, std::vector<const char*> categories)
+void CloudjectClassificationPipelineBase<T>::setInputCloudjects(boost::shared_ptr<std::list<MockCloudject::Ptr> > cloudjects, std::vector<const char*> categories)
 {
-    m_InputCloudjects = cloudjects;
+    m_InputMockCloudjects = cloudjects;
     m_Categories = categories;
 }
 
-template<typename T>
-boost::shared_ptr<std::list<Cloudject::Ptr> > CloudjectClassificationPipelineBase<T>::getInputCloudjects()
-{
-    return m_InputCloudjects;
-}
+//template<typename T>
+//boost::shared_ptr<std::list<Cloudject::Ptr> > CloudjectClassificationPipelineBase<T>::getInputCloudjects()
+//{
+//    return m_InputMockCloudjects;
+//}
 
 template<typename T>
 void CloudjectClassificationPipelineBase<T>::setValidation(int numFolds)
@@ -275,7 +275,7 @@ void CloudjectClassificationPipelineBase<T>::train(cv::Mat X, cv::Mat Y)
             m_ClassifierModels[i] = (void*) svm;
         }
     }
-//    m_InputCloudjects = boost::shared_ptr<std::list<Cloudject::Ptr> >(); // no longer needed
+//    m_InputMockCloudjects = boost::shared_ptr<std::list<Cloudject::Ptr> >(); // no longer needed
 }
 
 // Protected methods
@@ -309,15 +309,15 @@ std::vector<float> CloudjectClassificationPipelineBase<T>::evaluate(cv::Mat Y, c
     return accs;
 }
 
-template<typename T>
-void CloudjectClassificationPipelineBase<T>::getLabels(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, std::vector<const char*> categories, cv::Mat& Y)
+template<typename T> template<typename CloudjectTypePtr>
+void CloudjectClassificationPipelineBase<T>::getLabels(boost::shared_ptr<std::list<CloudjectTypePtr> > cloudjects, std::vector<const char*> categories, cv::Mat& Y)
 {
     // Format the labels of the sample X
     Y.release();
     Y.create(cloudjects->size(), categories.size(), cv::DataType<int>::type);
     
     int i = 0;
-    std::list<Cloudject::Ptr>::iterator it;
+    typename std::list<CloudjectTypePtr>::iterator it;
     for (it = cloudjects->begin(); it != cloudjects->end(); ++it, ++i)
         for (int j = 0; j < categories.size(); j++)
             Y.at<int>(i,j) = ((*it)->isRegionLabel(categories[j]) ? 1 : -1);
@@ -363,25 +363,25 @@ void CloudjectClassificationPipelineBase<T>::reduce(cv::Mat X, cv::PCA pca, cv::
         Xr = pca.project(X);
 }
 
-template<typename T>
-void CloudjectClassificationPipelineBase<T>::getTrainingCloudjects(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, int t, std::list<Cloudject::Ptr>& cloudjectsTr)
+template<typename T> template<typename CloudjectTypePtr>
+void CloudjectClassificationPipelineBase<T>::getTrainingCloudjects(boost::shared_ptr<typename std::list<CloudjectTypePtr> > cloudjects, int t, typename std::list<CloudjectTypePtr>& cloudjectsTr)
 {
     cloudjectsTr.clear();
 
     int i = 0;
-    std::list<Cloudject::Ptr>::iterator it;
+    typename std::list<CloudjectTypePtr>::iterator it;
     for (it = cloudjects->begin(); it != cloudjects->end(); ++it, ++i)
         if (m_Partitions.at<int>(i,0) != t)
             cloudjectsTr.push_back(*it);
 }
 
-template<typename T>
-void CloudjectClassificationPipelineBase<T>::getTestCloudjects(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, int t, std::list<Cloudject::Ptr>& cloudjectsTe)
+template<typename T>  template<typename CloudjectTypePtr>
+void CloudjectClassificationPipelineBase<T>::getTestCloudjects(boost::shared_ptr<typename std::list<CloudjectTypePtr> > cloudjects, int t, typename std::list<CloudjectTypePtr>& cloudjectsTe)
 {
     cloudjectsTe.clear();
     
     int i = 0;
-    std::list<Cloudject::Ptr>::iterator it;
+    typename std::list<CloudjectTypePtr>::iterator it;
     for (it = cloudjects->begin(); it != cloudjects->end(); ++it, ++i)
         if (m_Partitions.at<int>(i,0) == t)
             cloudjectsTe.push_back(*it);
@@ -434,14 +434,14 @@ void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::setPerCategoryRed
     m_bPerStrateReduction = bPerStrateReduction;
 }
 
-void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::cloudjectsToPointsSample(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, cv::Mat& X, cv::Mat& c)
+void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::cloudjectsToPointsSample(boost::shared_ptr<std::list<MockCloudject::Ptr> > cloudjects, cv::Mat& X, cv::Mat& c)
 {
     c.create(cloudjects->size(), 1, cv::DataType<int>::type);
-
+    
     int numPointsInstances = 0;
     
     int i = 0;
-    std::list<Cloudject::Ptr>::iterator cjIt;
+    std::list<MockCloudject::Ptr>::iterator cjIt;
     for (cjIt = cloudjects->begin(); cjIt != cloudjects->end(); ++cjIt, ++i)
     {
         (*cjIt)->allocate();
@@ -466,13 +466,42 @@ void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::cloudjectsToPoint
     }
 }
 
-void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::cloudjectsToPointsSample(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, std::map<std::string,cv::Mat>& X)
+void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::cloudjectsToPointsSample(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, cv::Mat& X, cv::Mat& c)
+{
+    c.create(cloudjects->size(), 1, cv::DataType<int>::type);
+    
+    int numPointsInstances = 0;
+    
+    int i = 0;
+    std::list<Cloudject::Ptr>::iterator cjIt;
+    for (cjIt = cloudjects->begin(); cjIt != cloudjects->end(); ++cjIt, ++i)
+    {       
+        c.at<int>(i,0) = ((pcl::PointCloud<pcl::PFHRGBSignature250>*) (*cjIt)->getDescriptor())->points.size();
+        numPointsInstances += c.at<int>(i,0);
+    }
+    
+    // Create a sample of cloudjects' PFHRGB descriptors (all concatenated)
+    X.create(numPointsInstances, 250, cv::DataType<float>::type);
+    
+    int j = 0; // counter for descriptors
+    for (cjIt = cloudjects->begin(); cjIt != cloudjects->end(); ++cjIt)
+    {
+        pcl::PointCloud<pcl::PFHRGBSignature250>* pDescriptor = ((pcl::PointCloud<pcl::PFHRGBSignature250>*) (*cjIt)->getDescriptor());
+        for (int k = 0; k < pDescriptor->points.size(); k++)
+        {
+            cv::Mat row (1, 250, cv::DataType<float>::type, pDescriptor->points[k].histogram);
+            row.copyTo(X.row(j++));
+        }
+    }
+}
+
+void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::cloudjectsToPointsSample(boost::shared_ptr<std::list<MockCloudject::Ptr> > cloudjects, std::map<std::string,cv::Mat>& X)
 {
     X.clear();
     
     std::map<std::string,int> numPointInstancesMap; // total no. descriptor points (no. rows of X and c actually)
     
-    std::list<Cloudject::Ptr>::iterator cjIt;
+    std::list<MockCloudject::Ptr>::iterator cjIt;
     for (cjIt = cloudjects->begin(); cjIt != cloudjects->end(); ++cjIt)
     {
         (*cjIt)->allocate(); // release before finishing the method calling
@@ -567,11 +596,11 @@ void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::setQuantizationVa
 float CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::validate()
 {
     // Input data already set
-    assert (m_InputCloudjects->size() > 0);
+    assert (m_InputMockCloudjects->size() > 0);
     m_qValPerfs.resize(m_qValParam.size());
 
     cv::Mat Y;
-    getLabels(m_InputCloudjects, m_Categories, Y);
+    getLabels(m_InputMockCloudjects, m_Categories, Y);
     createValidationPartitions(Y, m_NumFolds, m_Partitions);
 
     std::vector<cv::Mat> gQ (m_qValParam.size());
@@ -592,7 +621,7 @@ float CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::validate()
                 // Centers are selected among all the points without taking into
                 // account categories
                 cv::Mat X, c;
-                cloudjectsToPointsSample(m_InputCloudjects, X, c);
+                cloudjectsToPointsSample(m_InputMockCloudjects, X, c);
                 bow(X, m_qValParam[i], gQ[i]);
             }
             else
@@ -601,7 +630,7 @@ float CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::validate()
                 // of centers for each class (the parameters divided by the number
                 // of categories)
                 std::map<std::string,cv::Mat> XMap;
-                cloudjectsToPointsSample(m_InputCloudjects, XMap);
+                cloudjectsToPointsSample(m_InputMockCloudjects, XMap);
                 int sq = floor(m_qValParam[i] / m_Categories.size());
                 bow(XMap, (sq == 0) ? 1 : sq, gQ[i]);
             }
@@ -613,10 +642,10 @@ float CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::validate()
     {
         // Partitionate the data
         
-        boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjectsTr (new std::list<Cloudject::Ptr>);
-        boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjectsTe (new std::list<Cloudject::Ptr>);
-        getTrainingCloudjects(m_InputCloudjects, t, *cloudjectsTr);
-        getTestCloudjects(m_InputCloudjects, t, *cloudjectsTe);
+        boost::shared_ptr<std::list<MockCloudject::Ptr> > cloudjectsTr (new std::list<MockCloudject::Ptr>);
+        boost::shared_ptr<std::list<MockCloudject::Ptr> > cloudjectsTe (new std::list<MockCloudject::Ptr>);
+        getTrainingCloudjects(m_InputMockCloudjects, t, *cloudjectsTr);
+        getTestCloudjects(m_InputMockCloudjects, t, *cloudjectsTe);
 
         std::map<std::string,cv::Mat> XTrMap;
         if (!m_bGlobalQuantization)
@@ -725,13 +754,13 @@ void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::setQuantizationPa
 
 void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::train()
 {
-    assert (m_InputCloudjects->size() > 0);
+    assert (m_InputMockCloudjects->size() > 0);
     
     cv::Mat Y;
-    getLabels(m_InputCloudjects, m_Categories, Y);
+    getLabels(m_InputMockCloudjects, m_Categories, Y);
     
     cv::Mat X, c;
-    cloudjectsToPointsSample(m_InputCloudjects, X, c);
+    cloudjectsToPointsSample(m_InputMockCloudjects, X, c);
     
     if (!m_bCentersStratification)
     {
@@ -740,7 +769,7 @@ void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::train()
     else
     {
         std::map<std::string,cv::Mat> XMap;
-        cloudjectsToPointsSample(m_InputCloudjects, XMap);
+        cloudjectsToPointsSample(m_InputMockCloudjects, XMap);
         int sq = m_q / m_Categories.size();
         bow(XMap, (sq == 0) ? 1 : sq, m_Q);
     }
@@ -765,7 +794,7 @@ void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::train()
     CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::train(Wp,Y);
 }
 
-std::vector<float> CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::predict(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, std::list<std::vector<int> >& predictions, std::list<std::vector<float> >& distsToMargin)
+std::vector<float> CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::predict(boost::shared_ptr<std::list<MockCloudject::Ptr> > cloudjects, std::list<std::vector<int> >& predictions, std::list<std::vector<float> >& distsToMargin)
 {
     cv::Mat Y;
     getLabels(cloudjects, m_Categories, Y);
@@ -786,7 +815,6 @@ std::vector<float> CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::pre
     else
         CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::reduce(Wn, m_PCAs[0], Wp);
     
-    // Eventually predict
     cv::Mat P,F;
     CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::predict(Wp,P,F);
     
@@ -801,24 +829,33 @@ std::vector<float> CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::pre
 
 std::vector<int> CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::predict(Cloudject::Ptr cloudject, std::vector<float>& distsToMargin)
 {
-//    boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects (new std::list<Cloudject::Ptr>);
-//    cloudjects->push_back(cloudject);
-//    
-//    cv::Mat W, Q;
-//    bowSampleFromCloudjects(cloudjects, m_C, W);
-//    
-//    assert (W.rows == 1);
-//    
-//    // Eventually predict
-//    cv::Mat P,F;
-//    CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::predict(W,P,F);
-//    
-//    cv::Mat f = F.row(0);
-//    distsToMargin = std::vector<float>(f.begin<float>(), f.end<float>());
-//    
-//    cv::Mat p = P.row(0);
-//    std::vector<int> predictions ( p.begin<int>(), p.end<int>());
-//    return predictions;
+    boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects (new std::list<Cloudject::Ptr>);
+    cloudjects->push_back(cloudject);
+    
+    cv::Mat x, c;
+    cloudjectsToPointsSample(cloudjects, x, c);
+    
+    cv::Mat w;
+    bow(x, c, m_Q, w);
+    
+    cv::Mat wn;
+    normalize(w, m_NormParams, wn);
+    
+    cv::Mat wp;
+    if (m_bCentersStratification && m_bPerStrateReduction)
+        reduce(wn, m_PCAs, wp);
+    else
+        CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::reduce(wn, m_PCAs[0], wp);
+    
+    cv::Mat p,f;
+    CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::predict(wp,p,f);
+    
+    cv::Mat fAux = f.row(0);
+    distsToMargin = std::vector<float>(fAux.begin<float>(), fAux.end<float>());
+    
+    cv::Mat pAux = p.row(0);
+    std::vector<int> predictions ( pAux.begin<int>(), pAux.end<int>());
+    return predictions;
 }
             
 void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::reduce(cv::Mat X, int q, cv::Mat& Xr, std::vector<cv::PCA>& PCAs)
@@ -850,7 +887,7 @@ void CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::reduce(cv::Mat X,
 
 template class CloudjectClassificationPipeline<pcl::PFHRGBSignature250>;
 
-template void CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::setInputCloudjects(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, std::vector<const char*> categories);
+template void CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::setInputCloudjects(boost::shared_ptr<std::list<MockCloudject::Ptr> > cloudjects, std::vector<const char*> categories);
 template void CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::setNormalization(int normType);
 template void CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::setDimRedVariance(double var);
 template void CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>::setDimRedNumFeatures(int n);

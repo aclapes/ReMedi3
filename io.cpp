@@ -157,23 +157,23 @@ void remedi::io::readCloudjects(std::string parent, std::string fid, std::vector
     for (int i = 0; i < predictions.size(); i++)
     {
         Cloudject::Ptr pCj (new Cloudject(predictions[i]));
-//        pCj->setRegionMask(cv::imread(parent + "/" + fid + "-" + std::to_string(predictions[i].getID()) + ".png", CV_LOAD_IMAGE_GRAYSCALE));
+        pCj->setRegionMask(cv::imread(parent + "/" + fid + "-" + std::to_string(predictions[i].getID()) + ".png", CV_LOAD_IMAGE_GRAYSCALE));
         reader.read(parent + "/" + fid + "-" + std::to_string(predictions[i].getID()) + ".pcd", *(pCj->getCloud()));
         
         cloudjects.push_back(pCj);
     }
 }
 
-void remedi::io::mockreadCloudjects(std::string parent, std::string fid, std::vector<ForegroundRegion> predictions, std::vector<Cloudject::Ptr>& cloudjects, bool bHeader)
+void remedi::io::mockreadCloudjects(std::string parent, std::string fid, std::vector<ForegroundRegion> predictions, std::vector<MockCloudject::Ptr>& cloudjects, bool bHeader)
 {
     cloudjects.clear();
     
     for (int i = 0; i < predictions.size(); i++)
     {
-        Cloudject::Ptr pCj (new Cloudject(predictions[i]));
-        pCj->setCloudPath(parent + "/" + fid + "-" + std::to_string(predictions[i].getID()) + ".pcd");
+        MockCloudject::Ptr pMCj (new MockCloudject(predictions[i]));
+        pMCj->setCloudPath(parent + "/" + fid + "-" + std::to_string(predictions[i].getID()) + ".pcd");
         
-        cloudjects.push_back(pCj);
+        cloudjects.push_back(pMCj);
     }
 }
 
@@ -187,7 +187,7 @@ void remedi::io::readCloudjects(std::string parent, std::string fid, std::vector
     readCloudjects(parent, fid, predictions, cloudjects, bHeader);
 }
 
-void remedi::io::mockreadCloudjects(std::string parent, std::string fid, std::vector<Cloudject::Ptr>& cloudjects, bool bHeader)
+void remedi::io::mockreadCloudjects(std::string parent, std::string fid, std::vector<MockCloudject::Ptr>& cloudjects, bool bHeader)
 {
     cloudjects.clear();
     
@@ -226,7 +226,7 @@ void remedi::io::readCloudjectsWithDescriptor(std::string parent, std::string fi
     }
 }
 
-void remedi::io::mockreadCloudjectsWithDescriptor(std::string parent, std::string fid, std::vector<ForegroundRegion> predictions, std::string descriptorType, std::vector<Cloudject::Ptr>& cloudjects, bool bHeader)
+void remedi::io::mockreadCloudjectsWithDescriptor(std::string parent, std::string fid, std::vector<ForegroundRegion> predictions, std::string descriptorType, std::vector<MockCloudject::Ptr>& cloudjects, bool bHeader)
 {
     cloudjects.clear();
     

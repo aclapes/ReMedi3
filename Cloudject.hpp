@@ -59,9 +59,6 @@ public:
         if (this != &rhs)
         {
             m_Region = rhs.m_Region;
-
-            m_CloudPath = rhs.m_CloudPath;
-            m_DescriptorPath = rhs.m_DescriptorPath;
             
             m_pCloud = rhs.m_pCloud;
             m_DescriptorType = rhs.m_DescriptorType;
@@ -74,27 +71,7 @@ public:
     
     ~Cloudject()
     {
-        destroy(); // cause this procedure can be executed from somewhere else
-    }
-    
-    // Remove dynamically allocated memory (descriptor)
-    void destroy()
-    {
-        if (m_pDescriptor != NULL)
-        {
-            if (m_DescriptorType.compare("fpfh33") == 0)
-            {
-                ((pcl::PointCloud<pcl::FPFHSignature33>*) m_pDescriptor)->clear();
-                delete ((pcl::PointCloud<pcl::FPFHSignature33>*) m_pDescriptor);
-            }
-            else if (m_DescriptorType.compare("pfhrgb250") == 0)
-            {
-                ((pcl::PointCloud<pcl::PFHRGBSignature250>*) m_pDescriptor)->clear();
-                delete ((pcl::PointCloud<pcl::PFHRGBSignature250>*) m_pDescriptor);
-            }
-        }
-        
-        m_pDescriptor = NULL;
+        release(); // cause this procedure can be executed from somewhere else
     }
     
     // Public methods
@@ -149,16 +126,6 @@ public:
         return m_Region.getRect();
     }
     
-    void setCloudPath(std::string path)
-    {
-        m_CloudPath = path;
-    }
-    
-    void setDescriptorPath(std::string path)
-    {
-        m_DescriptorPath = path;
-    }
-    
     std::string getDescriptorType()
     {
         return m_DescriptorType;
@@ -167,6 +134,11 @@ public:
     void setDescriptorType(std::string type)
     {
         m_DescriptorType = type;
+    }
+    
+    void setCloud(pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud)
+    {
+        m_pCloud = pCloud;
     }
     
     void* getDescriptor()
@@ -253,43 +225,10 @@ public:
         return centroid;
     }
     
-    void allocate()
-    {
-        pcl::PCDReader reader;
-
-        if (m_pCloud->empty())
-            reader.read(m_CloudPath, *m_pCloud);
-        
-        if (m_pDescriptor == NULL)
-        {
-            if (m_DescriptorType.compare("fpfh33") == 0)
-            {
-                pcl::PointCloud<pcl::FPFHSignature33>* pDescriptor = new pcl::PointCloud<pcl::FPFHSignature33>();
-                reader.read(m_DescriptorPath, *pDescriptor);
-                m_pDescriptor = (void*) pDescriptor;
-            }
-            else if (m_DescriptorType.compare("pfhrgb250") == 0)
-            {
-                pcl::PointCloud<pcl::PFHRGBSignature250>* pDescriptor = new pcl::PointCloud<pcl::PFHRGBSignature250>();
-                reader.read(m_DescriptorPath, *pDescriptor);
-                m_pDescriptor = (void*) pDescriptor;
-            }
-        }
-    }
-    
-    void release()
-    {
-        if (!m_pCloud->empty())
-//            m_pCloud->clear();
-            m_pCloud = pcl::PointCloud<pcl::PointXYZRGB>::Ptr(new pcl::PointCloud<pcl::PointXYZRGB>);
-        
-        destroy();
-    }
-    
     void describe(std::string descriptorType, std::vector<float> params)
     {
         // delete previous computed descriptor if any
-        destroy();
+        release();
         
         // keep record of the type
         setDescriptorType(descriptorType);
@@ -318,34 +257,43 @@ public:
     typedef boost::shared_ptr<Cloudject> Ptr;
     
 
-private:
+protected:
     
-    // Attributes
+    // Protected methods
+    
+    void release()
+    {
+        if (!m_pCloud->empty())
+            m_pCloud = pcl::PointCloud<pcl::PointXYZRGB>::Ptr(new pcl::PointCloud<pcl::PointXYZRGB>);
+        
+        if (m_pDescriptor != NULL)
+        {
+            if (m_DescriptorType.compare("fpfh33") == 0)
+            {
+                ((pcl::PointCloud<pcl::FPFHSignature33>*) m_pDescriptor)->clear();
+                delete ((pcl::PointCloud<pcl::FPFHSignature33>*) m_pDescriptor);
+            }
+            else if (m_DescriptorType.compare("pfhrgb250") == 0)
+            {
+                ((pcl::PointCloud<pcl::PFHRGBSignature250>*) m_pDescriptor)->clear();
+                delete ((pcl::PointCloud<pcl::PFHRGBSignature250>*) m_pDescriptor);
+            }
+        }
+        
+        m_pDescriptor = NULL;
+    }
+    
+private:
     
     ForegroundRegion                                m_Region;
     
-    std::string                                     m_CloudPath;
-    std::string                                     m_DescriptorPath;
-
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr          m_pCloud;
     void*                                           m_pDescriptor;
     std::string                                     m_DescriptorType;
     
     Eigen::Matrix4f                                 m_T;
-    
-    
+
     // Private methods
-    
-    template<typename PointT>
-    void _toSample(pcl::PointCloud<PointT>* pDescriptor, std::list<std::vector<float> >& sample) const
-    {
-        for (int i = 0; i < pDescriptor->points.size(); i++)
-        {
-            size_t sz = sizeof(pDescriptor->points[0].histogram) / sizeof(float);
-            std::vector<float> v (pDescriptor->points[0].histogram, pDescriptor->points[0].histogram + sz);
-            sample.push_back(v);
-        }
-    }
     
     void describeFPFH(pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud,
                         float leafSize, float normalRadius, float pfhrgbRadius,
@@ -474,6 +422,96 @@ private:
         // Compute the features
         pfhrgb.compute (descriptor);
     }
+};
+
+class MockCloudject : public Cloudject
+{
+public:
+    // Constructors
+    
+    MockCloudject() : Cloudject()
+    {}
+    
+    MockCloudject(ForegroundRegion r) : Cloudject(r)
+    {}
+    
+    MockCloudject(const MockCloudject& rhs) : Cloudject(rhs)
+    {
+        *this = rhs;
+    }
+    
+    MockCloudject(const Cloudject& rhs) : Cloudject(rhs)
+    {
+        *this = rhs;
+    }
+    
+    MockCloudject& operator=(const MockCloudject& rhs)
+    {
+        if (this != &rhs)
+        {
+            Cloudject::operator=(rhs);
+            m_CloudPath = rhs.m_CloudPath;
+            m_DescriptorPath = rhs.m_DescriptorPath;
+        }
+        return *this;
+    }
+    
+    MockCloudject& operator=(const Cloudject& rhs)
+    {
+        if (this != &rhs)
+            Cloudject::operator=(rhs);
+        return *this;
+    }
+    
+    void setCloudPath(std::string path)
+    {
+        m_CloudPath = path;
+    }
+    
+    void setDescriptorPath(std::string path)
+    {
+        m_DescriptorPath = path;
+    }
+    
+    void allocate()
+    {
+        pcl::PCDReader reader;
+        
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud (new pcl::PointCloud<pcl::PointXYZRGB>);
+        if (getCloud()->empty())
+        {
+            reader.read(m_CloudPath, *pCloud);
+        }
+        
+        if (getDescriptor() == NULL)
+        {
+            std::string type = getDescriptorType();
+            if (type.compare("fpfh33") == 0)
+            {
+                pcl::PointCloud<pcl::FPFHSignature33>* pDescriptor = new pcl::PointCloud<pcl::FPFHSignature33>();
+                reader.read(m_DescriptorPath, *pDescriptor);
+                setDescriptor((void*) pDescriptor);
+            }
+            else if (type.compare("pfhrgb250") == 0)
+            {
+                pcl::PointCloud<pcl::PFHRGBSignature250>* pDescriptor = new pcl::PointCloud<pcl::PFHRGBSignature250>();
+                reader.read(m_DescriptorPath, *pDescriptor);
+                setDescriptor((void*) pDescriptor);
+            }
+        }
+    }
+    
+    void release()
+    {
+        Cloudject::release();
+    }
+    
+    typedef boost::shared_ptr<MockCloudject> Ptr;
+    
+private:
+    
+    std::string                                     m_CloudPath;
+    std::string                                     m_DescriptorPath;
 };
 
 #endif /* defined(__remedi3__Cloudject__) */

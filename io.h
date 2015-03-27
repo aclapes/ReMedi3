@@ -30,13 +30,13 @@ namespace remedi
         void writeCloudjects(std::string parent, std::string fid, std::vector<Cloudject::Ptr> cloudjects, bool bBinary = false, bool bHeader = false);
 
         void readCloudjects(std::string parent, std::string fid, std::vector<ForegroundRegion> predictions, std::vector<Cloudject::Ptr>& cloudjects, bool bHeader = false);
-        void mockreadCloudjects(std::string parent, std::string fid, std::vector<ForegroundRegion> predictions, std::vector<Cloudject::Ptr>& cloudjects, bool bHeader = false);
+        void mockreadCloudjects(std::string parent, std::string fid, std::vector<ForegroundRegion> predictions, std::vector<MockCloudject::Ptr>& cloudjects, bool bHeader = false);
         
         void readCloudjects(std::string parent, std::string fid, std::vector<Cloudject::Ptr>& cloudjects, bool bHeader = false);
-        void mockreadCloudjects(std::string parent, std::string fid, std::vector<Cloudject::Ptr>& cloudjects, bool bHeader = false);
+        void mockreadCloudjects(std::string parent, std::string fid, std::vector<MockCloudject::Ptr>& cloudjects, bool bHeader = false);
         
         void readCloudjectsWithDescriptor(std::string parent, std::string fid,  std::vector<ForegroundRegion> predictions, std::string descriptorType, std::vector<Cloudject::Ptr>& cloudjects, bool bHeader = false);
-        void mockreadCloudjectsWithDescriptor(std::string parent, std::string fid,  std::vector<ForegroundRegion> predictions, std::string descriptorType, std::vector<Cloudject::Ptr>& cloudjects, bool bHeader = false);
+        void mockreadCloudjectsWithDescriptor(std::string parent, std::string fid,  std::vector<ForegroundRegion> predictions, std::string descriptorType, std::vector<MockCloudject::Ptr>& cloudjects, bool bHeader = false);
         
         void writeCloudjectsDescription(std::string parent, std::string fid, std::vector<Cloudject::Ptr>& cloudjects, bool bBinary = false);
         

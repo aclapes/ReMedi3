@@ -495,7 +495,7 @@ float weightedOverlapBetweenRegions(Region& region1, Region& region2)
     
 }
 
-void remedi::getTrainingCloudjectsWithDescriptor(std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> partitions, int p, std::vector<const char*> annotationLabels, const Groundtruth& gt, std::string descriptorType, std::list<Cloudject::Ptr>& cloudjects)
+void remedi::getTrainingCloudjectsWithDescriptor(std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> partitions, int p, std::vector<const char*> annotationLabels, const Groundtruth& gt, std::string descriptorType, std::list<MockCloudject::Ptr>& cloudjects)
 {
     cloudjects.clear();
     
@@ -676,7 +676,7 @@ void remedi::getTrainingCloudjectsWithDescriptor(std::vector<Sequence<ColorDepth
                     }
                     
                     // Read the cloudjects representing the selected regions
-                    std::vector<Cloudject::Ptr> cloudjectsTrF;
+                    std::vector<MockCloudject::Ptr> cloudjectsTrF;
                     remedi::io::mockreadCloudjectsWithDescriptor(resultsParent + string(CLOUDJECTS_DIRNAME) + sequences[s]->getViewName(v), fids[v], regionsTrF, descriptorType, cloudjectsTrF, true);
                     
                     // Assign the already prepared labels and push
@@ -730,7 +730,7 @@ void remedi::getTrainingCloudjectsWithDescriptor(std::vector<Sequence<ColorDepth
 #endif //DEBUG_TRAINING_CONSTRUCTION_SELECTION
 }
 
-void remedi::getTestCloudjectsWithDescriptor(std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> partitions, int p, const Groundtruth& gt, std::string descriptorType, std::list<Cloudject::Ptr>& cloudjects)
+void remedi::getTestCloudjectsWithDescriptor(std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> partitions, int p, const Groundtruth& gt, std::string descriptorType, std::list<MockCloudject::Ptr>& cloudjects)
 {
     cloudjects.clear();
     
@@ -785,7 +785,7 @@ void remedi::getTestCloudjectsWithDescriptor(std::vector<Sequence<ColorDepthFram
                     }
                     
                     // Read the cloudjects representing the selected regions
-                    std::vector<Cloudject::Ptr> cloudjectsTeF;
+                    std::vector<MockCloudject::Ptr> cloudjectsTeF;
                     remedi::io::mockreadCloudjectsWithDescriptor(resultsParent + string(CLOUDJECTS_DIRNAME) + sequences[s]->getViewName(v), fids[v], regionsTeF, descriptorType, cloudjectsTeF, true);
                     
                     // Assign the already prepared labels and push
@@ -946,10 +946,11 @@ void ReMedi::detect(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences,
             for (int i = 0; i < correspondences.size(); i++)
             {
                 std::vector<std::vector<float> > distsToMargin (correspondences[i].size());
+                std::vector<std::vector<int> > predictions (correspondences[i].size());
                 for (int v = 0; v < correspondences[i].size(); v++)
-                    pipeline->predict(correspondences[i][v].second, distsToMargin[v]);
+                    predictions[v] = pipeline->predict(correspondences[i][v].second, distsToMargin[v]);
                 
-                std::vector<int> predictions (objectsLabels.size());
+                std::vector<int> predictionsFused (objectsLabels.size());
                 for (int j = 0; j < objectsLabels.size(); j++)
                 {
                     float distToMarginFused = .0f;
@@ -959,14 +960,14 @@ void ReMedi::detect(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences,
                         float wsq = 1.f / (pow(c.x,2) + pow(c.y,2) + pow(c.z,2));
                         distToMarginFused += ((wsq * distsToMargin[v][j]) / correspondences[i].size());
                     }
-                    predictions[j] = (distToMarginFused < 0) ? 1 : -1;
+                    predictionsFused[j] = (distToMarginFused < 0) ? 1 : -1;
                 }
                 
                 for (int v = 0; v < correspondences[i].size(); v++)
                 {
                     ForegroundRegion r = correspondences[i][v].second->getRegion();
                     for (int j = 0; j < objectsLabels.size(); j++)
-                        if (predictions[j] > 0) r.addLabel(objectsLabels[j]);
+                        if (predictionsFused[j] > 0) r.addLabel(objectsLabels[j]);
                     
                     dt[sequences[s]->getName()][sequences[s]->getViewName(v)][fids[v]].push_back(r);
                 }

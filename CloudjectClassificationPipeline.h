@@ -30,8 +30,8 @@ public:
     CloudjectClassificationPipelineBase& operator=(const CloudjectClassificationPipelineBase& rhs);
     ~CloudjectClassificationPipelineBase();
     
-    void setInputCloudjects(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, std::vector<const char*> categories);
-    boost::shared_ptr<std::list<Cloudject::Ptr> > getInputCloudjects();
+    void setInputCloudjects(boost::shared_ptr<std::list<MockCloudject::Ptr> > cloudjects, std::vector<const char*> categories);
+//    boost::shared_ptr<std::list<Cloudject::Ptr> > getInputCloudjects();
     
     void setDimRedVariance(double var);
     void setDimRedNumFeatures(int n);
@@ -46,7 +46,7 @@ public:
 
 protected:
 
-    boost::shared_ptr<std::list<Cloudject::Ptr> > m_InputCloudjects;
+    boost::shared_ptr<std::list<MockCloudject::Ptr> > m_InputMockCloudjects;
     std::vector<const char*> m_Categories;
     
     int m_NumFolds;
@@ -65,7 +65,8 @@ protected:
     
     float m_BestValPerformance;
     
-    void getLabels(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, std::vector<const char*> categories, cv::Mat& Y);
+    template<typename CloudjectTypePtr>
+    void getLabels(boost::shared_ptr<typename std::list<CloudjectTypePtr> > cloudjects, std::vector<const char*> categories, cv::Mat& Y);
     void createValidationPartitions(cv::Mat Y, int numFolds, cv::Mat& partitions);
     
     void validate(cv::Mat XTr, cv::Mat XTe, cv::Mat YTr, cv::Mat YTe);
@@ -83,8 +84,10 @@ protected:
     void reduce(cv::Mat X, cv::Mat& Xr, cv::PCA& pca); // train
     void reduce(cv::Mat X, cv::PCA pca, cv::Mat& Xr); // test
     
-    void getTrainingCloudjects(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, int t, std::list<Cloudject::Ptr>& cloudjectsTr);
-    void getTestCloudjects(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, int t, std::list<Cloudject::Ptr>& cloudjectsTe);
+    template<typename CloudjectTypePtr>
+    void getTrainingCloudjects(boost::shared_ptr<typename std::list<CloudjectTypePtr> > cloudjects, int t, typename std::list<CloudjectTypePtr>& cloudjectsTr);
+    template<typename CloudjectTypePtr>
+    void getTestCloudjects(boost::shared_ptr<typename std::list<CloudjectTypePtr> > cloudjects, int t, typename std::list<CloudjectTypePtr>& cloudjectsTr);
     
 private:
     std::vector<std::vector<float> > m_ClassifiersValParamCombs;
@@ -118,7 +121,7 @@ public:
     
     void train();
     
-    std::vector<float> predict(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, std::list<std::vector<int> >& predictions, std::list<std::vector<float> >& distsToMargin);
+    std::vector<float> predict(boost::shared_ptr<std::list<MockCloudject::Ptr> > cloudjects, std::list<std::vector<int> >& predictions, std::list<std::vector<float> >& distsToMargin);
     std::vector<int> predict(Cloudject::Ptr cloudject, std::vector<float>& distsToMargin);
     
     typedef boost::shared_ptr<CloudjectClassificationPipeline<pcl::PFHRGBSignature250> > Ptr;
@@ -136,8 +139,9 @@ private:
     bool m_bCentersStratification;
     bool m_bPerStrateReduction;
     
+    void cloudjectsToPointsSample(boost::shared_ptr<std::list<MockCloudject::Ptr> > cloudjects, cv::Mat& X, cv::Mat& c);
     void cloudjectsToPointsSample(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, cv::Mat& X, cv::Mat& c);
-    void cloudjectsToPointsSample(boost::shared_ptr<std::list<Cloudject::Ptr> > cloudjects, std::map<std::string,cv::Mat>& X);
+    void cloudjectsToPointsSample(boost::shared_ptr<std::list<MockCloudject::Ptr> > cloudjects, std::map<std::string,cv::Mat>& X);
     
     std::vector<cv::PCA> PCAs;
     

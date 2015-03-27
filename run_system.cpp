@@ -306,7 +306,7 @@ int run()
     std::vector<CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::Ptr> pipelines (NUM_OF_SUBJECTS);
     for (int t = 0; t < NUM_OF_SUBJECTS; t++)
     {
-        boost::shared_ptr<std::list<Cloudject::Ptr> > pCloudjectsTr (new std::list<Cloudject::Ptr>);
+        boost::shared_ptr<std::list<MockCloudject::Ptr> > pCloudjectsTr (new std::list<MockCloudject::Ptr>);
         remedi::getTrainingCloudjectsWithDescriptor(sequences, sequencesSids, t, annotationLabels, gt, "pfhrgb250", *pCloudjectsTr);
 
         pipelines[t] = CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::Ptr(new CloudjectClassificationPipeline<pcl::PFHRGBSignature250>);
@@ -338,7 +338,7 @@ int run()
         pipelines[t]->train(); // use the best parameters found in the model selection
         
         pCloudjectsTr->clear();
-        boost::shared_ptr<std::list<Cloudject::Ptr> > pCloudjectsTe (new std::list<Cloudject::Ptr>);
+        boost::shared_ptr<std::list<MockCloudject::Ptr> > pCloudjectsTe (new std::list<MockCloudject::Ptr>);
         remedi::getTestCloudjectsWithDescriptor(sequences, sequencesSids, t, gt, "pfhrgb250", *pCloudjectsTe);
 
          // out of sample accuracy and predictions
