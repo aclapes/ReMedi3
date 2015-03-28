@@ -523,7 +523,7 @@ void remedi::getTrainingCloudjectsWithDescriptor(std::vector<Sequence<ColorDepth
     std::cout << "Creating the sample of training cloudjects .." << std::endl;
     boost::timer t;
     
-    for (int s = 0; s < sequences.size(); s++)
+    for (int s = 0; s < 4/*sequences.size()*/; s++)
     {
         if (partitions[s] != p)
         {
@@ -818,6 +818,18 @@ void ReMedi::evaluateFrame(const std::map<std::string,std::map<std::string,Groun
     // Iterate over the dt vector to determine TP and FP
     tp = fp = fn = 0;
     
+    std::map<std::string,std::map<std::string,int> > matches;
+    
+    std::map<std::string,std::map<std::string,GroundtruthRegion> >::const_iterator it;
+    std::map<std::string,GroundtruthRegion>::const_iterator jt;
+
+    // Auxiliary strucdture to computer FN (after TP and FP)
+    for (it = gt.begin(); it != gt.end(); ++it)
+        if (it->first.compare("arms") != 0 && it->first.compare("others") != 0)
+            for (jt = it->second.begin(); jt != it->second.end(); ++jt)
+                matches[it->first][jt->first] = false;
+    
+    // Compute TP and FP first
     for (int i = 0; i < dt.size(); i++)
     {
         const std::set<std::string> labels = dt[i].getLabels();
@@ -825,29 +837,38 @@ void ReMedi::evaluateFrame(const std::map<std::string,std::map<std::string,Groun
         std::set<std::string>::iterator it;
         for (it = labels.begin(); it != labels.end(); ++it)
         {
+            // There is not even groundtruth object with such label
             if (gt.count(*it) == 0)
             {
                 fp++;
             }
-            else
+            else // and if there is..
             {
                 std::map<std::string,GroundtruthRegion> catgt = gt.at(*it);
-                
                 std::map<std::string,GroundtruthRegion>::iterator jt;
                 for (jt = catgt.begin(); jt != catgt.end(); ++jt)
-                    (rectangleOverlap(dt[i].getRect(),jt->second.getRect()) > 0) ? tp++ : fp++;
+                {
+                    // is the detected in the correct spot?
+                    if (rectangleOverlap(dt[i].getRect(),jt->second.getRect()) > 0)
+                    {
+                        tp++;
+                        // Count matches to this annotation
+                        matches[*it][jt->first] ++;
+                    }
+                    else
+                    {
+                        fp++;
+                    }
+                }
             }
         }
     }
     
-    // Count the total no. annotations, useful to compute FN
-    int n = 0;
-    std::map<std::string,std::map<std::string,GroundtruthRegion> >::const_iterator it;
+    //  Compute FN (annotations without at least one match)
     for (it = gt.begin(); it != gt.end(); ++it)
-        n += it->second.size();
-    
-    // Compute FN as: n - TP
-    fn = n - tp;
+        if (it->first.compare("arms") != 0 && it->first.compare("others") != 0)
+            for (jt = it->second.begin(); jt != it->second.end(); ++jt)
+                if (!matches[it->first][jt->first]) fn++; // match, not even once
 }
 
 void ReMedi::evaluate(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& gt, const Detection& dt, int& tp, int& fp, int& fn)
@@ -881,23 +902,23 @@ void ReMedi::setMultiviewDetectionStrategy(int strategy)
 
 void ReMedi::detect(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& gt, Detection& dt, const CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pipeline)
 {
-    if (m_MultiviewDetectionStrategy == MULTIVIEW_RECTCORRESPONDENCE_WEIGHTED_CONSENSUS)
-        detectRectanglesWeightedConsensus(sequences, objectsLabels, gt, dt, pipeline);
-    else if (m_MultiviewDetectionStrategy == MULTIVIEW_POINTCORRESPONDENCE_WEIGHTED_CONSENSUS)
-        detectCorrespondenceConsensus(sequences, objectsLabels, gt, dt, pipeline);
+    if (m_MultiviewDetectionStrategy == DETECT_MONOCULAR)
+        detectMonocular(sequences, objectsLabels, gt, dt, pipeline);
+    else if (m_MultiviewDetectionStrategy == DETECT_MULTIVIEW)
+        detectMultiview(sequences, objectsLabels, gt, dt, pipeline);
 }
 
-void ReMedi::detectRectanglesWeightedConsensus(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& gt, Detection& dt, const CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pipeline)
+void ReMedi::detectMonocular(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& gt, Detection& dt, const CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pipeline)
 {
     for (int s = 0; s < sequences.size(); s++)
     {
         std::string resultsParent = string(PARENT_PATH) + string(RESULTS_SUBDIR)
         + sequences[s]->getName() + "/" + string(KINECT_SUBSUBDIR);
         
+        int V = sequences[s]->getNumOfViews();
+
 #ifdef DO_VISUALIZE_DETECTIONS
         pcl::visualization::PCLVisualizer::Ptr pVis (new pcl::visualization::PCLVisualizer);
-        
-        int V = sequences[s]->getNumOfViews();
         std::vector<int> vp (V);
         for (int v = 0; v < V; v++)
         {
@@ -936,7 +957,7 @@ void ReMedi::detectRectanglesWeightedConsensus(const std::vector<Sequence<ColorD
             std::vector<std::vector<Cloudject::Ptr> > nonInteractedActors (sequences[s]->getNumOfViews());
             std::vector<std::vector<Cloudject::Ptr> > interactedActors (sequences[s]->getNumOfViews());
             
-            for (int v = 0; v < sequences[s]->getNumOfViews(); v++)
+            for (int v = 0; v < V; v++)
             {
                 std::vector<ForegroundRegion> regionsF;
                 remedi::io::readPredictionRegions(resultsParent + string(CLOUDJECTS_DIRNAME)
@@ -952,53 +973,30 @@ void ReMedi::detectRectanglesWeightedConsensus(const std::vector<Sequence<ColorD
                 findActors(cloudjectsF, interactors, nonInteractedActors[v], 0.02, interactedActors[v]);
             }
             
-            // Find the correspondences among actor clouds
-            std::vector<std::vector<std::pair<int, Cloudject::Ptr> > > contentions;
-            std::vector<std::vector<Rectangle3D> > rectangles;
-
-            remedi::findContentions(frames, nonInteractedActors, OR_CORRESPONDENCE_TOLERANCE, contentions, rectangles); // false (not to registrate)
+            for (int v = 0; v < V; v++)
+            {
+                for (int i = 0; i < nonInteractedActors[v].size(); i++)
+                {
+                    std::vector<int> predictions;
+                    std::vector<float> distsToMargin;
+                    predictions = pipeline->predict(nonInteractedActors[v][i], distsToMargin);
+                    
+                    ForegroundRegion r = nonInteractedActors[v][i]->getRegion();
+                    for (int i = 0; i < predictions.size(); i++)
+                        if (predictions[i] > 0) r.addLabel(objectsLabels[i]);
+                    
+                    dt[sequences[s]->getName()][sequences[s]->getViewName(v)][fids[v]].push_back(r);
+                }
+                
+                int tp, fp, fn;
+                evaluateFrame(gt.at(sequences[s]->getName()).at(sequences[s]->getViewName(v)).at(fids[v]),
+                              dt.at(sequences[s]->getName()).at(sequences[s]->getViewName(v)).at(fids[v]),
+                              tp, fp, fn);
+                std::cout << std::to_string(tp) << "\t" << std::to_string(fp) << "\t" << std::to_string(fn);
+                std::cout << ((v < sequences[s]->getNumOfViews() - 1) ?  "\t" : ";\n");
+            }
             
-//            for (int i = 0; i < correspondences.size(); i++)
-//            {
-//                std::vector<std::vector<float> > distsToMargin (contentions[i].size());
-//                std::vector<std::vector<int> > predictions (correspondences[i].size());
-//                for (int v = 0; v < correspondences[i].size(); v++)
-//                    predictions[v] = pipeline->predict(correspondences[i][v].second, distsToMargin[v]);
-//                
-//                std::vector<int> predictionsFused (objectsLabels.size());
-//                for (int j = 0; j < objectsLabels.size(); j++)
-//                {
-//                    float distToMarginFused = .0f;
-//                    for (int v = 0; v < correspondences[i].size(); v++)
-//                    {
-//                        pcl::PointXYZ c = correspondences[i][v].second->getCloudCentroid();
-//                        float wsq = 1.f / (pow(c.x,2) + pow(c.y,2) + pow(c.z,2));
-//                        distToMarginFused += ((wsq * distsToMargin[v][j]) / correspondences[i].size());
-//                    }
-//                    predictionsFused[j] = (distToMarginFused < 0) ? 1 : -1;
-//                }
-//                
-//                for (int v = 0; v < correspondences[i].size(); v++)
-//                {
-//                    ForegroundRegion r = correspondences[i][v].second->getRegion();
-//                    for (int j = 0; j < objectsLabels.size(); j++)
-//                        if (predictionsFused[j] > 0) r.addLabel(objectsLabels[j]);
-//                    
-//                    dt[sequences[s]->getName()][sequences[s]->getViewName(v)][fids[v]].push_back(r);
-//                }
-//            }
-//            
-//            for (int v = 0; v < sequences[s]->getNumOfViews(); v++)
-//            {
-//                int tp, fp, fn;
-//                evaluateFrame(gt.at(sequences[s]->getName()).at(sequences[s]->getViewName(v)).at(fids[v]),
-//                              dt.at(sequences[s]->getName()).at(sequences[s]->getViewName(v)).at(fids[v]),
-//                              tp, fp, fn);
-//                std::cout << std::to_string(tp) << "\t" << std::to_string(fp) << "\t" << std::to_string(fn);
-//                std::cout << ((v < sequences[s]->getNumOfViews() - 1) ?  "\t" : ";\n");
-//            }
-//            
-//#ifdef DO_VISUALIZE_DETECTIONS
+#ifdef DO_VISUALIZE_DETECTIONS
             for (int v = 0; v < V; v++)
             {
                 pVis->removeAllPointClouds(vp[v]);
@@ -1013,27 +1011,21 @@ void ReMedi::detectRectanglesWeightedConsensus(const std::vector<Sequence<ColorD
                     pVis->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 0, 0, "nactor" + std::to_string(v) + "-" + std::to_string(i), vp[v]);
                 }
                 
-                for (int i = 0; i < rectangles[v].size(); i++)
+                for (int i = 0; i < nonInteractedActors[v].size(); i++)
                 {
-                    pVis->addCube(rectangles[v][i].min.x, rectangles[v][i].max.x, rectangles[v][i].min.y, rectangles[v][i].max.y, rectangles[v][i].min.z, rectangles[v][i].max.z, ((v == 0) ? 1 : 0), ((v == 0) ? 0 : 1), 0, "rectangle" + std::to_string(v) + "-" + std::to_string(i), vp[0]);
+                    pVis->addPointCloud(nonInteractedActors[v][i]->getRegisteredCloud(), "actor" + std::to_string(v) + "-" + std::to_string(i), vp[v] );
+                    pVis->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, g_Colors[i%14][0], g_Colors[i%14][1], g_Colors[i%14][2], "actor" + std::to_string(v) + "-" + std::to_string(i), vp[v]);
                 }
             }
-//
-//            for (int i = 0; i < correspondences.size(); i++) for (int j = 0; j < correspondences[i].size(); j++)
-//            {
-//                int v = correspondences[i][j].first;
-//                pVis->addPointCloud(correspondences[i][j].second->getRegisteredCloud(), "actor" + std::to_string(v) + "-" + std::to_string(i), vp[0] );
-//                pVis->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, g_Colors[i%14][0], g_Colors[i%14][1], g_Colors[i%14][2], "actor" + std::to_string(v) + "-" + std::to_string(i), vp[0]);
-//            }
-            
+
             pVis->spinOnce();
-//#endif
+#endif //DO_VISUALIZE_DETECTIONS
         }
         std::cout << "];" << std::endl;
     }
 }
 
-void ReMedi::detectCorrespondenceConsensus(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& gt, Detection& dt, const CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pipeline)
+void ReMedi::detectMultiview(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& gt, Detection& dt, const CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pipeline)
 {
     for (int s = 0; s < sequences.size(); s++)
     {

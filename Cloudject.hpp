@@ -30,6 +30,10 @@
 
 #include <pcl/io/pcd_io.h>
 
+#include "conversion.h"
+#include "constants.h"
+
+
 class Cloudject
 {
 public:
@@ -218,6 +222,13 @@ public:
         }
         
         return pCloud;
+    }
+    
+    cv::Mat getRegisteredRegionMask()
+    {
+        cv::Mat registeredMask;
+        ColoredPointCloudToMat(getRegisteredCloud(), X_RESOLUTION, Y_RESOLUTION, m_Region.getRect().x, m_Region.getRect().y, registeredMask);
+        return registeredMask;
     }
     
     pcl::PointXYZ getRegisteredCloudCentroid()

@@ -351,7 +351,7 @@ int run()
         std::vector<Sequence<ColorDepthFrame>::Ptr> sequencesTe;
         remedi::getTestSequences(sequences, sequencesSids, t, sequencesTe);
         
-        sys.setMultiviewDetectionStrategy(MULTIVIEW_POINTCORRESPONDENCE_WEIGHTED_CONSENSUS);
+        sys.setMultiviewDetectionStrategy(DETECT_MONOCULAR);
         sys.detect(sequencesTe, objectsLabels, gt, dt, pipelines[t]); // Check it's working up to this point
         
         int tp, fp, fn;
