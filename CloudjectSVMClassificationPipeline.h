@@ -1,13 +1,13 @@
 //
-//  CloudjectClassificationPipeline.h
+//  CloudjectSVMClassificationPipeline.h
 //  remedi3
 //
 //  Created by Albert Clapés on 12/03/15.
 //
 //
 
-#ifndef __remedi3__CloudjectClassificationPipeline__
-#define __remedi3__CloudjectClassificationPipeline__
+#ifndef __remedi3__CloudjectSVMClassificationPipeline__
+#define __remedi3__CloudjectSVMClassificationPipeline__
 
 #include <stdio.h>
 #include <list>
@@ -22,13 +22,13 @@ enum type {CCPIPELINE_NORM_MINMAX, CCPIPELINE_NORM_STD,
     CCPIPELINE_NORM_L1, CCPIPELINE_NORM_L2};
 
 template<typename T>
-class CloudjectClassificationPipelineBase
+class CloudjectSVMClassificationPipelineBase
 {
 public:
-    CloudjectClassificationPipelineBase();
-    CloudjectClassificationPipelineBase(const CloudjectClassificationPipelineBase& rhs);
-    CloudjectClassificationPipelineBase& operator=(const CloudjectClassificationPipelineBase& rhs);
-    ~CloudjectClassificationPipelineBase();
+    CloudjectSVMClassificationPipelineBase();
+    CloudjectSVMClassificationPipelineBase(const CloudjectSVMClassificationPipelineBase& rhs);
+    CloudjectSVMClassificationPipelineBase& operator=(const CloudjectSVMClassificationPipelineBase& rhs);
+    ~CloudjectSVMClassificationPipelineBase();
     
     void setInputCloudjects(boost::shared_ptr<std::list<MockCloudject::Ptr> > cloudjects, std::vector<const char*> categories);
 //    boost::shared_ptr<std::list<Cloudject::Ptr> > getInputCloudjects();
@@ -95,16 +95,16 @@ private:
 };
 
 template<typename T>
-class CloudjectClassificationPipeline : public CloudjectClassificationPipelineBase<T>
+class CloudjectSVMClassificationPipeline : public CloudjectSVMClassificationPipelineBase<T>
 {};
 
 template<>
-class CloudjectClassificationPipeline<pcl::PFHRGBSignature250> : public CloudjectClassificationPipelineBase<pcl::PFHRGBSignature250>
+class CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250> : public CloudjectSVMClassificationPipelineBase<pcl::PFHRGBSignature250>
 {
 public:
-    CloudjectClassificationPipeline();
-    CloudjectClassificationPipeline(const CloudjectClassificationPipeline& rhs);
-    CloudjectClassificationPipeline& operator=(const CloudjectClassificationPipeline& rhs);
+    CloudjectSVMClassificationPipeline();
+    CloudjectSVMClassificationPipeline(const CloudjectSVMClassificationPipeline& rhs);
+    CloudjectSVMClassificationPipeline& operator=(const CloudjectSVMClassificationPipeline& rhs);
     
     void setPointSamplingRate(double rate);
     void setQuantizationValidationParameters(std::vector<int> qs);
@@ -124,7 +124,7 @@ public:
     std::vector<float> predict(boost::shared_ptr<std::list<MockCloudject::Ptr> > cloudjects, std::list<std::vector<int> >& predictions, std::list<std::vector<float> >& distsToMargin);
     std::vector<int> predict(Cloudject::Ptr cloudject, std::vector<float>& distsToMargin);
     
-    typedef boost::shared_ptr<CloudjectClassificationPipeline<pcl::PFHRGBSignature250> > Ptr;
+    typedef boost::shared_ptr<CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250> > Ptr;
 
 private:
     int m_q; // num of quantization vectors
@@ -158,4 +158,4 @@ private:
     void reduce(cv::Mat X, const std::vector<cv::PCA>& pcas, cv::Mat& Xr); // test
 };
 
-#endif /* defined(__remedi3__CloudjectClassificationPipeline__) */
+#endif /* defined(__remedi3__CloudjectSVMClassificationPipeline__) */

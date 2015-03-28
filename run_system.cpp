@@ -17,7 +17,7 @@
 
 #include "io.h"
 #include "features.h"
-#include "CloudjectClassificationPipeline.h"
+#include "CloudjectSVMClassificationPipeline.h"
 
 using namespace std;
 using namespace boost::assign;
@@ -303,13 +303,13 @@ int run()
     svmrbfValParams += gammaValParams, reglValParams;
     
     // Train classifiers and measure recognition accuracy
-    std::vector<CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::Ptr> pipelines (NUM_OF_SUBJECTS);
+    std::vector<CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr> pipelines (NUM_OF_SUBJECTS);
     for (int t = 0; t < NUM_OF_SUBJECTS; t++)
     {
         boost::shared_ptr<std::list<MockCloudject::Ptr> > pCloudjectsTr (new std::list<MockCloudject::Ptr>);
         remedi::getTrainingCloudjectsWithDescriptor(sequences, sequencesSids, t, annotationLabels, gt, "pfhrgb250", *pCloudjectsTr);
 
-        pipelines[t] = CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::Ptr(new CloudjectClassificationPipeline<pcl::PFHRGBSignature250>);
+        pipelines[t] = CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr(new CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>);
         pipelines[t]->setInputCloudjects(pCloudjectsTr, objectsLabels);
 
         pipelines[t]->setNormalization(CCPIPELINE_NORM_L2);
@@ -351,6 +351,7 @@ int run()
         std::vector<Sequence<ColorDepthFrame>::Ptr> sequencesTe;
         remedi::getTestSequences(sequences, sequencesSids, t, sequencesTe);
         
+        sys.setMultiviewDetectionStrategy(MULTIVIEW_POINTCORRESPONDENCE_WEIGHTED_CONSENSUS);
         sys.detect(sequencesTe, objectsLabels, gt, dt, pipelines[t]); // Check it's working up to this point
         
         int tp, fp, fn;

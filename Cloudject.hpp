@@ -96,12 +96,17 @@ public:
         return m_Region.isLabel(label);
     }
     
+    void addRegionLabel(std::string label)
+    {
+        m_Region.addLabel(label);
+    }
+    
     void setRegionLabels(std::set<std::string> labels)
     {
         m_Region.setLabels(labels);
     }
     
-    std::set<std::string> getRegionLabels()
+    std::set<std::string> getRegionLabels() const
     {
         return m_Region.getLabels();
     }
@@ -223,6 +228,65 @@ public:
         centroid.getVector4fMap() = _centroid;
 
         return centroid;
+    }
+    
+    void getCloudRectangle(pcl::PointXYZ& min, pcl::PointXYZ& max)
+    {
+        int n = m_pCloud->points.size();
+        
+        float minVal = std::numeric_limits<float>::min();
+        float maxVal = std::numeric_limits<float>::max();
+        min = pcl::PointXYZ(maxVal, maxVal, maxVal);
+        max = pcl::PointXYZ(minVal, minVal, minVal);
+        
+        for (int i = 0; i < n; ++i)
+        {
+            if (m_pCloud->points[i].z > .0 && m_pCloud->points[i].z < 4096.f)
+            {
+                if (m_pCloud->points[i].x < min.x) min.x = m_pCloud->points[i].x;
+                if (m_pCloud->points[i].y < min.y) min.y = m_pCloud->points[i].y;
+                if (m_pCloud->points[i].z < min.z) min.z = m_pCloud->points[i].z;
+
+                if (m_pCloud->points[i].x > max.x) max.x = m_pCloud->points[i].x;
+                if (m_pCloud->points[i].y > max.y) max.y = m_pCloud->points[i].y;
+                if (m_pCloud->points[i].z > max.z) max.z = m_pCloud->points[i].z;
+            }
+        }
+    }
+    
+    void getRegisteredCloudRectangle(pcl::PointXYZ& min, pcl::PointXYZ& max)
+    {
+        pcl::PointXYZ minTmp, maxTmp;
+        getCloudRectangle(minTmp, maxTmp);
+        
+        Eigen::Vector4f _minT = m_T * minTmp.getVector4fMap();
+        Eigen::Vector4f _maxT = m_T * maxTmp.getVector4fMap();
+
+        min.getVector4fMap() = _minT;
+        max.getVector4fMap() = _maxT;
+        
+//        std::cout << min << " " << max << std::endl;
+        float aux;
+        if (min.x > max.x)
+        {
+            aux = min.x;
+            min.x = max.x;
+            max.x = aux;
+        }
+        if (min.y > max.y)
+        {
+            aux = min.y;
+            min.y = max.y;
+            max.y = aux;
+        }
+        if (min.z > max.z)
+        {
+            aux = min.z;
+            min.z = max.z;
+            max.z = aux;
+        }
+//        std::cout << min << " " << max << std::endl;
+
     }
     
     void describe(std::string descriptorType, std::vector<float> params)
