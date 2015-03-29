@@ -373,7 +373,7 @@ template<typename T> template<typename CloudjectTypePtr>
 void CloudjectSVMClassificationPipelineBase<T>::getTrainingCloudjects(boost::shared_ptr<typename std::list<CloudjectTypePtr> > cloudjects, int t, typename std::list<CloudjectTypePtr>& cloudjectsTr)
 {
     cloudjectsTr.clear();
-
+    
     int i = 0;
     typename std::list<CloudjectTypePtr>::iterator it;
     for (it = cloudjects->begin(); it != cloudjects->end(); ++it, ++i)
@@ -392,6 +392,162 @@ void CloudjectSVMClassificationPipelineBase<T>::getTestCloudjects(boost::shared_
         if (m_Partitions.at<int>(i,0) == t)
             cloudjectsTe.push_back(*it);
 }
+
+template<typename T>
+void CloudjectSVMClassificationPipelineBase<T>::getTraining(cv::Mat X, cv::Mat c, int t, cv::Mat& XTr, cv::Mat& cTr)
+{
+    assert (c.rows == m_Partitions.rows);
+        
+    XTr.release();
+    cTr.release();
+    
+    int n, m; // count number of points and instances respectively
+    n = m = 0;
+    for (int i = 0; i < c.rows; i++)
+    {
+        if (m_Partitions.at<int>(i,0) != t)
+        {
+            m += c.at<int>(i,0);
+            n ++;
+        }
+    }
+    
+    XTr.create(m, X.cols, X.type());
+    cTr.create(n, c.cols, c.type());
+    
+    int offset, offsetTr;
+    offset = offsetTr = 0;
+    
+    n = 0;
+    for (int i = 0; i < c.rows; i++)
+    {
+        if (m_Partitions.at<int>(i,0) != t)
+        {
+            cv::Mat roi   (  X, cv::Rect(0,   offset, X.cols, c.at<int>(i,0)));
+            cv::Mat roiTr (XTr, cv::Rect(0, offsetTr, X.cols, c.at<int>(i,0)));
+            roi.copyTo(roiTr);
+            offsetTr += c.at<int>(i,0);
+
+            cTr.at<int>(n,0) = c.at<int>(i,0);
+            n++;
+        }
+        offset += c.at<int>(i,0);
+    }
+}
+
+template<typename T>
+void CloudjectSVMClassificationPipelineBase<T>::getTest(cv::Mat X, cv::Mat c, int t, cv::Mat& XTe, cv::Mat& cTe) {
+    assert (c.rows == m_Partitions.rows);
+    
+    XTe.release();
+    cTe.release();
+    
+    int n, m; // count number of points and instances respectively
+    n = m = 0;
+    for (int i = 0; i < c.rows; i++)
+    {
+        if (m_Partitions.at<int>(i,0) == t)
+        {
+            m += c.at<int>(i,0);
+            n ++;
+        }
+    }
+    
+    XTe.create(m, X.cols, X.type());
+    cTe.create(n, c.cols, c.type());
+    
+    int offset, offsetTe;
+    offset = offsetTe = 0;
+    
+    n = 0;
+    for (int i = 0; i < c.rows; i++)
+    {
+        if (m_Partitions.at<int>(i,0) == t)
+        {
+            cv::Mat roi   (  X, cv::Rect(0,   offset, X.cols, c.at<int>(i,0)));
+            cv::Mat roiTe (XTe, cv::Rect(0, offsetTe, X.cols, c.at<int>(i,0)));
+            roi.copyTo(roiTe);
+            offsetTe += c.at<int>(i,0);
+            
+            cTe.at<int>(n,0) = c.at<int>(i,0);
+            n++;
+        }
+        offset += c.at<int>(i,0);
+    }
+}
+
+template<typename T>
+void CloudjectSVMClassificationPipelineBase<T>::getTraining(cv::Mat X, int t, cv::Mat& XTr)
+{
+    assert (X.rows == m_Partitions.rows);
+    
+    XTr.release();
+    int n = cv::countNonZero(m_Partitions != t);
+    
+    XTr.create(n, X.cols, X.type());
+    
+    n = 0;
+    for (int i = 0; i < X.rows; i++)
+        if (m_Partitions.at<int>(i,0) != t)
+            X.row(i).copyTo(XTr.row(n++));
+}
+
+template<typename T>
+void CloudjectSVMClassificationPipelineBase<T>::getTest(cv::Mat X, int t, cv::Mat& XTe)
+{
+    assert (X.rows == m_Partitions.rows);
+    
+    XTe.release();
+    
+    int n = cv::countNonZero(m_Partitions == t);
+    XTe.create(n, X.cols, X.type());
+    
+    n = 0;
+    for (int i = 0; i < X.rows; i++)
+        if (m_Partitions.at<int>(i,0) == t)
+            X.row(i).copyTo(XTe.row(n++));
+}
+
+template<typename T>
+void CloudjectSVMClassificationPipelineBase<T>::stratify(cv::Mat X, cv::Mat c, cv::Mat Y, std::map<std::string,cv::Mat>& XMap)
+{
+    assert(m_Categories.size() > 0 && m_Categories.size() == Y.cols);
+
+    std::vector<int> m (Y.cols, 0);
+    std::vector<int> n (Y.cols, 0);
+    for (int i = 0; i < Y.cols; i++)
+    {
+        for (int j = 0; j < Y.rows; j++)
+            if (Y.at<int>(j,i) > 0)
+            {
+                m[i] += c.at<int>(j,0);
+                n[i] ++;
+            }
+    }
+
+    for (int i = 0; i < m_Categories.size(); i++)
+    {
+        cv::Mat XCat (m[i], X.cols, X.type());
+        
+        int offset, offsetCat;
+        offset = offsetCat = 0;
+        for (int j = 0; j < c.rows; j++)
+        {
+            if (Y.at<int>(j,i) > 0)
+            {
+                cv::Mat roi    (   X, cv::Rect(0,    offset, X.cols, c.at<int>(j,0)));
+                cv::Mat roiCat (XCat, cv::Rect(0, offsetCat, X.cols, c.at<int>(j,0)));
+                roi.copyTo(roiCat);
+                
+                offsetCat += c.at<int>(j,0);
+            }
+            offset += c.at<int>(j,0);
+        }
+        
+        XMap[m_Categories[i]] = XCat;
+    }
+}
+
 
 // ----------------------------------------------------------------------------
 // CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>
@@ -611,6 +767,9 @@ float CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::validate()
     getLabels(m_InputMockCloudjects, m_Categories, Y);
     createValidationPartitions(Y, m_NumFolds, m_Partitions);
 
+    cv::Mat X, countings;
+    cloudjectsToPointsSample(m_InputMockCloudjects, X, countings);
+    
     std::vector<cv::Mat> gQ (m_qValParam.size());
     if (m_bGlobalQuantization)
     {
@@ -628,8 +787,6 @@ float CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::validate()
             {
                 // Centers are selected among all the points without taking into
                 // account categories
-                cv::Mat X, c;
-                cloudjectsToPointsSample(m_InputMockCloudjects, X, c);
                 bow(X, m_qValParam[i], gQ[i]);
             }
             else
@@ -638,7 +795,7 @@ float CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::validate()
                 // of centers for each class (the parameters divided by the number
                 // of categories)
                 std::map<std::string,cv::Mat> XMap;
-                cloudjectsToPointsSample(m_InputMockCloudjects, XMap);
+                stratify(X, countings, Y, XMap);
                 int sq = floor(m_qValParam[i] / m_Categories.size());
                 bow(XMap, (sq == 0) ? 1 : sq, gQ[i]);
             }
@@ -648,28 +805,22 @@ float CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::validate()
     std::vector<cv::Mat> S (m_qValParam.size());
     for (int t = 0; t < m_NumFolds; t++)
     {
-        // Partitionate the data
-        
-        boost::shared_ptr<std::list<MockCloudject::Ptr> > cloudjectsTr (new std::list<MockCloudject::Ptr>);
-        boost::shared_ptr<std::list<MockCloudject::Ptr> > cloudjectsTe (new std::list<MockCloudject::Ptr>);
-        getTrainingCloudjects(m_InputMockCloudjects, t, *cloudjectsTr);
-        getTestCloudjects(m_InputMockCloudjects, t, *cloudjectsTe);
-
-        std::map<std::string,cv::Mat> XTrMap;
-        if (!m_bGlobalQuantization)
-            cloudjectsToPointsSample(cloudjectsTr, XTrMap);
-        
         // Create the training sample and quantize
         
         cv::Mat XTr, XTe, cTr, cTe;
-        cloudjectsToPointsSample(cloudjectsTr, XTr, cTr);
-        cloudjectsToPointsSample(cloudjectsTe, XTe, cTe);
+        getTraining(X, countings, t, XTr, cTr);
+        getTest(X, countings, t, XTe, cTe);
         
         // Get the partitioned data labels
         
         cv::Mat YTr, YTe;
-        getLabels(cloudjectsTr, m_Categories, YTr);
-        getLabels(cloudjectsTe, m_Categories, YTe);
+        getTraining(Y, t, YTr);
+        getTest(Y, t, YTe);
+        
+        // (If not global quantization)
+        std::map<std::string,cv::Mat> XTrMap;
+        if (!m_bGlobalQuantization)
+            stratify(XTr, cTr, YTr, XTrMap);
         
         for (int i = 0; i < m_qValParam.size(); i++)
         {

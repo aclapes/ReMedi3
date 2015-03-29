@@ -90,6 +90,12 @@ protected:
     template<typename CloudjectTypePtr>
     void getTestCloudjects(boost::shared_ptr<typename std::list<CloudjectTypePtr> > cloudjects, int t, typename std::list<CloudjectTypePtr>& cloudjectsTr);
     
+    void getTraining(cv::Mat X, cv::Mat c, int t, cv::Mat& XTr, cv::Mat& cTr);
+    void getTest(cv::Mat X, cv::Mat c, int t, cv::Mat& XTe, cv::Mat& cTe);
+    void getTraining(cv::Mat X, int t, cv::Mat& XTr);
+    void getTest(cv::Mat X, int t, cv::Mat& XTe);
+    void stratify(cv::Mat X, cv::Mat c, cv::Mat Y, std::map<std::string,cv::Mat>& XMap);
+    
 private:
     std::vector<std::vector<float> > m_ClassifiersValParamCombs;
     cv::Mat m_ClassifiersValPerfs; // Validation parameters [P]erformance

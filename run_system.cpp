@@ -294,7 +294,7 @@ int run()
     
     
     std::vector<int> quantValParams;
-    quantValParams += 10, 50, 100, 500;
+    quantValParams += 15;//10, 50, 100, 500;
     
     std::vector<std::vector<float> > svmrbfValParams;
     std::vector<float> gammaValParams, reglValParams;
