@@ -50,6 +50,10 @@ protected:
     boost::shared_ptr<std::list<MockCloudject::Ptr> > m_InputMockCloudjects;
     std::vector<const char*> m_Categories;
     
+    cv::Mat m_X;
+    cv::Mat m_Countings;
+    cv::Mat m_Y;
+    
     int m_NumFolds;
     cv::Mat m_Partitions;
     

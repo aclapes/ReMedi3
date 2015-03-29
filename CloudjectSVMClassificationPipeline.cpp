@@ -397,7 +397,7 @@ template<typename T>
 void CloudjectSVMClassificationPipelineBase<T>::getTraining(cv::Mat X, cv::Mat c, int t, cv::Mat& XTr, cv::Mat& cTr)
 {
     assert (c.rows == m_Partitions.rows);
-        
+    
     XTr.release();
     cTr.release();
     
@@ -763,12 +763,10 @@ float CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::validate()
     assert (m_InputMockCloudjects->size() > 0);
     m_qValPerfs.resize(m_qValParam.size());
 
-    cv::Mat Y;
-    getLabels(m_InputMockCloudjects, m_Categories, Y);
-    createValidationPartitions(Y, m_NumFolds, m_Partitions);
-
-    cv::Mat X, countings;
-    cloudjectsToPointsSample(m_InputMockCloudjects, X, countings);
+    getLabels(m_InputMockCloudjects, m_Categories, m_Y);
+    createValidationPartitions(m_Y, m_NumFolds, m_Partitions);
+    
+    cloudjectsToPointsSample(m_InputMockCloudjects, m_X, m_Countings);
     
     std::vector<cv::Mat> gQ (m_qValParam.size());
     if (m_bGlobalQuantization)
@@ -787,7 +785,7 @@ float CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::validate()
             {
                 // Centers are selected among all the points without taking into
                 // account categories
-                bow(X, m_qValParam[i], gQ[i]);
+                bow(m_X, m_qValParam[i], gQ[i]);
             }
             else
             {
@@ -795,7 +793,7 @@ float CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::validate()
                 // of centers for each class (the parameters divided by the number
                 // of categories)
                 std::map<std::string,cv::Mat> XMap;
-                stratify(X, countings, Y, XMap);
+                stratify(m_X, m_Countings, m_Y, XMap);
                 int sq = floor(m_qValParam[i] / m_Categories.size());
                 bow(XMap, (sq == 0) ? 1 : sq, gQ[i]);
             }
@@ -808,14 +806,14 @@ float CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::validate()
         // Create the training sample and quantize
         
         cv::Mat XTr, XTe, cTr, cTe;
-        getTraining(X, countings, t, XTr, cTr);
-        getTest(X, countings, t, XTe, cTe);
+        getTraining(m_X, m_Countings, t, XTr, cTr);
+        getTest(m_X, m_Countings, t, XTe, cTe);
         
         // Get the partitioned data labels
         
         cv::Mat YTr, YTe;
-        getTraining(Y, t, YTr);
-        getTest(Y, t, YTe);
+        getTraining(m_Y, t, YTr);
+        getTest(m_Y, t, YTe);
         
         // (If not global quantization)
         std::map<std::string,cv::Mat> XTrMap;
@@ -872,16 +870,16 @@ float CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::validate()
     {
 //        std::cout << S[i] << std::endl;
 
-        std::vector<std::vector<float> > bestParamsTmp (Y.cols);
+        std::vector<std::vector<float> > bestParamsTmp (m_Y.cols);
         m_qValPerfs[i] = .0f;
-        for (int j = 0; j < Y.cols; j++)
+        for (int j = 0; j < m_Y.cols; j++)
         {
             double minVal, maxVal;
             cv::Point minIdx, maxIdx;
             cv::minMaxLoc(S[i].col(j), &minVal, &maxVal, &minIdx, &maxIdx);
 
             bestParamsTmp[j] = classifiersValParamCombs[maxIdx.y];
-            m_qValPerfs[i] += (maxVal / Y.cols);
+            m_qValPerfs[i] += (maxVal / m_Y.cols);
         }
         
         if (m_qValPerfs[i] > m_BestValPerformance)
@@ -914,27 +912,28 @@ void CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::setQuantizatio
 void CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::train()
 {
     assert (m_InputMockCloudjects->size() > 0);
+    assert (m_Categories.size() > 0);
     
-    cv::Mat Y;
-    getLabels(m_InputMockCloudjects, m_Categories, Y);
+    if (m_Y.empty())
+        getLabels(m_InputMockCloudjects, m_Categories, m_Y);
     
-    cv::Mat X, c;
-    cloudjectsToPointsSample(m_InputMockCloudjects, X, c);
+    if (m_X.empty())
+        cloudjectsToPointsSample(m_InputMockCloudjects, m_X, m_Countings);
     
     if (!m_bCentersStratification)
     {
-        bow(X, m_q, m_Centers);
+        bow(m_X, m_q, m_Centers);
     }
     else
     {
         std::map<std::string,cv::Mat> XMap;
-        cloudjectsToPointsSample(m_InputMockCloudjects, XMap);
+        stratify(m_X, m_Countings, m_Y, XMap);
         int sq = m_q / m_Categories.size();
         bow(XMap, (sq == 0) ? 1 : sq, m_Centers);
     }
     
     cv::Mat W;
-    bow(X, c, m_Centers, W);
+    bow(m_X, m_Countings, m_Centers, W);
     
     cv::Mat Wn;
     normalize(W, Wn, m_NormParams);
@@ -950,7 +949,7 @@ void CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::train()
         CloudjectSVMClassificationPipelineBase<pcl::PFHRGBSignature250>::reduce(Wn, Wp, m_PCAs[0]);
     }
     
-    CloudjectSVMClassificationPipelineBase<pcl::PFHRGBSignature250>::train(Wp,Y);
+    CloudjectSVMClassificationPipelineBase<pcl::PFHRGBSignature250>::train(Wp,m_Y);
 }
 
 std::vector<float> CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::predict(boost::shared_ptr<std::list<MockCloudject::Ptr> > cloudjects, std::list<std::vector<int> >& predictions, std::list<std::vector<float> >& distsToMargin)
