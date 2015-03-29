@@ -294,68 +294,129 @@ int run()
     
     
     std::vector<int> quantValParams;
-    quantValParams += 15;//10, 50, 100, 500;
+    quantValParams += 10, 50, 100, 500;
     
     std::vector<std::vector<float> > svmrbfValParams;
     std::vector<float> gammaValParams, reglValParams;
-    gammaValParams += 1e-4, 1e-2, 1e-1, 1, 10; //1e-4, 1e-3, 1e-2, 5e-2, 1e-1, 0.5, 1, 5, 10; // rbf kernel's gamma
-    reglValParams += 1e-4, 1e-2, 1e-1, 1, 10, 100;//1e-4, 1e-3, 1e-2, 1e-1, 0.5, 1, 5, 10, 50, 100, 1000; // regularization CValue
+    gammaValParams += 1e-4, 1e-3, 1e-2, 5e-2, 1e-1, 0.5, 1, 5, 10; // rbf kernel's gamma
+    reglValParams += 1e-4, 1e-3, 1e-2, 1e-1, 0.5, 1, 5, 10, 50, 100, 1000; // regularization CValue
     svmrbfValParams += gammaValParams, reglValParams;
     
     // Train classifiers and measure recognition accuracy
-    std::vector<CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr> pipelines (NUM_OF_SUBJECTS);
     for (int t = 0; t < NUM_OF_SUBJECTS; t++)
     {
-        boost::shared_ptr<std::list<MockCloudject::Ptr> > pCloudjectsTr (new std::list<MockCloudject::Ptr>);
-        remedi::getTrainingCloudjectsWithDescriptor(sequences, sequencesSids, t, annotationLabels, gt, "pfhrgb250", *pCloudjectsTr);
+        std::cout << "Training in fold " << t << " (LOSOCV) .." << std::endl;
 
-        pipelines[t] = CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr(new CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>);
-        pipelines[t]->setInputCloudjects(pCloudjectsTr, objectsLabels);
+        std::vector<CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr> pipelines (3);
+        bool bSuccess = true;
+        for (int r = 0; r < NUM_REPETITIONS; r++)
+        {
+            pipelines[r] = CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr(new CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>);
+            bSuccess &= pipelines[r]->load("training_" + std::to_string(t) + "-" + std::to_string(r));
+        }
+        
+        if (!bSuccess)
+        {
+            // Validation
+            
+            CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pPipeline (new CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>);
+            
+            boost::shared_ptr<std::list<MockCloudject::Ptr> > pCloudjectsTr (new std::list<MockCloudject::Ptr>);
+            remedi::getTrainingCloudjectsWithDescriptor(sequences, sequencesSids, t, annotationLabels, gt, "pfhrgb250", *pCloudjectsTr);
 
-        pipelines[t]->setNormalization(CCPIPELINE_NORM_L2);
-        pipelines[t]->setDimRedVariance(1);
-//        pipelines[t]->setDimRedNumFeatures(15);
-        pipelines[t]->setClassifierType("svmrbf");
-        
-        pipelines[t]->setGlobalQuantization();
-        pipelines[t]->setCentersStratification();
-        pipelines[t]->setPerCategoryReduction();
-        
-        pipelines[t]->setValidation(10);
-        pipelines[t]->setQuantizationValidationParameters(quantValParams);
-        pipelines[t]->setClassifierValidationParameters(svmrbfValParams);
-        
-        pipelines[t]->validate(); // model selection
-        
-        // get the performances of the different quantizations
-        std::vector<float> quantValPerfs = (pipelines[t]->getQuantizationValidationPerformances());
-        std::cout << cv::Mat(quantValPerfs) << std::endl;
-        
-        int quantParam = pipelines[t]->getQuantizationParameter();
-//        std::vector<std::vector<float> > classifParams = pipelines[t]->get
-       
-        
-        pipelines[t]->train(); // use the best parameters found in the model selection
-        
-        pCloudjectsTr->clear();
-        boost::shared_ptr<std::list<MockCloudject::Ptr> > pCloudjectsTe (new std::list<MockCloudject::Ptr>);
-        remedi::getTestCloudjectsWithDescriptor(sequences, sequencesSids, t, gt, "pfhrgb250", *pCloudjectsTe);
+            pPipeline->setInputCloudjects(pCloudjectsTr);
+            pPipeline->setCategories(objectsLabels);
 
-         // out of sample accuracy and predictions
-        std::list<std::vector<int> > predictions; // not used for now
-        std::list<std::vector<float> > distsToMargin; // not used for now
-        std::vector<float> osacc = pipelines[t]->predict(pCloudjectsTe, predictions, distsToMargin);
-        std::copy(osacc.begin(), osacc.end(), std::ostream_iterator<float>(std::cout, " "));
-        std::cout << std::endl;
+            pPipeline->setNormalization(CCPIPELINE_NORM_L2);
+            pPipeline->setDimRedVariance(1);
+    //       pPipeline->setDimRedNumFeatures(15);
+            pPipeline->setClassifierType("svmrbf");
+            
+            pPipeline->setGlobalQuantization();
+            pPipeline->setCentersStratification();
+            pPipeline->setPerCategoryReduction();
+            
+            pPipeline->setValidation(10);
+            pPipeline->setQuantizationValidationParameters(quantValParams);
+            pPipeline->setClassifierValidationParameters(svmrbfValParams);
+            
+            pPipeline->validate(); // model selection
+            
+            // get the performances of the different quantizations
+            std::vector<float> quantValPerfs = (pPipeline->getQuantizationValidationPerformances());
+            std::cout << cv::Mat(quantValPerfs) << std::endl;
+            
+            // Training eventually
+            // Repeat it several times (because of the quantization stochasticity)
+            for (int r = 0; r < NUM_REPETITIONS; r++)
+            {
+                pPipeline->train(); // use the best parameters found in the model selection
+                pPipeline->save("training_" + std::to_string(t) + "-" + std::to_string(r));
+            }
+        }
+    }
+    
+    // Test recognition accuracy
+    for (int t = 0; t < NUM_OF_SUBJECTS; t++)
+    {
+        std::cout << "Testing (object recognition) in fold " << t << " (LOSOCV) .." << std::endl;
 
-        std::vector<Sequence<ColorDepthFrame>::Ptr> sequencesTe;
-        remedi::getTestSequences(sequences, sequencesSids, t, sequencesTe);
+        std::vector<CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr> pipelines (3);
+        bool bSuccess = true;
+        for (int r = 0; r < NUM_REPETITIONS; r++)
+        {
+            pipelines[r] = CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr(new CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>);
+            bSuccess &= pipelines[r]->load("training_" + std::to_string(t) + "-" + std::to_string(r));
+        }
         
-        sys.setMultiviewDetectionStrategy(DETECT_MULTIVIEW);
-        sys.detect(sequencesTe, objectsLabels, gt, dt, pipelines[t]); // Check it's working up to this point
+        if (bSuccess)
+        {
+            boost::shared_ptr<std::list<MockCloudject::Ptr> > pCloudjectsTe (new std::list<MockCloudject::Ptr>);
+            remedi::getTestCloudjectsWithDescriptor(sequences, sequencesSids, t, gt, "pfhrgb250", *pCloudjectsTe);
+
+            for (int r = 0; r < NUM_REPETITIONS; r++)
+            {
+                // Compute
+                std::list<std::vector<int> > predictions; // (not used)
+                std::list<std::vector<float> > distsToMargin; // (not used)
+                
+                std::vector<float> osacc = pipelines[r]->predict(pCloudjectsTe, predictions, distsToMargin);
+                // Output
+                std::copy(osacc.begin(), osacc.end(), std::ostream_iterator<float>(std::cout, " "));
+                std::cout << std::endl;
+            }
+        }
+    }
+    
+    for (int t = 0; t < NUM_OF_SUBJECTS; t++)
+    {
+        std::cout << "Testing (object detection) in fold " << t << " (LOSOCV) .." << std::endl;
+
+        std::vector<CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr> pipelines (3);
+        bool bSuccess = true;
+        for (int r = 0; r < NUM_REPETITIONS; r++)
+        {
+            pipelines[r] = CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr(new CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>);
+            bSuccess &= pipelines[r]->load("training_" + std::to_string(t) + "-" + std::to_string(r));
+        }
         
-        int tp, fp, fn;
-        sys.evaluate(sequencesTe, objectsLabels, gt, dt, tp, fp, fn);
+        if (bSuccess)
+        {
+            boost::shared_ptr<std::list<MockCloudject::Ptr> > pCloudjectsTe (new std::list<MockCloudject::Ptr>);
+            remedi::getTestCloudjectsWithDescriptor(sequences, sequencesSids, t, gt, "pfhrgb250", *pCloudjectsTe);
+            
+            for (int r = 0; r < NUM_REPETITIONS; r++)
+            {
+                std::vector<Sequence<ColorDepthFrame>::Ptr> sequencesTe;
+                remedi::getTestSequences(sequences, sequencesSids, t, sequencesTe);
+                
+                sys.setMultiviewDetectionStrategy(DETECT_MULTIVIEW);
+                sys.detect(sequencesTe, objectsLabels, gt, dt, pipelines[t]); // Check it's working up to this point
+                
+                int tp, fp, fn;
+                sys.evaluate(sequencesTe, objectsLabels, gt, dt, tp, fp, fn);
+            }
+        }
     }
     
     

@@ -92,6 +92,8 @@ static const char* g_AnnotationLabels[] = {"dish","pillbox","book","tetrabrick",
 
 #define OR_CORRESPONDENCE_TOLERANCE         0.1
 
+#define NUM_REPETITIONS                     3
+
 // Marker colors (as many as objects at least)
 static float g_Colors[][3] = {
     {1, 0, 0},

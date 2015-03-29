@@ -30,7 +30,8 @@ public:
     CloudjectSVMClassificationPipelineBase& operator=(const CloudjectSVMClassificationPipelineBase& rhs);
     ~CloudjectSVMClassificationPipelineBase();
     
-    void setInputCloudjects(boost::shared_ptr<std::list<MockCloudject::Ptr> > cloudjects, std::vector<const char*> categories);
+    void setInputCloudjects(boost::shared_ptr<std::list<MockCloudject::Ptr> > cloudjects);
+    void setCategories(std::vector<const char*> categories);
 //    boost::shared_ptr<std::list<Cloudject::Ptr> > getInputCloudjects();
     
     void setDimRedVariance(double var);
@@ -121,6 +122,10 @@ public:
     
     void train();
     
+//    void loadTrain();
+    void save(std::string filename, std::string extension = ".yml");
+    bool load(std::string filename, std::string extension = ".yml");
+    
     std::vector<float> predict(boost::shared_ptr<std::list<MockCloudject::Ptr> > cloudjects, std::list<std::vector<int> >& predictions, std::list<std::vector<float> >& distsToMargin);
     std::vector<int> predict(Cloudject::Ptr cloudject, std::vector<float>& distsToMargin);
     
@@ -132,7 +137,7 @@ private:
     cv::vector<float> m_qValPerfs;
     
     std::vector<cv::PCA> m_PCAs;
-    cv::Mat m_Q; // the q vectors actually
+    cv::Mat m_Centers; // the q vectors actually
     
     bool m_bGlobalQuantization;
     

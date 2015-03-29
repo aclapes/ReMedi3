@@ -525,9 +525,9 @@ void remedi::getTrainingCloudjectsWithDescriptor(std::vector<Sequence<ColorDepth
     std::cout << "Creating the sample of training cloudjects .." << std::endl;
     boost::timer t;
     
-    for (int s = 0; s < 3/*sequences.size()*/; s++)
+    for (int s = 0; s < sequences.size(); s++)
     {
-        if (partitions[s] != p)
+        if (partitions[s] != p) // TODO: IMPORTANT TO CHANGE BACK TO "!="
         {
             std::string resultsParent = string(PARENT_PATH) + string(RESULTS_SUBDIR)
             + sequences[s]->getName() + "/" + string(KINECT_SUBSUBDIR);
@@ -857,7 +857,7 @@ void ReMedi::evaluateFrame(const vector<std::map<std::string,std::map<std::strin
                         // is the detected in the correct spot?
                         if (d <= 0.15)
                         {
-                            std::cout << *it << " found in " << std::to_string(v) << std::endl;
+//                            std::cout << *it << " found in " << std::to_string(v) << std::endl;
                             tpAux++;
                             matches[*it] ++;
                         }
@@ -882,16 +882,14 @@ void ReMedi::evaluateFrame(const std::map<std::string,std::map<std::string,Groun
     // Iterate over the dt vector to determine TP and FP
     tp = fp = fn = 0;
     
-    std::map<std::string,std::map<std::string,int> > matches;
+    std::map<std::string,int> matches;
     
-    std::map<std::string,std::map<std::string,GroundtruthRegion> >::const_iterator it;
-    std::map<std::string,GroundtruthRegion>::const_iterator jt;
+    std::map<std::string,std::map<std::string,GroundtruthRegion> >::const_iterator itr;
 
     // Auxiliary structure to compute FN (after TP and FP)
-    for (it = gt.begin(); it != gt.end(); ++it)
-        if (it->first.compare("arms") != 0 && it->first.compare("others") != 0)
-            for (jt = it->second.begin(); jt != it->second.end(); ++jt)
-                matches[it->first][jt->first] = false;
+    for (itr = gt.begin(); itr != gt.end(); ++itr)
+        if (itr->first.compare("arms") != 0 && itr->first.compare("others") != 0)
+                matches[itr->first] = false;
     
     // Compute TP and FP first
     for (int i = 0; i < dt.size(); i++)
@@ -917,7 +915,7 @@ void ReMedi::evaluateFrame(const std::map<std::string,std::map<std::string,Groun
                     {
                         tp++;
                         // Count matches to this annotation
-                        matches[*it][jt->first] ++;
+                        matches[*it] ++;
                     }
                     else
                     {
@@ -929,10 +927,13 @@ void ReMedi::evaluateFrame(const std::map<std::string,std::map<std::string,Groun
     }
     
     //  Compute FN (annotations without at least one match)
-    for (it = gt.begin(); it != gt.end(); ++it)
-        if (it->first.compare("arms") != 0 && it->first.compare("others") != 0)
-            for (jt = it->second.begin(); jt != it->second.end(); ++jt)
-                if (!matches[it->first][jt->first]) fn++; // match, not even once
+//    for (it = gt.begin(); it != gt.end(); ++it)
+//        if (it->first.compare("arms") != 0 && it->first.compare("others") != 0)
+//            for (jt = it->second.begin(); jt != it->second.end(); ++jt)
+//                if (!matches[it->first][jt->first]) fn++; // match, not even once
+    std::map<std::string,int>::iterator it;
+    for (it= matches.begin(); it != matches.end(); ++it)
+        if (matches[it->first] == 0) fn++; // match, not even once
 }
 
 void ReMedi::evaluate(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& gt, const Detection& dt, int& tp, int& fp, int& fn)
@@ -1188,8 +1189,13 @@ void ReMedi::detectMultiview(const std::vector<Sequence<ColorDepthFrame>::Ptr> s
             {
                 std::vector<std::vector<float> > distsToMargin (correspondences[i].size());
                 std::vector<std::vector<int> > predictions (correspondences[i].size());
+                std::vector<float> marginNormFactors (correspondences[i].size());
                 for (int v = 0; v < correspondences[i].size(); v++)
+                {
                     predictions[v] = pipeline->predict(correspondences[i][v].second, distsToMargin[v]);
+                    for (int j = 0; j < distsToMargin.size(); j++)
+                        marginNormFactors += abs(distsToMargin[v][j]);
+                }
                 
                 std::vector<int> predictionsFused (objectsLabels.size());
                 for (int j = 0; j < objectsLabels.size(); j++)
@@ -1201,7 +1207,7 @@ void ReMedi::detectMultiview(const std::vector<Sequence<ColorDepthFrame>::Ptr> s
                         pcl::PointXYZ c = correspondences[i][v].second->getCloudCentroid();
                         // Inverse distance weighting
                         float wsq = 1.f / pow(sqrt(pow(c.x,2) + pow(c.y,2) + pow(c.z,2)), 4);
-                        distToMarginFused += (wsq * distsToMargin[v][j]);
+                        distToMarginFused += (wsq * distsToMargin[v][j] / marginNormFactors[v]);
                         W += wsq;
                     }
                     predictionsFused[j] = ((distToMarginFused/W) < 0 ? 1 : -1);

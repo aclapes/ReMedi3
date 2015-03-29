@@ -13,6 +13,7 @@
 #include "cvxtended.h"
 
 #include <boost/assign/std/vector.hpp> // for 'operator+=()'
+#include <boost/timer.hpp>
 
 using namespace boost::assign; // bring 'operator+=()' into scope
 
@@ -76,9 +77,14 @@ CloudjectSVMClassificationPipelineBase<T>& CloudjectSVMClassificationPipelineBas
 }
 
 template<typename T>
-void CloudjectSVMClassificationPipelineBase<T>::setInputCloudjects(boost::shared_ptr<std::list<MockCloudject::Ptr> > cloudjects, std::vector<const char*> categories)
+void CloudjectSVMClassificationPipelineBase<T>::setInputCloudjects(boost::shared_ptr<std::list<MockCloudject::Ptr> > cloudjects)
 {
     m_InputMockCloudjects = cloudjects;
+}
+
+template<typename T>
+void CloudjectSVMClassificationPipelineBase<T>::setCategories(std::vector<const char*> categories)
+{
     m_Categories = categories;
 }
 
@@ -406,7 +412,7 @@ CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>& CloudjectSVMClassif
     if (this != &rhs)
     {
         m_q = rhs.m_q;
-        m_Q = rhs.m_Q;
+        m_Centers = rhs.m_Centers;
         
         m_PCAs = rhs.m_PCAs;
         
@@ -540,7 +546,7 @@ void CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::bow(cv::Mat X,
 {
     // Find quantization vectors
     cv::Mat u;
-    cv::kmeans(X, q, u, cv::TermCriteria(), 3, cv::KMEANS_PP_CENTERS, Q);
+    cv::kmeans(X, q, u, cv::TermCriteria(), 1, cv::KMEANS_PP_CENTERS, Q);
 }
 
 void CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::bow(std::map<std::string,cv::Mat> X, int q, cv::Mat& Q)
@@ -548,11 +554,13 @@ void CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::bow(std::map<s
     // Find quantization vectors
     std::vector<cv::Mat> QVec (m_Categories.size());
     
+    boost::timer t;
     for (int k = 0; k < m_Categories.size(); k++)
     {
         cv::Mat u;
-        cv::kmeans(X[m_Categories[k]], q, u, cv::TermCriteria(), 3, cv::KMEANS_PP_CENTERS, QVec[k]);
+        cv::kmeans(X[m_Categories[k]], q, u, cv::TermCriteria( CV_TERMCRIT_EPS+CV_TERMCRIT_ITER, 10, 1.0), 1, cv::KMEANS_PP_CENTERS, QVec[k]);
     }
+    std::cout << "BOW centers' finding took " << t.elapsed() << " secs." << std::endl;
     
     cv::vconcat(QVec,Q);
 }
@@ -764,18 +772,18 @@ void CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::train()
     
     if (!m_bCentersStratification)
     {
-        bow(X, m_q, m_Q);
+        bow(X, m_q, m_Centers);
     }
     else
     {
         std::map<std::string,cv::Mat> XMap;
         cloudjectsToPointsSample(m_InputMockCloudjects, XMap);
         int sq = m_q / m_Categories.size();
-        bow(XMap, (sq == 0) ? 1 : sq, m_Q);
+        bow(XMap, (sq == 0) ? 1 : sq, m_Centers);
     }
     
     cv::Mat W;
-    bow(X, c, m_Q, W);
+    bow(X, c, m_Centers, W);
     
     cv::Mat Wn;
     normalize(W, Wn, m_NormParams);
@@ -804,7 +812,7 @@ std::vector<float> CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::
     cloudjectsToPointsSample(cloudjects, X, c);
 
     cv::Mat W;
-    bow(X, c, m_Q, W);
+    bow(X, c, m_Centers, W);
     
     cv::Mat Wn;
     normalize(W, m_NormParams, Wn);
@@ -836,7 +844,7 @@ std::vector<int> CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::pr
     cloudjectsToPointsSample(cloudjects, x, c);
     
     cv::Mat w;
-    bow(x, c, m_Q, w);
+    bow(x, c, m_Centers, w);
     
     cv::Mat wn;
     normalize(w, m_NormParams, wn);
@@ -885,9 +893,164 @@ void CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::reduce(cv::Mat
     cv::hconcat(XrVec, Xr);
 }
 
+bool CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::load(std::string filename, std::string extension)
+{
+    std::string filenameWithSuffix = filename + extension; // extension is expected to already include the ext dot (.xxx)
+    cv::FileStorage fs;
+    if (extension.compare(".xml") == 0)
+        fs.open(filenameWithSuffix, cv::FileStorage::READ | cv::FileStorage::FORMAT_XML);
+    else // yml
+        fs.open(filenameWithSuffix, cv::FileStorage::READ | cv::FileStorage::FORMAT_YAML);
+    
+    if (!fs.isOpened())
+        return false;
+    
+    // Save categories (problem with std::vector<const char*>, so convert to strings)
+    std::vector<std::string> categories;
+    fs["categories"] >> categories;
+    m_Categories.resize(categories.size());
+    for (int i = 0; i < m_Categories.size(); i++)
+        m_Categories[i] = categories[i].c_str();
+    
+    // Save the normalization-related variables
+    fs["normType"] >> m_NormType;
+    if (m_NormType == CCPIPELINE_NORM_MINMAX || m_NormType == CCPIPELINE_NORM_STD)
+    {
+        m_NormParams.resize(2);
+        fs["normParams-0"] >> m_NormParams[0];
+        fs["normParams-1"] >> m_NormParams[1];
+    }
+    
+    // Save the BOW-related variables
+    fs["q"] >> m_q;
+    fs["centers"] >> m_Centers;
+    
+    // Save the dim reduction-related variables
+    fs["dimRedVariance"] >> m_DimRedVariance;
+    fs["dimRedNumFeatures"] >> m_DimRedNumFeatures;
+    fs["globalQuantization"] >> m_bGlobalQuantization;
+    fs["centersStratification"] >> m_bCentersStratification;
+    fs["perStrateReduction"] >> m_bPerStrateReduction;
+    
+    int n;
+    fs["pcas-numberOf"] >> n;
+    m_PCAs.resize(n);
+    
+    for (int i = 0; i < m_PCAs.size(); i++)
+    {
+        fs["pcas_mean-" + std::to_string(i)] >> m_PCAs[i].mean;
+        fs["pcas_eigenvectors-" + std::to_string(i)] >> m_PCAs[i].eigenvectors;
+        fs["pcas_eigenvalues-" + std::to_string(i)] >> m_PCAs[i].eigenvalues;
+    }
+    
+    // Save the models' metadata
+    fs["classifierModels-numberOf"] >> n;
+    m_ClassifierModels.resize(n);
+    fs["classifierType"] >> m_ClassifierType;
+    
+    // Save the models
+    for (int i = 0; i < m_ClassifierModels.size(); i++)
+    {
+        std::string modelname = "classifierModels-" + std::to_string(i);
+        if (m_ClassifierType.compare("svmrbf") == 0)
+        {
+            CvSVM* pModel = new CvSVM;
+            pModel->load(filenameWithSuffix.c_str(), modelname.c_str());
+            m_ClassifierModels[i] = (void*) pModel;
+        }
+    }
+    
+    fs.release();
+    
+    return true; // all OK
+}
+
+
+void CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::save(std::string filename, std::string extension)
+{
+    std::string filenameWithSuffix = filename + extension; // extension is expected to already include the ext dot (.xxx)
+    cv::FileStorage fs;
+    
+    if (extension.compare(".xml") == 0)
+        fs.open(filenameWithSuffix, cv::FileStorage::WRITE | cv::FileStorage::FORMAT_XML);
+    else // yml
+        fs.open(filenameWithSuffix, cv::FileStorage::WRITE | cv::FileStorage::FORMAT_YAML);
+    
+    // Save categories (problem with std::vector<const char*>, so convert to strings)
+    std::vector<std::string> categories (m_Categories.size());
+    for (int i = 0; i < m_Categories.size(); i++)
+        categories[i] = m_Categories[i];
+    fs << "categories" << categories;
+    
+    // Save the normalization-related variables
+    fs << "normType" << m_NormType;
+    for (int i = 0; i < m_NormParams.size(); i++)
+        fs << "normParams-" + std::to_string(i) << m_NormParams[i];
+    
+    // Save the BOW-related variables
+    fs << "q" << m_q;
+    fs << "centers" << m_Centers;
+
+    // Save the dim reduction-related variables
+    fs << "dimRedVariance" << m_DimRedVariance;
+    fs << "dimRedNumFeatures" << m_DimRedNumFeatures;
+    
+    fs << "globalQuantization" << m_bGlobalQuantization;
+    fs << "centersStratification" << m_bCentersStratification;
+    fs << "perStrateReduction" << m_bPerStrateReduction;
+    
+    fs << "pcas-numberOf" << ((int) m_PCAs.size());
+    for (int i = 0; i < m_PCAs.size(); i++)
+    {
+        fs << "pcas_mean-" + std::to_string(i) << m_PCAs[i].mean;
+        fs << "pcas_eigenvectors-" + std::to_string(i) << m_PCAs[i].eigenvectors;
+        fs << "pcas_eigenvalues-" + std::to_string(i) << m_PCAs[i].eigenvalues;
+    }
+
+    // Save the models' metadata
+    fs << "classifierModels-numberOf" << ((int) m_ClassifierModels.size());
+    fs << "classifierType" << m_ClassifierType;
+
+    // Save the models
+    for (int i = 0; i < m_ClassifierModels.size(); i++)
+    {
+        std::string modelname = "classifierModels-" + std::to_string(i);
+        if (m_ClassifierType.compare("svmrbf") == 0)
+            ((CvSVM*) m_ClassifierModels[i])->write(fs.operator*(), modelname.c_str());
+    }
+    
+    fs.release();
+}
+
+//void CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::saveModels(std::string filename, std::string extension)
+//{
+//    // Save the models
+//    for (int i = 0; i < m_ClassifierModels.size(); i++)
+//    {
+//        if (m_ClassifierType.compare("svmrbf") == 0)
+//        {
+//            ((CvSVM*) m_ClassifierModels[i])->save(filename + "-M" + std::to_string(i) + extension);
+//        }
+//    }
+//}
+
+//void CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::loadModels(std::string filename, std::string extension)
+//{
+//    // Save the models
+//    fs << "classifiers_numberof" << m_ClassifierModels.size();
+//    fs << "classifiers_type" << m_ClassifierType;
+//    
+//    for (int i = 0; i < m_ClassifierModels.size(); i++)
+//    {
+//        if (m_ClassifierType.compare("svmrbf") == 0)
+//            ((CvSVM*) m_ClassifierModels[i])->save(filename + "-M" + std::to_string(i) + extension);
+//    }
+//}
+
 template class CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>;
 
-template void CloudjectSVMClassificationPipelineBase<pcl::PFHRGBSignature250>::setInputCloudjects(boost::shared_ptr<std::list<MockCloudject::Ptr> > cloudjects, std::vector<const char*> categories);
+template void CloudjectSVMClassificationPipelineBase<pcl::PFHRGBSignature250>::setInputCloudjects(boost::shared_ptr<std::list<MockCloudject::Ptr> > cloudjects);
+template void CloudjectSVMClassificationPipelineBase<pcl::PFHRGBSignature250>::setCategories(std::vector<const char*> categories);
 template void CloudjectSVMClassificationPipelineBase<pcl::PFHRGBSignature250>::setNormalization(int normType);
 template void CloudjectSVMClassificationPipelineBase<pcl::PFHRGBSignature250>::setDimRedVariance(double var);
 template void CloudjectSVMClassificationPipelineBase<pcl::PFHRGBSignature250>::setDimRedNumFeatures(int n);
