@@ -1,4 +1,4 @@
-//
+ //
 //  ReMedi.cpp
 //  remedi2
 //
@@ -18,6 +18,8 @@
 #include <pcl/common/common.h>
 #include <pcl/common/centroid.h>
 #include <pcl/features/pfhrgb.h>
+
+#include <map>
 
 using namespace boost::assign;
 namespace fs = boost::filesystem;
@@ -523,7 +525,7 @@ void remedi::getTrainingCloudjectsWithDescriptor(std::vector<Sequence<ColorDepth
     std::cout << "Creating the sample of training cloudjects .." << std::endl;
     boost::timer t;
     
-    for (int s = 0; s < 4/*sequences.size()*/; s++)
+    for (int s = 0; s < 3/*sequences.size()*/; s++)
     {
         if (partitions[s] != p)
         {
@@ -811,7 +813,69 @@ void remedi::getTestSequences(std::vector<Sequence<ColorDepthFrame>::Ptr> sequen
     }
 }
 
-// TODO: adapt Groundtruth's new structure
+//void _evaluateFrame(const std::map<std::string,std::map<std::string,GroundtruthRegion> >& gt, const std::map<std::string,std::map<std::string,pcl::PointXYZ> >& gtCentroids, const std::pair<int,Cloudject::Ptr> > >& correspondences, int& tp, int& fp, int& fn)
+//{
+//    
+//}
+
+void ReMedi::evaluateFrame(const vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > >& gt, const vector<std::map<std::string,std::map<std::string,pcl::PointXYZ> > >& gtCentroids, const std::vector<std::vector<std::pair<int, Cloudject::Ptr> > >& correspondences, int& tp, int& fp, int& fn)
+{
+    tp = fp = fn = 0;
+    
+    // Auxiliary structure to compute FN (after TP and FP)
+    std::map<std::string,int> matches;
+    
+    std::map<std::string,std::map<std::string,GroundtruthRegion> >::const_iterator itr;
+    std::map<std::string,GroundtruthRegion>::const_iterator jtr;
+    
+    for (int v = 0; v < gt.size(); v++)
+        for (itr = gt[v].begin(); itr != gt[v].end(); ++itr)
+            if (itr->first.compare("arms") != 0 && itr->first.compare("others") != 0)
+                    matches[itr->first] = 0;
+
+    // Compute TP and FP
+    for (int i = 0; i < correspondences.size(); i++)
+    {
+        pcl::PointXYZ p = correspondences[i][0].second->getCloudCentroid();
+        
+        const std::set<std::string> labels = correspondences[i][0].second->getRegionLabels();
+        std::set<std::string>::iterator it;
+
+        int tpAux = 0;
+        for (it = labels.begin(); it != labels.end(); ++it)
+        {
+            for (int v = 0; v < gt.size(); v++)
+            {
+                if (gt[v].count(*it) > 0)
+                {
+                    std::map<std::string,GroundtruthRegion> catgt = gt[v].at(*it);
+                    std::map<std::string,GroundtruthRegion>::iterator jt;
+                    for (jt = catgt.begin(); jt != catgt.end(); ++jt)
+                    {
+                        pcl::PointXYZ q = gtCentroids[v].at(*it).at(jt->first);
+                        float d = sqrt(pow(p.x-q.x,2)+pow(p.y-q.y,2)+pow(p.z-q.z,2));
+                        // is the detected in the correct spot?
+                        if (d <= 0.15)
+                        {
+                            std::cout << *it << " found in " << std::to_string(v) << std::endl;
+                            tpAux++;
+                            matches[*it] ++;
+                        }
+                    }
+                }
+            }
+        }
+        
+        tp += tpAux;
+        fp += labels.size() - tpAux;
+    }
+    
+    //  Compute FN (annotations without at least one match)
+    std::map<std::string,int>::iterator it;
+    for (it = matches.begin(); it != matches.end(); ++it)
+        if (matches[it->first] == 0) fn++; // match, not even once
+}
+
 // Evaluate detection performance in a frame
 void ReMedi::evaluateFrame(const std::map<std::string,std::map<std::string,GroundtruthRegion> > gt, const std::vector<ForegroundRegion> dt, int& tp, int& fp, int& fn)
 {
@@ -823,7 +887,7 @@ void ReMedi::evaluateFrame(const std::map<std::string,std::map<std::string,Groun
     std::map<std::string,std::map<std::string,GroundtruthRegion> >::const_iterator it;
     std::map<std::string,GroundtruthRegion>::const_iterator jt;
 
-    // Auxiliary strucdture to computer FN (after TP and FP)
+    // Auxiliary structure to compute FN (after TP and FP)
     for (it = gt.begin(); it != gt.end(); ++it)
         if (it->first.compare("arms") != 0 && it->first.compare("others") != 0)
             for (jt = it->second.begin(); jt != it->second.end(); ++jt)
@@ -1025,6 +1089,31 @@ void ReMedi::detectMonocular(const std::vector<Sequence<ColorDepthFrame>::Ptr> s
     }
 }
 
+
+
+pcl::PointXYZ g(ColorDepthFrame::Ptr frame, GroundtruthRegion region)
+{
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud (new pcl::PointCloud<pcl::PointXYZRGB>);
+
+    region.allocateMask();
+    int pos[2] = {region.getRect().x, region.getRect().y};
+    remedi::MatToColoredPointCloud(frame->getDepth(), frame->getColor(), region.getMask(), pos, *pCloud);
+    region.releaseMask();
+    
+    pcl::PointXYZ centroid = computeCentroid(*pCloud);
+    return centroid;
+}
+
+void f(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> > annotations, std::map<std::string,std::map<std::string,pcl::PointXYZ> >& centroids)
+{
+    std::map<std::string,std::map<std::string,GroundtruthRegion> >::const_iterator it;
+    std::map<std::string,GroundtruthRegion>::const_iterator jt;
+    
+    for (it = annotations.begin(); it != annotations.end(); ++it)
+        for (jt = it->second.begin(); jt != it->second.end(); ++jt)
+            centroids[it->first][jt->first] = g(frame, annotations.at(it->first).at(jt->first));
+}
+
 void ReMedi::detectMultiview(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& gt, Detection& dt, const CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pipeline)
 {
     for (int s = 0; s < sequences.size(); s++)
@@ -1106,34 +1195,38 @@ void ReMedi::detectMultiview(const std::vector<Sequence<ColorDepthFrame>::Ptr> s
                 for (int j = 0; j < objectsLabels.size(); j++)
                 {
                     float distToMarginFused = .0f;
+                    float W = .0f;
                     for (int v = 0; v < correspondences[i].size(); v++)
                     {
                         pcl::PointXYZ c = correspondences[i][v].second->getCloudCentroid();
-                        float wsq = 1.f / (pow(c.x,2) + pow(c.y,2) + pow(c.z,2));
-                        distToMarginFused += ((wsq * distsToMargin[v][j]) / correspondences[i].size());
+                        // Inverse distance weighting
+                        float wsq = 1.f / pow(sqrt(pow(c.x,2) + pow(c.y,2) + pow(c.z,2)), 4);
+                        distToMarginFused += (wsq * distsToMargin[v][j]);
+                        W += wsq;
                     }
-                    predictionsFused[j] = (distToMarginFused < 0) ? 1 : -1;
+                    predictionsFused[j] = ((distToMarginFused/W) < 0 ? 1 : -1);
                 }
                 
                 for (int v = 0; v < correspondences[i].size(); v++)
                 {
-                    ForegroundRegion r = correspondences[i][v].second->getRegion();
                     for (int j = 0; j < objectsLabels.size(); j++)
-                        if (predictionsFused[j] > 0) r.addLabel(objectsLabels[j]);
-                    
-                    dt[sequences[s]->getName()][sequences[s]->getViewName(v)][fids[v]].push_back(r);
+                        if (predictionsFused[j] > 0) correspondences[i][v].second->addRegionLabel(objectsLabels[j]);
+//                        if (predictions[v][j] > 0) correspondences[i][v].second->addRegionLabel(objectsLabels[j]);
                 }
             }
             
+            std::vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > > annotationsF (V);
+            std::vector<std::map<std::string,std::map<std::string,pcl::PointXYZ> > > annotationsCentroidsF (V);
             for (int v = 0; v < sequences[s]->getNumOfViews(); v++)
             {
-                int tp, fp, fn;
-                evaluateFrame(gt.at(sequences[s]->getName()).at(sequences[s]->getViewName(v)).at(fids[v]),
-                              dt.at(sequences[s]->getName()).at(sequences[s]->getViewName(v)).at(fids[v]),
-                              tp, fp, fn);
-                std::cout << std::to_string(tp) << "\t" << std::to_string(fp) << "\t" << std::to_string(fn);
-                std::cout << ((v < sequences[s]->getNumOfViews() - 1) ?  "\t" : ";\n");
+                annotationsF[v] = gt.at(sequences[s]->getName()).at(sequences[s]->getViewName(v)).at(fids[v]);
+                f(frames[v], annotationsF[v], annotationsCentroidsF[v]);
             }
+            
+            int tp, fp, fn;
+            evaluateFrame(annotationsF, annotationsCentroidsF, correspondences, tp, fp, fn);
+            std::cout << std::to_string(tp) << "\t" << std::to_string(fp) << "\t" << std::to_string(fn) << ";\n";
+        
             
 #ifdef DO_VISUALIZE_DETECTIONS
             for (int v = 0; v < V; v++)
@@ -1281,9 +1374,9 @@ bool ReMedi::isInteractive(ColorPointCloudPtr tabletopRegionCluster, ColorPointC
 
 void remedi::MatToColoredPointCloud(cv::Mat depth, cv::Mat color, cv::Mat mask, int pos[2], pcl::PointCloud<pcl::PointXYZRGB>& cloud)
 {
-    cloud.height = depth.rows;
-    cloud.width =  depth.cols;
-    cloud.resize(depth.rows * depth.cols);
+    cloud.height = mask.rows;
+    cloud.width =  mask.cols;
+    cloud.resize(mask.rows * mask.cols);
     cloud.is_dense = true;
     
     float invfocal = (1/285.63f) / (X_RESOLUTION/320.f); // Kinect inverse focal length. If depth map resolution
@@ -1292,26 +1385,29 @@ void remedi::MatToColoredPointCloud(cv::Mat depth, cv::Mat color, cv::Mat mask, 
     float rwx, rwy, rwz;
     pcl::PointXYZRGB p;
     
-    for (unsigned int y = 0; y < cloud.height; y++) for (unsigned int x = 0; x < cloud.width; x++)
+    for (unsigned int y = 0; y < mask.rows; y++) for (unsigned int x = 0; x < mask.cols; x++)
     {
         if (mask.at<unsigned char>(y,x) > 0)
         {
-            z = (float) depth.at<unsigned short>(y,x) /*z_us*/;
+            z = (float) depth.at<unsigned short>(y+pos[1],x+pos[0]) /*z_us*/;
             
-            rwx = ((x+pos[0]) - 320.0) * invfocal * z;
-            rwy = ((y+pos[1]) - 240.0) * invfocal * z;
-            rwz = z;
-            
-            p.x = rwx/1000.f;
-            p.y = rwy/1000.f;
-            p.z = rwz/1000.f;
-            
-            cv::Vec3b c = color.at<cv::Vec3b>(y,x);
-            p.b = c[0];
-            p.g = c[1];
-            p.r = c[2];
-            
-            cloud.at(x,y) = p;
+            if (z > MIN_DEPTH && z < MAX_DEPTH)
+            {
+                rwx = ((x+pos[0]) - 320.0) * invfocal * z;
+                rwy = ((y+pos[1]) - 240.0) * invfocal * z;
+                rwz = z;
+                
+                p.x = rwx/1000.f;
+                p.y = rwy/1000.f;
+                p.z = rwz/1000.f;
+                
+                cv::Vec3b c = color.at<cv::Vec3b>(y+pos[1],x+pos[0]);
+                p.b = c[0];
+                p.g = c[1];
+                p.r = c[2];
+                
+                cloud.at(x,y) = p;
+            }
         }
     }
 }

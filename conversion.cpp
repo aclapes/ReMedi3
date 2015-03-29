@@ -316,7 +316,8 @@ void PointCloudToMat(pcl::PointCloud<pcl::PointXYZ>::Ptr pCloud, int height, int
 
 void ColoredPointCloudToMat(pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud, int height, int width, int x0, int y0, cv::Mat& mat)
 {
-    cv::Mat tmp (height, width, CV_16UC1);
+    cv::Mat tmp (height, width, CV_16UC1, cv::Scalar(0));
+    cv::Mat c  (height, width, CV_8UC3, cv::Scalar(0));
     
     float invfocal = (1/285.63f) / (width/320.f); // Kinect inverse focal length. If depth map resolution
     
@@ -330,16 +331,19 @@ void ColoredPointCloudToMat(pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud, int h
         
         if (rwz > 0)
         {
-            x = std::floor( (rwx/(invfocal * rwz)) + (width/2.f) ) + x0;
-            y = std::floor( (rwy/(invfocal * rwz)) + (height/2.f) ) + y0;
+            x = std::floor( (rwx/(invfocal * rwz)) + (width/2.f) );// + x0;
+            y = std::floor( (rwy/(invfocal * rwz)) + (height/2.f) );// + y0;
             z = rwz * 1000.f;
             
             if (x > 0 && x < width && y > 0 && y < height)
+            {
                 tmp.at<unsigned short>(y,x) = z;
+                c.at<cv::Vec3b>(y,x) = cv::Vec3b(pCloud->points[i].b, pCloud->points[i].g, pCloud->points[i].r);
+            }
         }
     }
     
-    mat = cv::Mat(mat, cv::Rect(x0,y0,pCloud->width,pCloud->height));
+    mat = cv::Mat(tmp, cv::Rect(x0,y0,pCloud->width,pCloud->height));
 }
 
 void ColoredPointCloudToMat(pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud, int height, int width, cv::Mat& mat)
@@ -736,6 +740,31 @@ std::vector<std::vector<pcl::PointXYZ> > matTow(cv::Mat mat)
     return w;
 }
 
+
+template<typename PointT>
+pcl::PointXYZ computeCentroid(pcl::PointCloud<PointT> pCloud)
+{
+    int n = pCloud.points.size();
+    
+    double x = .0;
+    double y = .0;
+    double z = .0;
+    
+    int c = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        if (pCloud.points[i].z > .0)
+        {
+            x += pCloud.points[i].x;
+            y += pCloud.points[i].y;
+            z += pCloud.points[i].z;
+            c++;
+        }
+    }
+    
+    return pcl::PointXYZ(x/c, y/c, z/c);
+}
+
 template std::string to_string_with_precision<float>(const float a_value, const int n);
 template std::string to_string_with_precision<double>(const double a_value, const int n);
 
@@ -753,3 +782,6 @@ template std::vector<std::vector<double> > matTow(cv::Mat mat);
 
 template void biggestEuclideanCluster<pcl::PointXYZ>(pcl::PointCloud<pcl::PointXYZ>::Ptr, int, int, float, pcl::PointCloud<pcl::PointXYZ>&);
 template void biggestEuclideanCluster<pcl::PointXYZRGB>(pcl::PointCloud<pcl::PointXYZRGB>::Ptr, int, int, float, pcl::PointCloud<pcl::PointXYZRGB>&);
+
+template pcl::PointXYZ computeCentroid(pcl::PointCloud<pcl::PointXYZ> pCloud);
+template pcl::PointXYZ computeCentroid(pcl::PointCloud<pcl::PointXYZRGB> pCloud);

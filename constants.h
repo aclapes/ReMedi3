@@ -39,6 +39,9 @@ static const char* g_AnnotationLabels[] = {"dish","pillbox","book","tetrabrick",
 #define Y_RESOLUTION                        480
 #define X_RESOLUTION                        640
 
+#define MIN_DEPTH                           700
+#define MAX_DEPTH                           2300
+
 // Interactive registerer-related constants
 #define IR_VIS_WND_HEIGHT                   480
 #define IR_VIS_WND_WIDTH                    640

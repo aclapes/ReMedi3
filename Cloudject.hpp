@@ -182,25 +182,26 @@ public:
     
     pcl::PointXYZ getCloudCentroid()
     {
-        int n = m_pCloud->points.size();
-        
-        double x = .0;
-        double y = .0;
-        double z = .0;
-        
-        int c = 0;
-        for (int i = 0; i < n; ++i)
-        {
-            if (m_pCloud->points[i].z > .0)
-            {
-                x += m_pCloud->points[i].x;
-                y += m_pCloud->points[i].y;
-                z += m_pCloud->points[i].z;
-                c++;
-            }
-        }
-        
-        return pcl::PointXYZ(x/c, y/c, z/c);
+        return computeCentroid(*m_pCloud);
+//        int n = m_pCloud->points.size();
+//        
+//        double x = .0;
+//        double y = .0;
+//        double z = .0;
+//        
+//        int c = 0;
+//        for (int i = 0; i < n; ++i)
+//        {
+//            if (m_pCloud->points[i].z > .0)
+//            {
+//                x += m_pCloud->points[i].x;
+//                y += m_pCloud->points[i].y;
+//                z += m_pCloud->points[i].z;
+//                c++;
+//            }
+//        }
+//        
+//        return pcl::PointXYZ(x/c, y/c, z/c);
     }
     
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr getRegisteredCloud()
@@ -226,9 +227,11 @@ public:
     
     cv::Mat getRegisteredRegionMask()
     {
-        cv::Mat registeredMask;
-        ColoredPointCloudToMat(getRegisteredCloud(), X_RESOLUTION, Y_RESOLUTION, m_Region.getRect().x, m_Region.getRect().y, registeredMask);
-        return registeredMask;
+        cv::Mat registeredCloud;
+        ColoredPointCloudToMat(getRegisteredCloud(), Y_RESOLUTION, X_RESOLUTION, m_Region.getRect().x, m_Region.getRect().y, registeredCloud);
+        
+        cv::Mat registeredCloudMask = registeredCloud > 0;
+        return registeredCloudMask;
     }
     
     pcl::PointXYZ getRegisteredCloudCentroid()

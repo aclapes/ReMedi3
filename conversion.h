@@ -81,4 +81,5 @@ cv::Mat wToMat(std::vector<std::vector<T> > w);
 template<typename T>
 std::vector<std::vector<T> > matTow(cv::Mat mat);
 
-void reproject(pcl::PointCloud<pcl::PointXYZRGB>& cloud, cv::Mat& m);
+template<typename PointT>
+pcl::PointXYZ computeCentroid(pcl::PointCloud<PointT> pCloud);
