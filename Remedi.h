@@ -20,11 +20,12 @@
 #include "GroundtruthRegion.hpp"
 #include "ForegroundRegion.hpp"
 #include "Cloudject.hpp"
-#include "CloudjectClassificationPipeline.h"
+#include "CloudjectSVMClassificationPipeline.h"
 
 #include "io.h"
 
 #include <set>
+#include <iostream>
 
 #include <boost/variant.hpp>
 
@@ -56,6 +57,23 @@ typedef pcl::PointCloud<FPFHSignature>::Ptr FPFHDescriptionPtr;
 typedef pcl::PointCloud<PFHRGBSignature> PFHRGBDescription;
 typedef pcl::PointCloud<PFHRGBSignature>::Ptr PFHRGBDescriptionPtr;
 
+class Rectangle3D
+{
+public:
+    pcl::PointXYZ min;
+    pcl::PointXYZ max;
+    float area()
+    {
+        return ((max.x > min.x) ? (max.x - min.x) : 0.f) *
+               ((max.y > min.y) ? (max.y - min.y) : 0.f) *
+               ((max.z > min.z) ? (max.z - min.z) : 0.f);
+    }
+    friend std::ostream& operator<<(std::ostream& os, const Rectangle3D& r)
+    {
+        return os << "[" << r.min.x << "," << r.min.y << "," << r.min.z << ";\n"
+                         << r.max.x << "," << r.max.y << "," << r.max.z << "]";
+    }
+};
 
 class ReMedi
 {
@@ -134,7 +152,12 @@ public:
     // Normal functioning of the system
     void run();
     
-    void detect(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& gt, Detection& dt, const CloudjectClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pipeline);
+    void setMultiviewDetectionStrategy(int strategy);
+    
+    void detect(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& gt, Detection& dt, const CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pipeline);
+    void detectMonocular(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& gt, Detection& dt, const CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pipeline);
+    void detectMultiview(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& gt, Detection& dt, const CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pipeline);
+    
     void evaluate(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& groundtruth, const Detection& detection,  int& tp, int& fp, int& fn);
 
 //    static void loadGroundtruth(std::string parent, std::vector<std::string> seqDirnames, std::string subdir, std::string dirname, std::vector<const char*> views, std::vector<const char*> objectsNames, Groundtruth& gt);
@@ -187,6 +210,8 @@ private:
     
     BackgroundSubtractor<cv::BackgroundSubtractorMOG2, ColorDepthFrame>::Ptr m_pBackgroundSubtractor;
     
+    int m_MultiviewDetectionStrategy;
+    
     //
     // Private methods
     //
@@ -196,6 +221,8 @@ private:
     bool isInteractive(ColorPointCloudPtr tabletopRegionCluster, ColorPointCloudPtr interactionCloud, float tol);
     
     void evaluateFrame(const std::map<std::string,std::map<std::string,GroundtruthRegion> > gt, const std::vector<ForegroundRegion> dt, int& tp, int& fp, int& fn);
+    void evaluateFrame(const vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > >& gt, const vector<std::map<std::string,std::map<std::string,pcl::PointXYZ> > >& gtCentroids, const std::vector<std::vector<std::pair<int, Cloudject::Ptr> > >& correspondences, int& tp, int& fp, int& fn);
+
 };
 
 // Static methods
@@ -211,8 +238,8 @@ namespace remedi
     void loadGroundtruth(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, Groundtruth& gt);
     void getGroundtruthForTraining(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, const std::vector<const char*> objectsLabels, const Groundtruth& gt, Groundtruth& gtTr);
 
-    void getTrainingCloudjectsWithDescriptor(std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> partitions, int p, std::vector<const char*> annotationLabels, const Groundtruth& gt, std::string descriptorType, std::list<Cloudject::Ptr>& cloudjects);
-    void getTestCloudjectsWithDescriptor(std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> partitions, int p, const Groundtruth& gt, std::string descriptorType, std::list<Cloudject::Ptr>& cloudjects);
+    void getTrainingCloudjectsWithDescriptor(std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> partitions, int p, std::vector<const char*> annotationLabels, const Groundtruth& gt, std::string descriptorType, std::list<MockCloudject::Ptr>& cloudjects);
+    void getTestCloudjectsWithDescriptor(std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> partitions, int p, const Groundtruth& gt, std::string descriptorType, std::list<MockCloudject::Ptr>& cloudjects);
 
     void getTestSequences(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> partitions, int p, std::vector<Sequence<ColorDepthFrame>::Ptr>& sequencesTe);
     
@@ -222,6 +249,14 @@ namespace remedi
     void _findCorrespondences(std::vector<std::vector<PointT> > positions, float tol, std::vector<std::vector<std::pair<std::pair<int,int>,PointT> > >&  correspondences);
     void findNextCorrespondence(std::vector<std::vector<PointT> >& detections, std::vector<std::vector<bool> >& assignations, int v, float tol, std::vector<std::pair<std::pair<int,int>,PointT> >& chain);
     void _getDetectionPositions(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, bool bRegistrate, std::vector<std::vector<PointT> >& positions);
+    
+//    void findCorrespondencesBasedOnInclusion(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, float tol, std::vector<std::vector<std::pair<int,Cloudject::Ptr> > >& correspondences, std::vector<std::vector<Rectangle3D> >& rectangles);
+//    void _findCorrespondences(std::vector<std::vector<Rectangle3D> > rectangles, float tol, std::vector<std::vector<std::pair<std::pair<int,int>,Rectangle3D> > >&  correspondences);
+//    void findNextCorrespondence(std::vector<std::vector<Rectangle3D> >& detections, int v, float tol, std::vector<std::pair<std::pair<int,int>,Rectangle3D> >& chain);
+//    void _getDetectionRectangles(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, bool bRegistrate, std::vector<std::vector<Rectangle3D> >& rectangles);
+    
+    void findContentions(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, float tol, std::vector<std::vector<std::pair<int,Cloudject::Ptr> > >& contentions, std::vector<std::vector<Rectangle3D> >& rectangles);
+    void _getDetectionRectangles(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, bool bRegistrate, std::vector<std::vector<Rectangle3D> >& rectangles);
 }
 
 #endif

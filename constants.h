@@ -39,6 +39,9 @@ static const char* g_AnnotationLabels[] = {"dish","pillbox","book","tetrabrick",
 #define Y_RESOLUTION                        480
 #define X_RESOLUTION                        640
 
+#define MIN_DEPTH                           700
+#define MAX_DEPTH                           2300
+
 // Interactive registerer-related constants
 #define IR_VIS_WND_HEIGHT                   480
 #define IR_VIS_WND_WIDTH                    640
@@ -89,6 +92,8 @@ static const char* g_AnnotationLabels[] = {"dish","pillbox","book","tetrabrick",
 
 #define OR_CORRESPONDENCE_TOLERANCE         0.1
 
+#define NUM_REPETITIONS                     3
+
 // Marker colors (as many as objects at least)
 static float g_Colors[][3] = {
     {1, 0, 0},
@@ -114,6 +119,7 @@ static float g_Colors[][3] = {
 
 enum { COLOR = 0, DEPTH = 1, COLOR_WITH_SHADOWS = 2, COLORDEPTH = 3 };
 enum { DESCRIPTION_FPFH, DESCRIPTION_PFHRGB };
+enum { DETECT_MONOCULAR, DETECT_MULTIVIEW };
 
 #define DO_VISUALIZE_DETECTIONS
 

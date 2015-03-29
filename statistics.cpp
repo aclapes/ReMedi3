@@ -330,12 +330,16 @@ void _variate(vector<vector<T > > list, int idx, cv::Mat v, cv::Mat& variations)
 template<typename T>
 void expandParameters(vector<vector<T> > params, vector<vector<T> >& expandedParams)
 {
+    expandedParams.clear();
+    
     variate(params, expandedParams);
 }
 
 template<typename T>
 void expandParameters(vector<vector<T> > params, cv::Mat& expandedParams)
 {
+    expandedParams.release();
+
     variate(params, expandedParams);
 }
 
@@ -343,6 +347,8 @@ void expandParameters(vector<vector<T> > params, cv::Mat& expandedParams)
 template<typename T>
 void expandParameters(vector<vector<T> > params, int ncells, vector<vector<T> >& gridExpandedParams)
 {
+    gridExpandedParams.clear();
+
     vector<vector<T> > cellExpandedParams;
     variate(params, cellExpandedParams);
     

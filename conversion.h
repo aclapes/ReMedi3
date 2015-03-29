@@ -16,10 +16,11 @@ void normalsToAngles(pcl::PointCloud<pcl::Normal>::Ptr pNormals, cv::Mat& angles
 void pcl2cv(pcl::PointXYZ p, cv::Mat& m);
 void pcl2cv(pcl::PointXYZRGB p, cv::Mat& m);
 
-void ProjectiveToRealworld(std::vector<float> p, int xres, int yres, std::vector<float>& rw);
-void RealworldToProjective(std::vector<float> rw, int xres, int yres, std::vector<float>& p);
+void ProjectiveToRealworld(pcl::PointXYZ p, int xres, int yres, int x0, int y0, pcl::PointXYZ& rw);
+void RealworldToProjective(pcl::PointXYZ rw, int xres, int yres, int x0, int y0, pcl::PointXYZ& p);
 void ProjectiveToRealworld(pcl::PointXYZ p, int xres, int yres, pcl::PointXYZ& rw);
 void RealworldToProjective(pcl::PointXYZ rw, int xres, int yres, pcl::PointXYZ& p);
+
 void ProjectiveToRealworld(pcl::PointCloud<pcl::PointXYZ>::Ptr pProjCloud, pcl::PointCloud<pcl::PointXYZ>& realCloud);
 void RealworldToProjective(pcl::PointCloud<pcl::PointXYZ>::Ptr pRealCloud, pcl::PointCloud<pcl::PointXYZ>& projCloud);
 
@@ -35,6 +36,8 @@ void MatToColoredPointCloud(cv::Mat depth, cv::Mat color, cv::Mat mask, pcl::Poi
 
 void PointCloudToMat(pcl::PointCloud<pcl::PointXYZ>&, cv::Mat&);
 void PointCloudToMat(pcl::PointCloud<pcl::PointXYZ>::Ptr, int height, int width, cv::Mat&);
+void ColoredPointCloudToMat(pcl::PointCloud<pcl::PointXYZRGB>::Ptr, int height, int width, cv::Mat&);
+void ColoredPointCloudToMat(pcl::PointCloud<pcl::PointXYZRGB>::Ptr, int height, int width, int x0, int y0, cv::Mat&);
 
 void MaskDensePointCloud(pcl::PointCloud<pcl::PointXYZ>::Ptr, cv::Mat, pcl::PointCloud<pcl::PointXYZ>&);
 
@@ -77,3 +80,6 @@ template<typename T>
 cv::Mat wToMat(std::vector<std::vector<T> > w);
 template<typename T>
 std::vector<std::vector<T> > matTow(cv::Mat mat);
+
+template<typename PointT>
+pcl::PointXYZ computeCentroid(pcl::PointCloud<PointT> pCloud);

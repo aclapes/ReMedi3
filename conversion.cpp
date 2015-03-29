@@ -47,46 +47,32 @@ void pcl2cv(pcl::PointXYZRGB p, cv::Mat& m)
     m.at<float>(0,2) = p.b;
 }
 
-void ProjectiveToRealworld(std::vector<float> p, int xres, int yres, std::vector<float>& rw)
+void ProjectiveToRealworld(pcl::PointXYZ p, int xres, int yres, int x0, int y0, pcl::PointXYZ& rw)
 {
-    pcl::PointXYZ rwpoint;
-    ProjectiveToRealworld(pcl::PointXYZ(p[0],p[1],p[2]), xres, yres, rwpoint);
+    float invfocal = (1/285.63f) / (xres/320.f);
     
-    rw.clear();
-    rw.resize(3);
-    rw[0] = rwpoint.x;
-    rw[1] = rwpoint.y;
-    rw[2] = rwpoint.z;
+    rw.x = (((p.x+x0) - xres/2) * invfocal * p.z) / 1000.f,
+    rw.y = (((p.y+y0) - yres/2) * invfocal * p.z) / 1000.f,
+    rw.z = p.z / 1000.f;
 }
 
-void RealworldToProjective(std::vector<float> rw, int xres, int yres, std::vector<float>& p)
+void RealworldToProjective(pcl::PointXYZ rw, int xres, int yres, int x0, int y0, pcl::PointXYZ& p)
 {
-    pcl::PointXYZ ppoint;
-    RealworldToProjective(pcl::PointXYZ(rw[0],rw[1],rw[2]), xres, yres, ppoint);
+    float invfocal = (1/285.63f) / (xres/320.f);
     
-    p.clear();
-    p.resize(3);
-    p[0] = ppoint.x;
-    p[1] = ppoint.y;
-    p[2] = ppoint.z;
+    p.x = (int) ( ((rw.x) / (invfocal * rw.z)) + (xres / 2.f) ) + x0;
+    p.y = (int) ( ((rw.y) / (invfocal * rw.z)) + (yres / 2.f) ) + y0;
+    p.z = rw.z * 1000.f;
 }
 
 void ProjectiveToRealworld(pcl::PointXYZ p, int xres, int yres, pcl::PointXYZ& rw)
 {
-    float invfocal = (1/285.63f) / (xres/320.f);
-    
-    rw.x = ((p.x - xres/2) * invfocal * p.z) / 1000.f,
-    rw.y = ((p.y - yres/2) * invfocal * p.z) / 1000.f,
-    rw.z = p.z / 1000.f;
+    RealworldToProjective(p, xres, yres, 0, 0, rw);
 }
 
 void RealworldToProjective(pcl::PointXYZ rw, int xres, int yres, pcl::PointXYZ& p)
 {
-    float invfocal = (1/285.63f) / (xres/320.f);
-    
-    p.x = (int) ( ((rw.x) / (invfocal * rw.z)) + (xres / 2.f) );
-    p.y = (int) ( ((rw.y) / (invfocal * rw.z)) + (yres / 2.f) );
-    p.z = rw.z * 1000.f;
+    ProjectiveToRealworld(rw, xres, yres, 0, 0, p);
 }
 
 void ProjectiveToRealworld(pcl::PointCloud<pcl::PointXYZ>::Ptr pProjCloud, pcl::PointCloud<pcl::PointXYZ>& realCloud)
@@ -328,8 +314,44 @@ void PointCloudToMat(pcl::PointCloud<pcl::PointXYZ>::Ptr pCloud, int height, int
     }
 }
 
+void ColoredPointCloudToMat(pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud, int height, int width, int x0, int y0, cv::Mat& mat)
+{
+    cv::Mat tmp (height, width, CV_16UC1, cv::Scalar(0));
+    cv::Mat c  (height, width, CV_8UC3, cv::Scalar(0));
+    
+    float invfocal = (1/285.63f) / (width/320.f); // Kinect inverse focal length. If depth map resolution
+    
+    for (unsigned int i = 0; i < pCloud->points.size(); i++)
+    {
+        float rwx = pCloud->points[i].x;
+        float rwy = pCloud->points[i].y;
+        float rwz = pCloud->points[i].z;
+        
+        float x, y, z;
+        
+        if (rwz > 0)
+        {
+            x = std::floor( (rwx/(invfocal * rwz)) + (width/2.f) );// + x0;
+            y = std::floor( (rwy/(invfocal * rwz)) + (height/2.f) );// + y0;
+            z = rwz * 1000.f;
+            
+            if (x > 0 && x < width && y > 0 && y < height)
+            {
+                tmp.at<unsigned short>(y,x) = z;
+                c.at<cv::Vec3b>(y,x) = cv::Vec3b(pCloud->points[i].b, pCloud->points[i].g, pCloud->points[i].r);
+            }
+        }
+    }
+    
+    mat = cv::Mat(tmp, cv::Rect(x0,y0,pCloud->width,pCloud->height));
+}
 
-void MaskDensePointCloud(pcl::PointCloud<pcl::PointXYZ>::Ptr pCloudSrc, cv::Mat maskMat, 
+void ColoredPointCloudToMat(pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud, int height, int width, cv::Mat& mat)
+{
+    ColoredPointCloudToMat(pCloud, height, width, 0, 0, mat);
+}
+
+void MaskDensePointCloud(pcl::PointCloud<pcl::PointXYZ>::Ptr pCloudSrc, cv::Mat maskMat,
 	pcl::PointCloud<pcl::PointXYZ>& cloudTgt)
 {
 	for (unsigned int y = 0; y < pCloudSrc->height; y++) for (unsigned int x = 0; x < pCloudSrc->width; x++)
@@ -718,6 +740,31 @@ std::vector<std::vector<pcl::PointXYZ> > matTow(cv::Mat mat)
     return w;
 }
 
+
+template<typename PointT>
+pcl::PointXYZ computeCentroid(pcl::PointCloud<PointT> pCloud)
+{
+    int n = pCloud.points.size();
+    
+    double x = .0;
+    double y = .0;
+    double z = .0;
+    
+    int c = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        if (pCloud.points[i].z > .0)
+        {
+            x += pCloud.points[i].x;
+            y += pCloud.points[i].y;
+            z += pCloud.points[i].z;
+            c++;
+        }
+    }
+    
+    return pcl::PointXYZ(x/c, y/c, z/c);
+}
+
 template std::string to_string_with_precision<float>(const float a_value, const int n);
 template std::string to_string_with_precision<double>(const double a_value, const int n);
 
@@ -735,3 +782,6 @@ template std::vector<std::vector<double> > matTow(cv::Mat mat);
 
 template void biggestEuclideanCluster<pcl::PointXYZ>(pcl::PointCloud<pcl::PointXYZ>::Ptr, int, int, float, pcl::PointCloud<pcl::PointXYZ>&);
 template void biggestEuclideanCluster<pcl::PointXYZRGB>(pcl::PointCloud<pcl::PointXYZRGB>::Ptr, int, int, float, pcl::PointCloud<pcl::PointXYZRGB>&);
+
+template pcl::PointXYZ computeCentroid(pcl::PointCloud<pcl::PointXYZ> pCloud);
+template pcl::PointXYZ computeCentroid(pcl::PointCloud<pcl::PointXYZRGB> pCloud);
