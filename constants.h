@@ -84,7 +84,7 @@ static const char* g_AnnotationLabels[] = {"dish","pillbox","book","tetrabrick",
 #define CLOUDJECTS_DIRNAME                  "Cloudjects"
 #define DESCRIPTIONS_DIRNAME                "Descriptions"
 
-#define TRAINING_BLOB_SAMPLING_RATE         0 //0.01 //0.1
+#define TRAINING_BLOB_SAMPLING_RATE         1 //0.01 //0.1
 
 #define OR_PFHDESC_LEAFSIZE                 0.01
 #define OR_PFHDESC_NORMAL_RADIUS            0.04

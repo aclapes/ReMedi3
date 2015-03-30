@@ -710,7 +710,7 @@ void CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::bow(cv::Mat X,
 {
     // Find quantization vectors
     cv::Mat u;
-    cv::kmeans(X, q, u, cv::TermCriteria( CV_TERMCRIT_EPS+CV_TERMCRIT_ITER, 100, 0.1), 1, cv::KMEANS_PP_CENTERS, Q);
+    cv::kmeans(X, q, u, cv::TermCriteria(), 1, cv::KMEANS_PP_CENTERS, Q);
 }
 
 void CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::bow(std::map<std::string,cv::Mat> X, int q, cv::Mat& Q)
@@ -721,7 +721,7 @@ void CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::bow(std::map<s
     for (int k = 0; k < m_Categories.size(); k++)
     {
         cv::Mat u;
-        cv::kmeans(X[m_Categories[k]], q, u, cv::TermCriteria( CV_TERMCRIT_EPS+CV_TERMCRIT_ITER, 100, 0.1), 1, cv::KMEANS_PP_CENTERS, QVec[k]);
+        cv::kmeans(X[m_Categories[k]], q, u, cv::TermCriteria(), 1, cv::KMEANS_PP_CENTERS, QVec[k]);
     }
     cv::vconcat(QVec,Q);
 }

@@ -288,7 +288,7 @@ int run()
     
     
     std::vector<int> quantValParams;
-    quantValParams += 10, 50, 100, 500, 1000;
+    quantValParams += 50, 100, 200, 400;
     
     std::vector<std::vector<float> > svmrbfValParams;
     std::vector<float> gammaValParams, reglValParams;
@@ -297,7 +297,7 @@ int run()
     svmrbfValParams += gammaValParams, reglValParams;
     
     // Train classifiers and measure recognition accuracy
-    for (int t = 0; t < NUM_OF_SUBJECTS; t++)
+    for (int t = 4; t < 8/*NUM_OF_SUBJECTS*/; t++)
     {
         std::cout << "Training in fold " << t << " (LOSOCV) .. " << std::endl;
 
@@ -329,8 +329,8 @@ int run()
             pPipeline->setClassifierType("svmrbf");
             
             pPipeline->setGlobalQuantization();
-            pPipeline->setCentersStratification();
-            pPipeline->setPerCategoryReduction();
+//            pPipeline->setCentersStratification();
+//            pPipeline->setPerCategoryReduction();
             
             pPipeline->setValidation(10);
             pPipeline->setQuantizationValidationParameters(quantValParams);
@@ -363,7 +363,7 @@ int run()
     }
     
     // Test recognition accuracy
-    for (int t = 0; t < NUM_OF_SUBJECTS; t++)
+    for (int t = 4; t < 8/*NUM_OF_SUBJECTS*/; t++)
     {
         std::cout << "Testing (object recognition) in fold " << t << " (LOSOCV) .." << std::endl;
 
