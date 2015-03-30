@@ -32,6 +32,7 @@ public:
     
     void setInputCloudjects(boost::shared_ptr<std::list<MockCloudject::Ptr> > cloudjects);
     void setCategories(std::vector<const char*> categories);
+    void setCategories(std::vector<std::string> categories);
 //    boost::shared_ptr<std::list<Cloudject::Ptr> > getInputCloudjects();
     
     void setDimRedVariance(double var);
@@ -48,7 +49,7 @@ public:
 protected:
 
     boost::shared_ptr<std::list<MockCloudject::Ptr> > m_InputMockCloudjects;
-    std::vector<const char*> m_Categories;
+    std::vector<std::string> m_Categories;
     
     cv::Mat m_X;
     cv::Mat m_Countings;
@@ -71,7 +72,7 @@ protected:
     float m_BestValPerformance;
     
     template<typename CloudjectTypePtr>
-    void getLabels(boost::shared_ptr<typename std::list<CloudjectTypePtr> > cloudjects, std::vector<const char*> categories, cv::Mat& Y);
+    void getLabels(boost::shared_ptr<typename std::list<CloudjectTypePtr> > cloudjects, std::vector<std::string> categories, cv::Mat& Y);
     void createValidationPartitions(cv::Mat Y, int numFolds, cv::Mat& partitions);
     
     void validate(cv::Mat XTr, cv::Mat XTe, cv::Mat YTr, cv::Mat YTe);

@@ -85,6 +85,14 @@ void CloudjectSVMClassificationPipelineBase<T>::setInputCloudjects(boost::shared
 template<typename T>
 void CloudjectSVMClassificationPipelineBase<T>::setCategories(std::vector<const char*> categories)
 {
+    m_Categories.resize(categories.size());
+    for (int i = 0; i < categories.size(); i++)
+        m_Categories[i] = categories[i];
+}
+
+template<typename T>
+void CloudjectSVMClassificationPipelineBase<T>::setCategories(std::vector<std::string> categories)
+{
     m_Categories = categories;
 }
 
@@ -316,7 +324,7 @@ std::vector<float> CloudjectSVMClassificationPipelineBase<T>::evaluate(cv::Mat Y
 }
 
 template<typename T> template<typename CloudjectTypePtr>
-void CloudjectSVMClassificationPipelineBase<T>::getLabels(boost::shared_ptr<std::list<CloudjectTypePtr> > cloudjects, std::vector<const char*> categories, cv::Mat& Y)
+void CloudjectSVMClassificationPipelineBase<T>::getLabels(boost::shared_ptr<std::list<CloudjectTypePtr> > cloudjects, std::vector<std::string> categories, cv::Mat& Y)
 {
     // Format the labels of the sample X
     Y.release();
@@ -702,7 +710,7 @@ void CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::bow(cv::Mat X,
 {
     // Find quantization vectors
     cv::Mat u;
-    cv::kmeans(X, q, u, cv::TermCriteria(), 1, cv::KMEANS_PP_CENTERS, Q);
+    cv::kmeans(X, q, u, cv::TermCriteria( CV_TERMCRIT_EPS+CV_TERMCRIT_ITER, 30, 1.0), 1, cv::KMEANS_PP_CENTERS, Q);
 }
 
 void CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::bow(std::map<std::string,cv::Mat> X, int q, cv::Mat& Q)
@@ -714,7 +722,7 @@ void CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::bow(std::map<s
     for (int k = 0; k < m_Categories.size(); k++)
     {
         cv::Mat u;
-        cv::kmeans(X[m_Categories[k]], q, u, cv::TermCriteria( CV_TERMCRIT_EPS+CV_TERMCRIT_ITER, 10, 1.0), 1, cv::KMEANS_PP_CENTERS, QVec[k]);
+        cv::kmeans(X[m_Categories[k]], q, u, cv::TermCriteria(), 1, cv::KMEANS_PP_CENTERS, QVec[k]);
     }
     std::cout << "BOW centers' finding took " << t.elapsed() << " secs." << std::endl;
     
@@ -1058,9 +1066,8 @@ bool CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::load(std::stri
     // Save categories (problem with std::vector<const char*>, so convert to strings)
     std::vector<std::string> categories;
     fs["categories"] >> categories;
-    m_Categories.resize(categories.size());
-    for (int i = 0; i < m_Categories.size(); i++)
-        m_Categories[i] = categories[i].c_str();
+    for (int i = 0; i < categories.size(); i++)
+        m_Categories.push_back( categories[i].c_str() );
     
     // Save the normalization-related variables
     fs["normType"] >> m_NormType;
@@ -1201,6 +1208,7 @@ template class CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>;
 
 template void CloudjectSVMClassificationPipelineBase<pcl::PFHRGBSignature250>::setInputCloudjects(boost::shared_ptr<std::list<MockCloudject::Ptr> > cloudjects);
 template void CloudjectSVMClassificationPipelineBase<pcl::PFHRGBSignature250>::setCategories(std::vector<const char*> categories);
+template void CloudjectSVMClassificationPipelineBase<pcl::PFHRGBSignature250>::setCategories(std::vector<std::string> categories);
 template void CloudjectSVMClassificationPipelineBase<pcl::PFHRGBSignature250>::setNormalization(int normType);
 template void CloudjectSVMClassificationPipelineBase<pcl::PFHRGBSignature250>::setDimRedVariance(double var);
 template void CloudjectSVMClassificationPipelineBase<pcl::PFHRGBSignature250>::setDimRedNumFeatures(int n);

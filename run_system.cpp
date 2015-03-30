@@ -303,7 +303,7 @@ int run()
     svmrbfValParams += gammaValParams, reglValParams;
     
     // Train classifiers and measure recognition accuracy
-    for (int t = 0; t < NUM_OF_SUBJECTS; t++)
+    for (int t = 0; t < 1/*NUM_OF_SUBJECTS*/; t++)
     {
         std::cout << "Training in fold " << t << " (LOSOCV) .." << std::endl;
 
@@ -328,7 +328,7 @@ int run()
             pPipeline->setCategories(objectsLabels);
 
             pPipeline->setNormalization(CCPIPELINE_NORM_L2);
-            pPipeline->setDimRedVariance(1);
+            pPipeline->setDimRedVariance(0.9);
     //       pPipeline->setDimRedNumFeatures(15);
             pPipeline->setClassifierType("svmrbf");
             
@@ -345,7 +345,7 @@ int run()
             // get the performances of the different quantizations
             std::vector<float> quantValPerfs = (pPipeline->getQuantizationValidationPerformances());
             std::cout << cv::Mat(quantValPerfs) << std::endl;
-            
+
             // Training eventually
             // Repeat it several times (because of the quantization stochasticity)
             for (int r = 0; r < NUM_REPETITIONS; r++)
@@ -357,7 +357,7 @@ int run()
     }
     
     // Test recognition accuracy
-    for (int t = 0; t < NUM_OF_SUBJECTS; t++)
+    for (int t = 0; t < 1/*NUM_OF_SUBJECTS*/; t++)
     {
         std::cout << "Testing (object recognition) in fold " << t << " (LOSOCV) .." << std::endl;
 
@@ -380,6 +380,7 @@ int run()
                 std::list<std::vector<int> > predictions; // (not used)
                 std::list<std::vector<float> > distsToMargin; // (not used)
                 
+//                pipelines[r]->setCategories(objectsLabels); // fix a poltergheist: categories not correctly loaded
                 std::vector<float> osacc = pipelines[r]->predict(pCloudjectsTe, predictions, distsToMargin);
                 // Output
                 std::copy(osacc.begin(), osacc.end(), std::ostream_iterator<float>(std::cout, " "));
