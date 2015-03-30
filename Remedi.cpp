@@ -521,18 +521,15 @@ void remedi::getTrainingCloudjectsWithDescriptor(std::vector<Sequence<ColorDepth
     //
     // Considering the training groundtruth, build the set of cloudjects.
     //
-    
-    std::cout << "Creating the sample of training cloudjects .." << std::endl;
-    boost::timer t;
-    
-    for (int s = 0; s < 4/*sequences.size()*/; s++)
+        
+    for (int s = 0; s < sequences.size(); s++)
     {
         if (partitions[s] != p)
         {
             std::string resultsParent = string(PARENT_PATH) + string(RESULTS_SUBDIR)
             + sequences[s]->getName() + "/" + string(KINECT_SUBSUBDIR);
             
-            std::cout << resultsParent << std::endl;
+//            std::cout << resultsParent << std::endl;
             
             sequences[s]->restart();
             while(sequences[s]->hasNextFrames())
@@ -691,9 +688,7 @@ void remedi::getTrainingCloudjectsWithDescriptor(std::vector<Sequence<ColorDepth
             }
         }
     }
-    
-    std::cout << "Created a training sample of " << cloudjects.size() << " cloudjects (in " << t.elapsed() << " secs.)" << std::endl;
-    
+        
 #ifdef DEBUG_TRAINING_CONSTRUCTION_SELECTION
     std::list<Cloudject::Ptr>::iterator ct;
     for (ct = cloudjects.begin(); ct != cloudjects.end(); ++ct)
@@ -739,9 +734,6 @@ void remedi::getTestCloudjectsWithDescriptor(std::vector<Sequence<ColorDepthFram
 {
     cloudjects.clear();
     
-    std::cout << "Creating the sample of testing cloudjects .." << std::endl;
-    boost::timer t;
-    
     for (int s = 0; s < sequences.size(); s++)
     {
         if (partitions[s] == p)
@@ -749,7 +741,7 @@ void remedi::getTestCloudjectsWithDescriptor(std::vector<Sequence<ColorDepthFram
             std::string resultsParent = string(PARENT_PATH) + string(RESULTS_SUBDIR)
             + sequences[s]->getName() + "/" + string(KINECT_SUBSUBDIR);
             
-            std::cout << resultsParent << std::endl;
+//            std::cout << resultsParent << std::endl;
             
             sequences[s]->restart();
             while(sequences[s]->hasNextFrames())
@@ -800,8 +792,6 @@ void remedi::getTestCloudjectsWithDescriptor(std::vector<Sequence<ColorDepthFram
             }
         }
     }
-    
-    std::cout << "Created a test sample of " << cloudjects.size() << " cloudjects (in " << t.elapsed() << " secs.)" << std::endl;
 }
 
 void remedi::getTestSequences(std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> partitions, int p, std::vector<Sequence<ColorDepthFrame>::Ptr>& sequencesTe)

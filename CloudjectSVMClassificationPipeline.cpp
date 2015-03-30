@@ -710,7 +710,7 @@ void CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::bow(cv::Mat X,
 {
     // Find quantization vectors
     cv::Mat u;
-    cv::kmeans(X, q, u, cv::TermCriteria( CV_TERMCRIT_EPS+CV_TERMCRIT_ITER, 30, 1.0), 1, cv::KMEANS_PP_CENTERS, Q);
+    cv::kmeans(X, q, u, cv::TermCriteria( CV_TERMCRIT_EPS+CV_TERMCRIT_ITER, 100, 0.1), 1, cv::KMEANS_PP_CENTERS, Q);
 }
 
 void CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::bow(std::map<std::string,cv::Mat> X, int q, cv::Mat& Q)
@@ -718,14 +718,11 @@ void CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::bow(std::map<s
     // Find quantization vectors
     std::vector<cv::Mat> QVec (m_Categories.size());
     
-    boost::timer t;
     for (int k = 0; k < m_Categories.size(); k++)
     {
         cv::Mat u;
-        cv::kmeans(X[m_Categories[k]], q, u, cv::TermCriteria(), 1, cv::KMEANS_PP_CENTERS, QVec[k]);
+        cv::kmeans(X[m_Categories[k]], q, u, cv::TermCriteria( CV_TERMCRIT_EPS+CV_TERMCRIT_ITER, 100, 0.1), 1, cv::KMEANS_PP_CENTERS, QVec[k]);
     }
-    std::cout << "BOW centers' finding took " << t.elapsed() << " secs." << std::endl;
-    
     cv::vconcat(QVec,Q);
 }
 
@@ -836,7 +833,10 @@ float CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::validate()
                 if (!m_bCentersStratification)
                     bow(XTr, m_qValParam[i], Q);
                 else
-                    bow(XTrMap, m_qValParam[i], Q);
+                {
+                    int sq = floor(m_qValParam[i] / m_Categories.size());
+                    bow(XTrMap, (sq == 0) ? 1 : sq, Q);
+                }
             }
             
             cv::Mat WTr, WTe;

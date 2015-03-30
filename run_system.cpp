@@ -270,14 +270,8 @@ int run()
     
     
 // *---------------------------------------------------------------------------*
-// | Preprocessing and global descriptors computation (BoW)
+// | Learning and prediction
 // *---------------------------------------------------------------------------*
-    
-    //
-    // Aggregate local descriptors
-    // ...
-
-    std::cout << "Aggregating local descriptors (PFHRGB) in fixed-length feature vectors ... " << std::endl;
 
     sequencesDirnames.erase(sequencesDirnames.begin());
 
@@ -294,7 +288,7 @@ int run()
     
     
     std::vector<int> quantValParams;
-    quantValParams += 15;//10, 50, 100, 500;
+    quantValParams += 10, 50, 100, 500, 1000;
     
     std::vector<std::vector<float> > svmrbfValParams;
     std::vector<float> gammaValParams, reglValParams;
@@ -303,11 +297,11 @@ int run()
     svmrbfValParams += gammaValParams, reglValParams;
     
     // Train classifiers and measure recognition accuracy
-    for (int t = 0; t < 1/*NUM_OF_SUBJECTS*/; t++)
+    for (int t = 0; t < NUM_OF_SUBJECTS; t++)
     {
-        std::cout << "Training in fold " << t << " (LOSOCV) .." << std::endl;
+        std::cout << "Training in fold " << t << " (LOSOCV) .. " << std::endl;
 
-        std::vector<CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr> pipelines (3);
+        std::vector<CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr> pipelines (NUM_REPETITIONS);
         bool bSuccess = true;
         for (int r = 0; r < NUM_REPETITIONS; r++)
         {
@@ -315,14 +309,16 @@ int run()
             bSuccess &= pipelines[r]->load("training_" + std::to_string(t) + "-" + std::to_string(r));
         }
         
-        if (!bSuccess)
+        if (bSuccess)
+            std::cout << "Loaded from a previous V+T procedure." << std::endl;
+        else
         {
-            // Validation
-            
             CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pPipeline (new CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>);
             
+            std::cout << "Creating the sample of training cloudjects .." << std::endl;
             boost::shared_ptr<std::list<MockCloudject::Ptr> > pCloudjectsTr (new std::list<MockCloudject::Ptr>);
             remedi::getTrainingCloudjectsWithDescriptor(sequences, sequencesSids, t, annotationLabels, gt, "pfhrgb250", *pCloudjectsTr);
+            std::cout << "Created a training sample of " << pCloudjectsTr->size() << " cloudjects." << std::endl;
 
             pPipeline->setInputCloudjects(pCloudjectsTr);
             pPipeline->setCategories(objectsLabels);
@@ -340,28 +336,38 @@ int run()
             pPipeline->setQuantizationValidationParameters(quantValParams);
             pPipeline->setClassifierValidationParameters(svmrbfValParams);
             
+            std::cout << "Validating .." << std::endl;
+            
+            boost::timer valTimer;
             pPipeline->validate(); // model selection
+            float valTime = valTimer.elapsed();
             
             // get the performances of the different quantizations
             std::vector<float> quantValPerfs = (pPipeline->getQuantizationValidationPerformances());
-            std::cout << cv::Mat(quantValPerfs) << std::endl;
+            std::cout << "Performances quantizations: " << cv::Mat(quantValParams) << ": " << cv::Mat(quantValPerfs) << std::endl;
+
+            std::cout << "Generating final models (" << NUM_REPETITIONS << "x) .." << std::endl;
 
             // Training eventually
             // Repeat it several times (because of the quantization stochasticity)
+            boost::timer trTimer;
             for (int r = 0; r < NUM_REPETITIONS; r++)
             {
                 pPipeline->train(); // use the best parameters found in the model selection
                 pPipeline->save("training_" + std::to_string(t) + "-" + std::to_string(r));
             }
+            float trTime = trTimer.elapsed();
+            
+            std::cout << "It took " << (valTime + trTime) << " (" << valTime << " + " << trTime << ") secs." << std::endl;
         }
     }
     
     // Test recognition accuracy
-    for (int t = 0; t < 1/*NUM_OF_SUBJECTS*/; t++)
+    for (int t = 0; t < NUM_OF_SUBJECTS; t++)
     {
         std::cout << "Testing (object recognition) in fold " << t << " (LOSOCV) .." << std::endl;
 
-        std::vector<CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr> pipelines (3);
+        std::vector<CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr> pipelines (NUM_REPETITIONS);
         bool bSuccess = true;
         for (int r = 0; r < NUM_REPETITIONS; r++)
         {
@@ -371,8 +377,10 @@ int run()
         
         if (bSuccess)
         {
+            std::cout << "Creating the sample of test cloudjects .." << std::endl;
             boost::shared_ptr<std::list<MockCloudject::Ptr> > pCloudjectsTe (new std::list<MockCloudject::Ptr>);
             remedi::getTestCloudjectsWithDescriptor(sequences, sequencesSids, t, gt, "pfhrgb250", *pCloudjectsTe);
+            std::cout << "Created a test sample of " << pCloudjectsTe->size() << " cloudjects." << std::endl;
 
             for (int r = 0; r < NUM_REPETITIONS; r++)
             {
@@ -389,36 +397,38 @@ int run()
         }
     }
     
-    for (int t = 0; t < NUM_OF_SUBJECTS; t++)
-    {
-        std::cout << "Testing (object detection) in fold " << t << " (LOSOCV) .." << std::endl;
-
-        std::vector<CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr> pipelines (3);
-        bool bSuccess = true;
-        for (int r = 0; r < NUM_REPETITIONS; r++)
-        {
-            pipelines[r] = CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr(new CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>);
-            bSuccess &= pipelines[r]->load("training_" + std::to_string(t) + "-" + std::to_string(r));
-        }
-        
-        if (bSuccess)
-        {
-            boost::shared_ptr<std::list<MockCloudject::Ptr> > pCloudjectsTe (new std::list<MockCloudject::Ptr>);
-            remedi::getTestCloudjectsWithDescriptor(sequences, sequencesSids, t, gt, "pfhrgb250", *pCloudjectsTe);
-            
-            for (int r = 0; r < NUM_REPETITIONS; r++)
-            {
-                std::vector<Sequence<ColorDepthFrame>::Ptr> sequencesTe;
-                remedi::getTestSequences(sequences, sequencesSids, t, sequencesTe);
-                
-                sys.setMultiviewDetectionStrategy(DETECT_MULTIVIEW);
-                sys.detect(sequencesTe, objectsLabels, gt, dt, pipelines[t]); // Check it's working up to this point
-                
-                int tp, fp, fn;
-                sys.evaluate(sequencesTe, objectsLabels, gt, dt, tp, fp, fn);
-            }
-        }
-    }
+//    for (int t = 0; t < NUM_OF_SUBJECTS; t++)
+//    {
+//        std::cout << "Testing (object detection) in fold " << t << " (LOSOCV) .." << std::endl;
+//
+//        std::vector<CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr> pipelines (NUM_REPETITIONS);
+//        bool bSuccess = true;
+//        for (int r = 0; r < NUM_REPETITIONS; r++)
+//        {
+//            pipelines[r] = CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr(new CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>);
+//            bSuccess &= pipelines[r]->load("training_" + std::to_string(t) + "-" + std::to_string(r));
+//        }
+//        
+//        if (bSuccess)
+//        {
+//            std::cout << "Creating the sample of test cloudjects .." << std::endl;
+//            boost::shared_ptr<std::list<MockCloudject::Ptr> > pCloudjectsTe (new std::list<MockCloudject::Ptr>);
+//            remedi::getTestCloudjectsWithDescriptor(sequences, sequencesSids, t, gt, "pfhrgb250", *pCloudjectsTe);
+//            std::cout << "Created a training sample of " << pCloudjectsTe->size() << " cloudjects." << std::endl;
+//            
+//            for (int r = 0; r < NUM_REPETITIONS; r++)
+//            {
+//                std::vector<Sequence<ColorDepthFrame>::Ptr> sequencesTe;
+//                remedi::getTestSequences(sequences, sequencesSids, t, sequencesTe);
+//                
+//                sys.setMultiviewDetectionStrategy(DETECT_MULTIVIEW);
+//                sys.detect(sequencesTe, objectsLabels, gt, dt, pipelines[t]); // Check it's working up to this point
+//                
+//                int tp, fp, fn;
+//                sys.evaluate(sequencesTe, objectsLabels, gt, dt, tp, fp, fn);
+//            }
+//        }
+//    }
     
     
     // Use the already trained classifiers and measure TP, FP, and FN over the sequences
