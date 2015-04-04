@@ -99,6 +99,8 @@ namespace cvx
     void convert(cv::Mat mat, std::list<std::vector<T> >& lv);
     template<typename T>
     void convert(std::vector<std::vector<T> > vv, cv::Mat& mat);
+    template<typename T>
+    cv::Mat convert(std::vector<std::vector<T> > vv);
     
     void vconcat(std::vector<cv::Mat> array, cv::Mat& mat);
     void hconcat(std::vector<cv::Mat> array, cv::Mat& mat);

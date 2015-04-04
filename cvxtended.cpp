@@ -710,6 +710,23 @@ void cvx::harmonicMean(cv::InputArray src, cv::OutputArray dst, int dim)
     dst.getMatRef() = _dst;
 }
 
+
+template<typename T>
+void cvx::convert(cv::Mat mat, std::list<std::vector<T> >& lv)
+{
+    lv.clear();
+    
+    for (int i = 0; i < mat.rows; i++)
+    {
+        std::vector<T> v (mat.cols);
+        
+        for (int j = 0; j < mat.cols; j++)
+            v[j] = mat.at<T>(i,j);
+        
+        lv.push_back(v);
+    }
+}
+
 template<typename T>
 void cvx::convert(cv::Mat mat, std::vector<std::vector<T> >& vv)
 {
@@ -741,19 +758,13 @@ void cvx::convert(std::vector<std::vector<T> > vv, cv::Mat& mat)
 }
 
 template<typename T>
-void cvx::convert(cv::Mat mat, std::list<std::vector<T> >& lv)
+cv::Mat cvx::convert(std::vector<std::vector<T> > vv)
 {
-    lv.clear();
-
-    for (int i = 0; i < mat.rows; i++)
-    {
-        std::vector<T> v (mat.cols);
-        
-        for (int j = 0; j < mat.cols; j++)
-            v[j] = mat.at<T>(i,j);
-        
-        lv.push_back(v);
-    }
+    cv::Mat m;
+    
+    convert<T>(vv,m);
+    
+    return m;
 }
 
 void cvx::vconcat(std::vector<cv::Mat> array, cv::Mat& mat)
@@ -933,6 +944,12 @@ template void cvx::convert(std::vector<std::vector<ushort> > vv, cv::Mat& mat);
 template void cvx::convert(std::vector<std::vector<int> > vv, cv::Mat& mat);
 template void cvx::convert(std::vector<std::vector<float> > vv, cv::Mat& mat);
 template void cvx::convert(std::vector<std::vector<double> > vv, cv::Mat& mat);
+
+template cv::Mat cvx::convert(std::vector<std::vector<uchar> > vv);
+template cv::Mat cvx::convert(std::vector<std::vector<ushort> > vv);
+template cv::Mat cvx::convert(std::vector<std::vector<int> > vv);
+template cv::Mat cvx::convert(std::vector<std::vector<float> > vv);
+template cv::Mat cvx::convert(std::vector<std::vector<double> > vv);
 
 template int cvx::match<int>(cv::Mat m, cv::Mat query, bool debug);
 template int cvx::match<float>(cv::Mat m, cv::Mat query, bool debug);

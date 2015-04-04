@@ -62,6 +62,19 @@ class Rectangle3D
 public:
     pcl::PointXYZ min;
     pcl::PointXYZ max;
+    
+    Rectangle3D () {}
+    Rectangle3D (const Rectangle3D& rhs) { *this = rhs; }
+    Rectangle3D& operator=(const Rectangle3D& rhs)
+    {
+        if (this != &rhs)
+        {
+            min = rhs.min;
+            max = rhs.max;
+        }
+        return *this;
+    }
+    
     float area()
     {
         return ((max.x > min.x) ? (max.x - min.x) : 0.f) *
@@ -72,6 +85,42 @@ public:
     {
         return os << "[" << r.min.x << "," << r.min.y << "," << r.min.z << ";\n"
                          << r.max.x << "," << r.max.y << "," << r.max.z << "]";
+    }
+};
+
+class DetectionResult
+{
+public:
+    int tp;
+    int fp;
+    int fn;
+    
+    DetectionResult() : tp(0), fp(0), fn(0) {}
+    DetectionResult (const DetectionResult& rhs) { *this = rhs; }
+    
+    DetectionResult& operator=(const DetectionResult& rhs)
+    {
+        if (this != &rhs)
+        {
+            tp = rhs.tp;
+            fp = rhs.fp;
+            fn = rhs.fn;
+        }
+        return *this;
+    }
+    
+    DetectionResult& operator+=(const DetectionResult& rhs)
+    {
+        tp += rhs.tp;
+        fp += rhs.fp;
+        fn += rhs.fn;
+        
+        return *this;
+    }
+    
+    cv::Vec3f toVector()
+    {
+        return cv::Vec3f(tp,fp,fn);
     }
 };
 
@@ -153,12 +202,16 @@ public:
     void run();
     
     void setMultiviewDetectionStrategy(int strategy);
+    void setMultiviewLateFusionNormalization(bool normalization);
+    void setMultiviewActorCorrespondenceThresh(float thresh);
+    void setInteractionThresh(float thresh);
     
     void detect(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& gt, Detection& dt, const CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pipeline);
     void detectMonocular(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& gt, Detection& dt, const CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pipeline);
     void detectMultiview(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& gt, Detection& dt, const CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pipeline);
     
-    void evaluate(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& groundtruth, const Detection& detection,  int& tp, int& fp, int& fn);
+//    void evaluate(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& groundtruth, const Detection& detection,  int& tp, int& fp, int& fn);
+    std::vector<DetectionResult> getDetectionResults();
 
 //    static void loadGroundtruth(std::string parent, std::vector<std::string> seqDirnames, std::string subdir, std::string dirname, std::vector<const char*> views, std::vector<const char*> objectsNames, Groundtruth& gt);
     
@@ -211,6 +264,11 @@ private:
     BackgroundSubtractor<cv::BackgroundSubtractorMOG2, ColorDepthFrame>::Ptr m_pBackgroundSubtractor;
     
     int m_MultiviewDetectionStrategy;
+    bool m_bMultiviewLateFusionNormalization;
+    float m_MultiviewActorCorrespThresh;
+    float m_InteractionThresh;
+    
+    std::vector<DetectionResult> m_DetectionResults;
     
     //
     // Private methods
@@ -220,8 +278,8 @@ private:
     void findInteractions(std::vector<ColorPointCloudPtr> candidates, std::vector<ColorPointCloudPtr> interactors, std::vector<bool>& mask, float leafSize);
     bool isInteractive(ColorPointCloudPtr tabletopRegionCluster, ColorPointCloudPtr interactionCloud, float tol);
     
-    void evaluateFrame(const std::map<std::string,std::map<std::string,GroundtruthRegion> > gt, const std::vector<ForegroundRegion> dt, int& tp, int& fp, int& fn);
-    void evaluateFrame(const vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > >& gt, const vector<std::map<std::string,std::map<std::string,pcl::PointXYZ> > >& gtCentroids, const std::vector<std::vector<std::pair<int, Cloudject::Ptr> > >& correspondences, int& tp, int& fp, int& fn);
+    void evaluateFrame(const std::map<std::string,std::map<std::string,GroundtruthRegion> > gt, const std::vector<ForegroundRegion> dt, DetectionResult& result);
+    void evaluateFrame(const vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > >& gt, const vector<std::map<std::string,std::map<std::string,pcl::PointXYZ> > >& gtCentroids, const std::vector<std::vector<std::pair<int, Cloudject::Ptr> > >& correspondences, DetectionResult& result);
 
 };
 

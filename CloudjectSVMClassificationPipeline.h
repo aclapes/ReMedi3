@@ -44,7 +44,8 @@ public:
     void setValidation(int numFolds);
     void setClassifierValidationParameters(std::vector<std::vector<float> > classifierParams);
 
-    void setClassifierParameters(std::vector<std::vector<float> > classifierParams);
+    void setClassifierParameters(std::vector<std::vector<float> > parameters);
+    std::vector<std::vector<float> > getClassifierParameters();
 
 protected:
 

@@ -256,10 +256,16 @@ void CloudjectSVMClassificationPipelineBase<T>::validate(cv::Mat XTr, cv::Mat XT
 }
 
 template<typename T>
-void CloudjectSVMClassificationPipelineBase<T>::setClassifierParameters(std::vector<std::vector<float> > classifierParams)
+void CloudjectSVMClassificationPipelineBase<T>::setClassifierParameters(std::vector<std::vector<float> > parameters)
 {
     // Rows must be the number of classifiers, and columns the number of parameters
-    m_ClassifierParams = classifierParams;
+    m_ClassifierParams = parameters;
+}
+
+template<typename T>
+std::vector<std::vector<float> > CloudjectSVMClassificationPipelineBase<T>::getClassifierParameters()
+{
+    return m_ClassifierParams;
 }
 
 template<typename T>
@@ -1213,6 +1219,8 @@ template void CloudjectSVMClassificationPipelineBase<pcl::PFHRGBSignature250>::s
 template void CloudjectSVMClassificationPipelineBase<pcl::PFHRGBSignature250>::setDimRedVariance(double var);
 template void CloudjectSVMClassificationPipelineBase<pcl::PFHRGBSignature250>::setDimRedNumFeatures(int n);
 template void CloudjectSVMClassificationPipelineBase<pcl::PFHRGBSignature250>::setClassifierType(std::string classifierType);
+template std::vector<std::vector<float> > CloudjectSVMClassificationPipelineBase<pcl::PFHRGBSignature250>::getClassifierParameters();
+template void CloudjectSVMClassificationPipelineBase<pcl::PFHRGBSignature250>::setClassifierParameters(std::vector<std::vector<float> > parameters);
 template void CloudjectSVMClassificationPipelineBase<pcl::PFHRGBSignature250>::setValidation(int numFolds);
 template void CloudjectSVMClassificationPipelineBase<pcl::PFHRGBSignature250>::setClassifierValidationParameters(std::vector<std::vector<float> > classifierParams);
 template void CloudjectSVMClassificationPipelineBase<pcl::PFHRGBSignature250>::train(cv::Mat X, cv::Mat Y);

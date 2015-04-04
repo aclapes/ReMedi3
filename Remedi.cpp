@@ -33,7 +33,10 @@ ReMedi::ReMedi()
   m_pRegisterer(new InteractiveRegisterer),
   m_bSetRegistererCorrespondences(false),
   m_pTableModeler(new TableModeler),
-  m_MultiviewDetectionStrategy(0)
+  m_MultiviewDetectionStrategy(0),
+  m_bMultiviewLateFusionNormalization(false),
+  m_MultiviewActorCorrespThresh(3),
+  m_InteractionThresh(0.075)
 {
     m_pBackgroundSubtractor = BackgroundSubtractor<cv::BackgroundSubtractorMOG2, ColorDepthFrame>::Ptr(new BackgroundSubtractor<cv::BackgroundSubtractorMOG2, ColorDepthFrame>);
 }
@@ -59,6 +62,11 @@ ReMedi& ReMedi::operator=(const ReMedi& rhs)
         m_pBackgroundSubtractor = rhs.m_pBackgroundSubtractor;
         
         m_MultiviewDetectionStrategy = rhs.m_MultiviewDetectionStrategy;
+        m_bMultiviewLateFusionNormalization = rhs.m_bMultiviewLateFusionNormalization;
+        m_MultiviewActorCorrespThresh = rhs.m_MultiviewActorCorrespThresh;
+        m_InteractionThresh = rhs.m_InteractionThresh;
+        
+        m_DetectionResults = rhs.m_DetectionResults;
     }
     
     return *this;
@@ -808,11 +816,11 @@ void remedi::getTestSequences(std::vector<Sequence<ColorDepthFrame>::Ptr> sequen
 //    
 //}
 
-void ReMedi::evaluateFrame(const vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > >& gt, const vector<std::map<std::string,std::map<std::string,pcl::PointXYZ> > >& gtCentroids, const std::vector<std::vector<std::pair<int, Cloudject::Ptr> > >& correspondences, int& tp, int& fp, int& fn)
+void ReMedi::evaluateFrame(const vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > >& gt, const vector<std::map<std::string,std::map<std::string,pcl::PointXYZ> > >& gtCentroids, const std::vector<std::vector<std::pair<int, Cloudject::Ptr> > >& correspondences, DetectionResult& result)
 {
-    tp = fp = fn = 0;
+    result.tp = result.fp = result.fn = 0;
     
-    // Auxiliary structure to compute FN (after TP and FP)
+    // Auxiliary structure to compute FN (after result.result.tp and FP)
     std::map<std::string,int> matches;
     
     std::map<std::string,std::map<std::string,GroundtruthRegion> >::const_iterator itr;
@@ -856,21 +864,21 @@ void ReMedi::evaluateFrame(const vector<std::map<std::string,std::map<std::strin
             }
         }
         
-        tp += tpAux;
-        fp += labels.size() - tpAux;
+        result.tp += tpAux;
+        result.fp += labels.size() - tpAux;
     }
     
     //  Compute FN (annotations without at least one match)
     std::map<std::string,int>::iterator it;
     for (it = matches.begin(); it != matches.end(); ++it)
-        if (matches[it->first] == 0) fn++; // match, not even once
+        if (matches[it->first] == 0) result.fn++; // match, not even once
 }
 
 // Evaluate detection performance in a frame
-void ReMedi::evaluateFrame(const std::map<std::string,std::map<std::string,GroundtruthRegion> > gt, const std::vector<ForegroundRegion> dt, int& tp, int& fp, int& fn)
+void ReMedi::evaluateFrame(const std::map<std::string,std::map<std::string,GroundtruthRegion> > gt, const std::vector<ForegroundRegion> dt, DetectionResult& result)
 {
     // Iterate over the dt vector to determine TP and FP
-    tp = fp = fn = 0;
+    result.tp = result.fp = result.fn = 0;
     
     std::map<std::string,int> matches;
     
@@ -892,7 +900,7 @@ void ReMedi::evaluateFrame(const std::map<std::string,std::map<std::string,Groun
             // There is not even groundtruth object with such label
             if (gt.count(*it) == 0)
             {
-                fp++;
+                result.fp++;
             }
             else // and if there is..
             {
@@ -903,13 +911,13 @@ void ReMedi::evaluateFrame(const std::map<std::string,std::map<std::string,Groun
                     // is the detected in the correct spot?
                     if (rectangleOverlap(dt[i].getRect(),jt->second.getRect()) > 0)
                     {
-                        tp++;
+                        result.tp++;
                         // Count matches to this annotation
                         matches[*it] ++;
                     }
                     else
                     {
-                        fp++;
+                        result.fp++;
                     }
                 }
             }
@@ -923,36 +931,56 @@ void ReMedi::evaluateFrame(const std::map<std::string,std::map<std::string,Groun
 //                if (!matches[it->first][jt->first]) fn++; // match, not even once
     std::map<std::string,int>::iterator it;
     for (it= matches.begin(); it != matches.end(); ++it)
-        if (matches[it->first] == 0) fn++; // match, not even once
+        if (matches[it->first] == 0) result.fn++; // match, not even once
 }
 
-void ReMedi::evaluate(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& gt, const Detection& dt, int& tp, int& fp, int& fn)
+//void ReMedi::evaluate(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& gt, const Detection& dt, int& tp, int& fp, int& fn)
+//{
+//    tp = fp = fn = 0;
+//    for (int s = 0; s < sequences.size(); s++)
+//    {
+//        sequences[s]->restart();
+//        while (sequences[s]->hasNextFrames())
+//        {
+//            sequences[s]->next();
+//            std::vector<std::string> fids = sequences[s]->getFramesFilenames();
+//            for (int v = 0; v < sequences[s]->getNumOfViews(); v++)
+//            {
+//                int tpF, fpF, fnF;
+//                evaluateFrame(gt.at(sequences[s]->getName()).at(sequences[s]->getViewName(v)).at(fids[v]),
+//                              dt.at(sequences[s]->getName()).at(sequences[s]->getViewName(v)).at(fids[v]),
+//                              tpF, fpF, fnF);
+//                tp += tpF;
+//                fp += fpF;
+//                fn += fnF;
+//            }
+//        }
+//    }
+//}
+
+std::vector<DetectionResult> ReMedi::getDetectionResults()
 {
-    tp = fp = fn = 0;
-    for (int s = 0; s < sequences.size(); s++)
-    {
-        sequences[s]->restart();
-        while (sequences[s]->hasNextFrames())
-        {
-            sequences[s]->next();
-            std::vector<std::string> fids = sequences[s]->getFramesFilenames();
-            for (int v = 0; v < sequences[s]->getNumOfViews(); v++)
-            {
-                int tpF, fpF, fnF;
-                evaluateFrame(gt.at(sequences[s]->getName()).at(sequences[s]->getViewName(v)).at(fids[v]),
-                              dt.at(sequences[s]->getName()).at(sequences[s]->getViewName(v)).at(fids[v]),
-                              tpF, fpF, fnF);
-                tp += tpF;
-                fp += fpF;
-                fn += fnF;
-            }
-        }
-    }
+    return m_DetectionResults; // one per view
 }
 
 void ReMedi::setMultiviewDetectionStrategy(int strategy)
 {
     m_MultiviewDetectionStrategy = strategy;
+}
+
+void ReMedi::setMultiviewLateFusionNormalization(bool bNormalization)
+{
+    m_bMultiviewLateFusionNormalization = bNormalization;
+}
+
+void ReMedi::setMultiviewActorCorrespondenceThresh(float thresh)
+{
+    m_MultiviewActorCorrespThresh = thresh;
+}
+
+void ReMedi::setInteractionThresh(float thresh)
+{
+    m_InteractionThresh = thresh;
 }
 
 void ReMedi::detect(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& gt, Detection& dt, const CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pipeline)
@@ -965,6 +993,8 @@ void ReMedi::detect(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences,
 
 void ReMedi::detectMonocular(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& gt, Detection& dt, const CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pipeline)
 {
+    m_DetectionResults.resize(m_pBgSeq->getNumOfViews());
+
     for (int s = 0; s < sequences.size(); s++)
     {
         std::string resultsParent = string(PARENT_PATH) + string(RESULTS_SUBDIR)
@@ -1043,12 +1073,14 @@ void ReMedi::detectMonocular(const std::vector<Sequence<ColorDepthFrame>::Ptr> s
                     dt[sequences[s]->getName()][sequences[s]->getViewName(v)][fids[v]].push_back(r);
                 }
                 
-                int tp, fp, fn;
+                DetectionResult result;
                 evaluateFrame(gt.at(sequences[s]->getName()).at(sequences[s]->getViewName(v)).at(fids[v]),
                               dt.at(sequences[s]->getName()).at(sequences[s]->getViewName(v)).at(fids[v]),
-                              tp, fp, fn);
-                std::cout << std::to_string(tp) << "\t" << std::to_string(fp) << "\t" << std::to_string(fn);
+                              result);
+                std::cout << std::to_string(result.tp) << "\t" << std::to_string(result.fp) << "\t" << std::to_string(result.fn);
                 std::cout << ((v < sequences[s]->getNumOfViews() - 1) ?  "\t" : ";\n");
+                
+                m_DetectionResults[v] += result;
             }
             
 #ifdef DO_VISUALIZE_DETECTIONS
@@ -1107,6 +1139,8 @@ void f(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::stri
 
 void ReMedi::detectMultiview(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& gt, Detection& dt, const CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pipeline)
 {
+    m_DetectionResults.resize(1);
+    
     for (int s = 0; s < sequences.size(); s++)
     {
         std::string resultsParent = string(PARENT_PATH) + string(RESULTS_SUBDIR)
@@ -1219,10 +1253,11 @@ void ReMedi::detectMultiview(const std::vector<Sequence<ColorDepthFrame>::Ptr> s
                 f(frames[v], annotationsF[v], annotationsCentroidsF[v]);
             }
             
-            int tp, fp, fn;
-            evaluateFrame(annotationsF, annotationsCentroidsF, correspondences, tp, fp, fn);
-            std::cout << std::to_string(tp) << "\t" << std::to_string(fp) << "\t" << std::to_string(fn) << ";\n";
+            DetectionResult result;
+            evaluateFrame(annotationsF, annotationsCentroidsF, correspondences, result);
+            std::cout << std::to_string(result.tp) << "\t" << std::to_string(result.fp) << "\t" << std::to_string(result.fn) << ";\n";
         
+            m_DetectionResults[0] += result;
             
 #ifdef DO_VISUALIZE_DETECTIONS
             for (int v = 0; v < V; v++)
