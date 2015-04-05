@@ -19,76 +19,15 @@
 #include "features.h"
 #include "CloudjectSVMClassificationPipeline.h"
 
+#include <pcl/console/parse.h>
+
 using namespace std;
 using namespace boost::assign;
 
 namespace fs = boost::filesystem;
 
-int run()
+int run(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> sequencesSids, int beginFold = 0, int endFold = 0)
 {
-// *---------------------------------------------------------------------------*
-// | Read & list the paths of the seqs from PARENT_PATH/SEQUENCES_SUBDIR/
-// *---------------------------------------------------------------------------*
-    
-    std::vector<std::string> sequencesDirnames; // sequence directory paths
-    std::vector<int> sequencesSids; // sequence's subject identifier (for validation purposes)
-    remedi::loadSequences(string(PARENT_PATH) + string(SEQUENCES_SUBDIR), sequencesDirnames, sequencesSids);
-    
-    std::vector<const char*> viewsNames (g_Views, g_Views + sizeof(g_Views)/sizeof(g_Views[0]));
-    
-    std::vector<std::vector<std::string> > colorFramesPaths, depthFramesPaths;
-    remedi::loadFramesPaths(string(PARENT_PATH) + string(SEQUENCES_SUBDIR), sequencesDirnames, KINECT_SUBSUBDIR, FRAMES_COLOR_DIRNAME, viewsNames, colorFramesPaths);
-    remedi::loadFramesPaths(string(PARENT_PATH) + string(SEQUENCES_SUBDIR), sequencesDirnames, KINECT_SUBSUBDIR, FRAMES_DEPTH_DIRNAME, viewsNames, depthFramesPaths);
-    
-    assert(colorFramesPaths.size() == depthFramesPaths.size());
-    
-// *---------------------------------------------------------------------------*
-// | Read the frames from sequences
-// *---------------------------------------------------------------------------*
-    
-    KinectReader reader;
-    
-    // Create and allocate the frames of the background sequence
-    Sequence<ColorDepthFrame>::Ptr pBgSeq (new Sequence<ColorDepthFrame>(viewsNames));
-//    reader.setPreallocation();
-    reader.read(colorFramesPaths[0], depthFramesPaths[0], *pBgSeq); // 0-th seq is the bg seq
-//    reader.setPreallocation(false);
-    
-    // Create and allocate the frames of the rest of the sequences (NOT background sequences)
-    vector<Sequence<ColorDepthFrame>::Ptr> sequences;
-    
-    // Load from a file that contains the delays among each sequence's streams (manually specified)
-    vector<vector<int> > delays;
-    remedi::loadDelaysFile(string(PARENT_PATH) + string(SEQUENCES_SUBDIR), string(DELAYS_FILENAME), delays);
-    
-    for (int s = 1; s < colorFramesPaths.size(); s++) // start from 1 (0 is the bg sequence)
-    {
-        Sequence<ColorDepthFrame>::Ptr pSeq (new Sequence<ColorDepthFrame>(viewsNames));
-        reader.read(colorFramesPaths[s], depthFramesPaths[s], *pSeq);
-        pSeq->setPath(string(PARENT_PATH) + string(SEQUENCES_SUBDIR)
-                      + sequencesDirnames[s] + "/" + string(KINECT_SUBSUBDIR));
-        pSeq->setName(sequencesDirnames[s]);
-        pSeq->setDelays(delays[s]);
-        
-        sequences.push_back(pSeq);
-    }
-    
-// *---------------------------------------------------------------------------*
-// | Create and parametrize the general system parameters
-// *---------------------------------------------------------------------------*
-    
-    ReMedi sys; // the system
-    
-    sys.setFramesResolution(X_RESOLUTION, Y_RESOLUTION); // resolution of frames in pixels
-    sys.setDefaultFrame(DEFAULT_FRAME); // an arbitrary frame (for registration, table modeling, etc)
-    sys.setBackgroundSequence(pBgSeq); // Set the background sequence
-
-    sys.setRegistererParameters(IR_NUM_OF_POINTS, IR_VIS_WND_HEIGHT, IR_VIS_WND_WIDTH, IR_VIS_VP, IR_VIS_HP, IR_VIS_DIST, IR_VIS_MARKER_RADIUS);
-    sys.setTableModelerParameters(TM_LEAF_SIZE, TM_NORMAL_RADIUS, TM_SAC_ITERS, TM_SAC_DIST_THRESH, TM_TT_Y_OFFSET, TM_INTERACTIVE_BORDER_DIST, TM_CONF_LEVEL);
-    sys.setSubtractorParameters(BS_NUM_OF_SAMPLES, BS_MODALITY, BS_K, BS_LRATE, BS_BGRATIO, BS_VARGEN, BS_MORPHOLOGY);
-
-    sys.initialize();
-    
 // *---------------------------------------------------------------------------*
 // | Perform table top segmentation
 // *---------------------------------------------------------------------------*
@@ -98,15 +37,15 @@ int run()
 //        sequences[s]->restart();
 //        while (sequences[s]->hasNextFrames())
 //        {
-//            vector<ColorDepthFrame::Ptr> testFrames = sequences[s]->nextFrames();
-//            sys.getRegisterer()->setInputFrames(testFrames);
-//            sys.getRegisterer()->registrate(testFrames);
+//            std::vector<ColorDepthFrame::Ptr> testFrames = sequences[s]->nextFrames();
+//            pSys->getRegisterer()->setInputFrames(testFrames);
+//            pSys->getRegisterer()->registrate(testFrames);
 //            
 //            // focus only on tabletop's region for the BS
-//            vector<cv::Mat> tabletopMasks;
-//            sys.getTableModeler()->getTabletopMask(testFrames, tabletopMasks);
+//            std::vector<cv::Mat> tabletopMasks;
+//            pSys->getTableModeler()->getTabletopMask(testFrames, tabletopMasks);
 //            
-//            vector<string> fids = sequences[s]->getFramesFilenames();
+//            std::vector<string> fids = sequences[s]->getFramesFilenames();
 //            for (int v = 0; v < sequences[s]->getNumOfViews(); v++)
 //            {
 //                std::string path = string(PARENT_PATH) + string(RESULTS_SUBDIR)
@@ -121,7 +60,7 @@ int run()
 // | Background subraction and blob extraction
 // *---------------------------------------------------------------------------*
 //    
-//    sys.getBackgroundSubtractor()->model(); // train the background model using the bgSeq
+//    pSys->getBackgroundSubtractor()->model(); // train the background model using the bgSeq
 //    
 //    BoundingBoxesGenerator bbGenerator (BB_MIN_PIXELS, BB_DEPTH_THRESH); // from Oscar
 //    
@@ -136,10 +75,10 @@ int run()
 //            std::vector<ColorDepthFrame::Ptr> testFrames = sequences[s]->nextFrames();
 //
 //            std::vector<cv::Mat> foregroundMasks;
-//            sys.getBackgroundSubtractor()->setInputFrames(testFrames);
-//            sys.getBackgroundSubtractor()->subtract(foregroundMasks);
+//            pSys->getBackgroundSubtractor()->setInputFrames(testFrames);
+//            pSys->getBackgroundSubtractor()->subtract(foregroundMasks);
 //            
-//            vector<string> fids = sequences[s]->getFramesFilenames();
+//            std::vector<string> fids = sequences[s]->getFramesFilenames();
 //            for (int v = 0; v < sequences[s]->getNumOfViews(); v++)
 //            {
 //                cv::Mat tabletopMask = cv::imread(parentPath + std::string(TABLETOP_MASKS_DIRNAME)
@@ -204,7 +143,7 @@ int run()
 //        while (sequences[s]->hasNextFrames())
 //        {
 //            std::vector<ColorDepthFrame::Ptr> frames = sequences[s]->nextFrames();
-//            vector<string> fids = sequences[s]->getFramesFilenames();
+//            std::vector<string> fids = sequences[s]->getFramesFilenames();
 //            
 //            for (int v = 0; v < sequences[s]->getNumOfViews(); v++)
 //            {
@@ -248,7 +187,7 @@ int run()
 //        while (sequences[s]->hasNextFrames())
 //        {
 //            sequences[s]->next();
-//            vector<string> fids = sequences[s]->getFramesFilenames();
+//            std::vector<string> fids = sequences[s]->getFramesFilenames();
 //
 //            for (int v = 0; v < sequences[s]->getNumOfViews(); v++)
 //            {
@@ -268,25 +207,21 @@ int run()
 //        std::cout << std::endl;
 //    }
     
-    
+    return 0;
+}
+
 // *---------------------------------------------------------------------------*
 // | Learning and prediction
 // *---------------------------------------------------------------------------*
 
-    sequencesDirnames.erase(sequencesDirnames.begin());
-
+int runTrain(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> sequencesSids, const Groundtruth& gt, int beginFold = 0, int endFold = 0)
+{
     int numOfAnnotations = sizeof(g_AnnotationLabels)/sizeof(g_AnnotationLabels[0]);
     std::vector<const char*> annotationLabels (g_AnnotationLabels, g_AnnotationLabels + numOfAnnotations);
     
-    Groundtruth gt;
-    remedi::loadGroundtruth(sequences, gt);
-    
-    Detection dt;
-    
     int numOfObjects = sizeof(g_ObjectsLabels)/sizeof(g_ObjectsLabels[0]);
     std::vector<const char*> objectsLabels (g_ObjectsLabels, g_ObjectsLabels + numOfObjects);
-    
-    
+
     std::vector<int> quantValParams;
     quantValParams += 50, 100, 200, 400;
     
@@ -297,7 +232,7 @@ int run()
     svmrbfValParams += gammaValParams, reglValParams;
     
     // Train classifiers and measure recognition accuracy
-    for (int t = 0; t < NUM_OF_SUBJECTS; t++)
+    for (int t = beginFold; t < endFold; t++)
     {
         std::cout << "Training in fold " << t << " (LOSOCV) .. " << std::endl;
 
@@ -364,39 +299,60 @@ int run()
         }
     }
     
-//    // Test recognition accuracy
-//    for (int t = 0; t < NUM_OF_SUBJECTS; t++)
-//    {
-//        std::cout << "Testing (object recognition) in fold " << t << " (LOSOCV) .." << std::endl;
-//
-//        std::vector<CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr> pipelines (NUM_REPETITIONS);
-//        bool bSuccess = true;
-//        for (int r = 0; r < NUM_REPETITIONS; r++)
-//        {
-//            pipelines[r] = CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr(new CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>);
-//            bSuccess &= pipelines[r]->load("training_" + std::to_string(t) + "-" + std::to_string(r));
-//        }
-//        
-//        if (bSuccess)
-//        {
-//            std::cout << "Creating the sample of test cloudjects .." << std::endl;
-//            boost::shared_ptr<std::list<MockCloudject::Ptr> > pCloudjectsTe (new std::list<MockCloudject::Ptr>);
-//            remedi::getTestCloudjectsWithDescriptor(sequences, sequencesSids, t, gt, "pfhrgb250", *pCloudjectsTe);
-//            std::cout << "Created a test sample of " << pCloudjectsTe->size() << " cloudjects." << std::endl;
-//
-//            for (int r = 0; r < NUM_REPETITIONS; r++)
-//            {
-//                // Compute
-//                std::list<std::vector<int> > predictions; // (not used)
-//                std::list<std::vector<float> > distsToMargin; // (not used)
-//                
-//                std::vector<float> osacc = pipelines[r]->predict(pCloudjectsTe, predictions, distsToMargin);
-//                // Output
-//                std::copy(osacc.begin(), osacc.end(), std::ostream_iterator<float>(std::cout, " "));
-//                std::cout << std::endl;
-//            }
-//        }
-//    }
+    return 0;
+}
+
+int runPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> sequencesSids, const Groundtruth& gt, int beginFold = 0, int endFold = 0)
+{
+    // Test recognition accuracy
+    for (int t = beginFold; t < endFold; t++)
+    {
+        std::cout << "Testing (object recognition) in fold " << t << " (LOSOCV) .." << std::endl;
+
+        std::vector<CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr> pipelines (NUM_REPETITIONS);
+        bool bSuccess = true;
+        for (int r = 0; r < NUM_REPETITIONS; r++)
+        {
+            pipelines[r] = CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr(new CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>);
+            bSuccess &= pipelines[r]->load("training_" + std::to_string(t) + "-" + std::to_string(r));
+        }
+        
+        if (bSuccess)
+        {
+            std::cout << "Creating the sample of test cloudjects .." << std::endl;
+            boost::shared_ptr<std::list<MockCloudject::Ptr> > pCloudjectsTe (new std::list<MockCloudject::Ptr>);
+            remedi::getTestCloudjectsWithDescriptor(sequences, sequencesSids, t, gt, "pfhrgb250", *pCloudjectsTe);
+            std::cout << "Created a test sample of " << pCloudjectsTe->size() << " cloudjects." << std::endl;
+
+            for (int r = 0; r < NUM_REPETITIONS; r++)
+            {
+                // Compute
+                std::list<std::vector<int> > predictions;
+                std::list<std::vector<float> > distsToMargin;
+                std::vector<float> osacc = pipelines[r]->predict(pCloudjectsTe, predictions, distsToMargin);
+                
+                // Output to console
+                std::copy(osacc.begin(), osacc.end(), std::ostream_iterator<float>(std::cout, " "));
+                std::cout << std::endl;
+                
+                // to disk
+                cv::FileStorage fs ("testing_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r) + ".yml", cv::FileStorage::WRITE);
+                fs << "predictions" << cvx::convert<int>(predictions);
+                fs << "distsToMargin" << cvx::convert<float>(distsToMargin);
+                fs.release();
+            }
+        }
+    }
+    
+    return 0;
+}
+
+int runDetection(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> sequencesSids, const Groundtruth& gt, int beginFold = 0, int endFold = 0)
+{
+    int numOfObjects = sizeof(g_ObjectsLabels)/sizeof(g_ObjectsLabels[0]);
+    std::vector<const char*> objectsLabels (g_ObjectsLabels, g_ObjectsLabels + numOfObjects);
+    
+    Detection dt;
     
     std::vector<std::vector<float> > detectionValParams;
     std::vector<float> interactionThresh, mvActorCorrespThresh;
@@ -407,12 +363,10 @@ int run()
     std::vector<std::vector<float> > detectionValCombs;
     expandParameters<float>(detectionValParams, detectionValCombs);
     
-    std::vector<std::vector<cv::Mat> > dtMonocularResults (NUM_OF_SUBJECTS, std::vector<cv::Mat>(NUM_REPETITIONS,cv::Mat(detectionValCombs.size(),pBgSeq->getNumOfViews(),CV_32FC3)));
+    std::vector<std::vector<cv::Mat> > dtMonocularResults (NUM_OF_SUBJECTS, std::vector<cv::Mat>(NUM_REPETITIONS,cv::Mat(detectionValCombs.size(),pSys->getBackgroundSequence()->getNumOfViews(),CV_32FC3)));
     std::vector<std::vector<cv::Mat> > dtMultiviewResults (NUM_OF_SUBJECTS, std::vector<cv::Mat>(NUM_REPETITIONS,cv::Mat(detectionValCombs.size(),1,CV_32FC3)));
     
-    cv::FileStorage fs; // store detection in disk to process them later
-    
-    for (int t = 0; t < NUM_OF_SUBJECTS; t++)
+    for (int t = beginFold; t < endFold; t++)
     {
         std::cout << "Testing (object detection) in fold " << t << " (LOSOCV) .." << std::endl;
 
@@ -439,54 +393,143 @@ int run()
             {
                 for (int i = 0; i < detectionValCombs.size(); i++)
                 {
-                    sys.setMultiviewDetectionStrategy(DETECT_MONOCULAR);
-                    sys.setMultiviewActorCorrespondenceThresh(detectionValCombs[i][0]);
-                    sys.setInteractionThresh(detectionValCombs[i][1]);
-                    sys.detect(sequencesTe, objectsLabels, gt, dt, pipelines[t]);
+                    pSys->setMultiviewDetectionStrategy(DETECT_MONOCULAR);
+                    pSys->setMultiviewActorCorrespondenceThresh(detectionValCombs[i][0]);
+                    pSys->setInteractionThresh(detectionValCombs[i][1]);
+                    pSys->detect(sequencesTe, objectsLabels, gt, dt, pipelines[r]);
                     
-                    std::vector<DetectionResult> dtResultsFold = sys.getDetectionResults();
+                    std::vector<DetectionResult> dtResultsFold = pSys->getDetectionResults();
                     for (int v = 0; v < dtResultsFold.size(); v++)
                         dtMonocularResults[t][r].at<cv::Vec3f>(i,v) = dtResultsFold[v].toVector();
                 }
                 
-                fs.open("detection-monocular_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r) + ".yml", cv::FileStorage::WRITE);
+                cv::FileStorage fs ("detection-monocular_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r) + ".yml", cv::FileStorage::WRITE);
                 fs << "detections" << dtMonocularResults[t][r];
                 fs.release();
             }
-                
-//                // MULTIVIEW
-//                // TODO: proper way of normalising prior to late fusion
-//                for (int i = 0; i < detectionValCombs.size(); i++)
-//                {
-//                    sys.setMultiviewDetectionStrategy(DETECT_MULTIVIEW);
-//                    sys.setMultiviewLateFusionNormalization(true);
-//                    sys.setMultiviewActorCorrespondenceThresh(detectionValCombs[i][0]);
-//                    sys.setInteractionThresh(detectionValCombs[i][1]);
-//                    sys.detect(sequencesTe, objectsLabels, gt, dt, pipelines[t]);
-//                    
-//                    int tp, fp, fn;
-//                    sys.evaluate(sequencesTe, objectsLabels, gt, dt, tp, fp, fn);
-//                }
             
+            // MULTIVIEW
+            for (int r = 0; r < NUM_REPETITIONS; r++)
+            {
+                std::vector<cv::Mat> predictionsTr (NUM_OF_SUBJECTS-1);
+                std::vector<cv::Mat> distsToMarginTr (NUM_OF_SUBJECTS-1);
+                for (int tt = 0; tt < NUM_OF_SUBJECTS; tt++)
+                {
+                    if (tt != t)
+                    {
+                        cv::FileStorage fs ("testing_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r) + ".yml", cv::FileStorage::READ);
+                        fs["predictions"] >> predictionsTr[tt];
+                        fs["distsToMargin"] >> distsToMarginTr[tt];
+                        fs.release();
+                    }
+                }
+                
+                cv::Mat predictions, distsToMargin;
+                vconcat(predictionsTr, predictions);
+                vconcat(distsToMarginTr, distsToMargin);
+                
+                for (int i = 0; i < detectionValCombs.size(); i++)
+                {
+                    pSys->setMultiviewDetectionStrategy(DETECT_MULTIVIEW);
+                    pSys->setMultiviewLateFusionNormalization(true);
+                    pSys->setMultiviewActorCorrespondenceThresh(detectionValCombs[i][0]);
+                    pSys->setInteractionThresh(detectionValCombs[i][1]);
+                    pSys->detect(sequencesTe, objectsLabels, gt, dt, pipelines[0]); // [r]
+                }
+            }
         }
     }
-
-    
-    // Use the already trained classifiers and measure TP, FP, and FN over the sequences
-//    
-//    for (int t = 0; t < NUM_OF_SUBJECTS; t++)
-//    {
-////        ReMedi::
-//        std::vector<Sequence<ColorDepthFrame>::Ptr> sequencesTe;
-//        remedi::getTestSequences(sequences, sequencesSids, t, sequencesTe);
-//        
-//        sys.detect(sequencesTe, objectsLabels, gt, pipelines[t]);
-//    }
     
 	return 0;
 }
 
-int main()
+int main(int argc, char** argv)
 {
-    return run();
+    // *-----------------------------------------------------------------------*
+    // | Read parameters
+    // *-----------------------------------------------------------------------*
+    
+    int beginFold = 0, endFold = 0;
+    pcl::console::parse_2x_arguments(argc, argv, "-F", beginFold, endFold);
+    
+    bool bTrain, bPrediction, bDetection;
+    bTrain      = (pcl::console::find_argument(argc, argv, "-T") >= 0);
+    bPrediction = (pcl::console::find_argument(argc, argv, "-P") >= 0);
+    bDetection  = (pcl::console::find_argument(argc, argv, "-D") >= 0);
+    
+    // *-----------------------------------------------------------------------*
+    // | Read & list the paths of the seqs from PARENT_PATH/SEQUENCES_SUBDIR/
+    // *-----------------------------------------------------------------------*
+    
+    std::vector<std::string> sequencesDirnames; // sequence directory paths
+    std::vector<int> sequencesSids; // sequence's subject identifier (for validation purposes)
+    remedi::loadSequences(string(PARENT_PATH) + string(SEQUENCES_SUBDIR), sequencesDirnames, sequencesSids);
+    
+    std::vector<const char*> viewsNames (g_Views, g_Views + sizeof(g_Views)/sizeof(g_Views[0]));
+    
+    std::vector<std::vector<std::string> > colorFramesPaths, depthFramesPaths;
+    remedi::loadFramesPaths(string(PARENT_PATH) + string(SEQUENCES_SUBDIR), sequencesDirnames, KINECT_SUBSUBDIR, FRAMES_COLOR_DIRNAME, viewsNames, colorFramesPaths);
+    remedi::loadFramesPaths(string(PARENT_PATH) + string(SEQUENCES_SUBDIR), sequencesDirnames, KINECT_SUBSUBDIR, FRAMES_DEPTH_DIRNAME, viewsNames, depthFramesPaths);
+    
+    assert(colorFramesPaths.size() == depthFramesPaths.size());
+    
+    // *-----------------------------------------------------------------------*
+    // | Read the frames from sequences
+    // *-----------------------------------------------------------------------*
+    
+    KinectReader reader;
+    
+    // Create and allocate the frames of the background sequence
+    Sequence<ColorDepthFrame>::Ptr pBgSeq (new Sequence<ColorDepthFrame>(viewsNames));
+    //    reader.setPreallocation();
+    reader.read(colorFramesPaths[0], depthFramesPaths[0], *pBgSeq); // 0-th seq is the bg seq
+    //    reader.setPreallocation(false);
+    
+    // Create and allocate the frames of the rest of the sequences (NOT background sequences)
+    std::vector<Sequence<ColorDepthFrame>::Ptr> sequences;
+    
+    // Load from a file that contains the delays among each sequence's streams (manually specified)
+    std::vector<vector<int> > delays;
+    remedi::loadDelaysFile(string(PARENT_PATH) + string(SEQUENCES_SUBDIR), string(DELAYS_FILENAME), delays);
+    
+    for (int s = 1; s < colorFramesPaths.size(); s++) // start from 1 (0 is the bg sequence)
+    {
+        Sequence<ColorDepthFrame>::Ptr pSeq (new Sequence<ColorDepthFrame>(viewsNames));
+        reader.read(colorFramesPaths[s], depthFramesPaths[s], *pSeq);
+        pSeq->setPath(string(PARENT_PATH) + string(SEQUENCES_SUBDIR)
+                      + sequencesDirnames[s] + "/" + string(KINECT_SUBSUBDIR));
+        pSeq->setName(sequencesDirnames[s]);
+        pSeq->setDelays(delays[s]);
+        
+        sequences.push_back(pSeq);
+    }
+    
+    // *-----------------------------------------------------------------------*
+    // | Create and parametrize the general system parameters
+    // *-----------------------------------------------------------------------*
+    
+    ReMedi::Ptr pSys (new ReMedi); // the system
+    
+    pSys->setFramesResolution(X_RESOLUTION, Y_RESOLUTION); // resolution of frames in pixels
+    pSys->setDefaultFrame(DEFAULT_FRAME); // an arbitrary frame (for registration, table modeling, etc)
+    pSys->setBackgroundSequence(pBgSeq); // Set the background sequence
+    
+    pSys->setRegistererParameters(IR_NUM_OF_POINTS, IR_VIS_WND_HEIGHT, IR_VIS_WND_WIDTH, IR_VIS_VP, IR_VIS_HP, IR_VIS_DIST, IR_VIS_MARKER_RADIUS);
+    pSys->setTableModelerParameters(TM_LEAF_SIZE, TM_NORMAL_RADIUS, TM_SAC_ITERS, TM_SAC_DIST_THRESH, TM_TT_Y_OFFSET, TM_INTERACTIVE_BORDER_DIST, TM_CONF_LEVEL);
+    pSys->setSubtractorParameters(BS_NUM_OF_SAMPLES, BS_MODALITY, BS_K, BS_LRATE, BS_BGRATIO, BS_VARGEN, BS_MORPHOLOGY);
+    
+    pSys->initialize();
+    
+    // Run
+    Groundtruth gt;
+    remedi::loadGroundtruth(sequences, gt);
+    
+    if (bTrain)
+        runTrain(pSys, sequences, sequencesSids, gt, (beginFold < endFold) ? beginFold : 0, (beginFold < endFold) ? endFold : NUM_OF_SUBJECTS);
+    if (bPrediction)
+        runPrediction(pSys, sequences, sequencesSids, gt, (beginFold < endFold) ? beginFold : 0, (beginFold < endFold) ? endFold : NUM_OF_SUBJECTS);
+    if (bDetection)
+        runDetection(pSys, sequences, sequencesSids, gt, (beginFold < endFold) ? beginFold : 0, (beginFold < endFold) ? endFold : NUM_OF_SUBJECTS);
+    
+    return 0;
 }

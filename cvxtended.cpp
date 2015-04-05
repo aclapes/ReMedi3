@@ -743,7 +743,7 @@ void cvx::convert(cv::Mat mat, std::vector<std::vector<T> >& vv)
 }
 
 template<typename T>
-void cvx::convert(std::vector<std::vector<T> > vv, cv::Mat& mat)
+void cvx::convert(const std::vector<std::vector<T> >& vv, cv::Mat& mat)
 {
     if (vv.size() == 0 || vv[0].size() == 0)
         return;
@@ -757,12 +757,41 @@ void cvx::convert(std::vector<std::vector<T> > vv, cv::Mat& mat)
     }
 }
 
+
 template<typename T>
-cv::Mat cvx::convert(std::vector<std::vector<T> > vv)
+void cvx::convert(const std::list<std::vector<T> >& lv, cv::Mat& mat)
+{
+    if (lv.size() == 0 || lv.front().size() == 0)
+        return;
+    
+    mat.create(lv.size(), lv.front().size(), cv::DataType<T>::type);
+    
+    typename std::list<std::vector<T> >::const_iterator it = lv.begin();
+    int i = 0;
+    for ( ; it != lv.end(); ++it, ++i)
+    {
+        assert( it->size() == mat.cols );
+        for (int j = 0; j < mat.cols; j++)
+            mat.at<T>(i,j) = it->at(j);
+    }
+}
+
+template<typename T>
+cv::Mat cvx::convert(const std::vector<std::vector<T> >& vv)
 {
     cv::Mat m;
     
     convert<T>(vv,m);
+    
+    return m;
+}
+
+template<typename T>
+cv::Mat cvx::convert(const std::list<std::vector<T> >& lv)
+{
+    cv::Mat m;
+    
+    convert<T>(lv,m);
     
     return m;
 }
@@ -939,17 +968,29 @@ template void cvx::convert(cv::Mat mat, std::list<std::vector<int> >& lv);
 template void cvx::convert(cv::Mat mat, std::list<std::vector<float> >& lv);
 template void cvx::convert(cv::Mat mat, std::list<std::vector<double> >& lv);
 
-template void cvx::convert(std::vector<std::vector<uchar> > vv, cv::Mat& mat);
-template void cvx::convert(std::vector<std::vector<ushort> > vv, cv::Mat& mat);
-template void cvx::convert(std::vector<std::vector<int> > vv, cv::Mat& mat);
-template void cvx::convert(std::vector<std::vector<float> > vv, cv::Mat& mat);
-template void cvx::convert(std::vector<std::vector<double> > vv, cv::Mat& mat);
+template void cvx::convert(const std::vector<std::vector<uchar> >& vv, cv::Mat& mat);
+template void cvx::convert(const std::vector<std::vector<ushort> >& vv, cv::Mat& mat);
+template void cvx::convert(const std::vector<std::vector<int> >& vv, cv::Mat& mat);
+template void cvx::convert(const std::vector<std::vector<float> >& vv, cv::Mat& mat);
+template void cvx::convert(const std::vector<std::vector<double> >& vv, cv::Mat& mat);
 
-template cv::Mat cvx::convert(std::vector<std::vector<uchar> > vv);
-template cv::Mat cvx::convert(std::vector<std::vector<ushort> > vv);
-template cv::Mat cvx::convert(std::vector<std::vector<int> > vv);
-template cv::Mat cvx::convert(std::vector<std::vector<float> > vv);
-template cv::Mat cvx::convert(std::vector<std::vector<double> > vv);
+template void cvx::convert(const std::list<std::vector<uchar> >& lv, cv::Mat& mat);
+template void cvx::convert(const std::list<std::vector<ushort> >& lv, cv::Mat& mat);
+template void cvx::convert(const std::list<std::vector<int> >& lv, cv::Mat& mat);
+template void cvx::convert(const std::list<std::vector<float> >& lv, cv::Mat& mat);
+template void cvx::convert(const std::list<std::vector<double> >& lv, cv::Mat& mat);
+
+template cv::Mat cvx::convert(const std::vector<std::vector<uchar> >& vv);
+template cv::Mat cvx::convert(const std::vector<std::vector<ushort> >& vv);
+template cv::Mat cvx::convert(const std::vector<std::vector<int> >& vv);
+template cv::Mat cvx::convert(const std::vector<std::vector<float> >& vv);
+template cv::Mat cvx::convert(const std::vector<std::vector<double> >& vv);
+
+template cv::Mat cvx::convert(const std::list<std::vector<uchar> >& lv);
+template cv::Mat cvx::convert(const std::list<std::vector<ushort> >& lv);
+template cv::Mat cvx::convert(const std::list<std::vector<int> >& lv);
+template cv::Mat cvx::convert(const std::list<std::vector<float> >& lv);
+template cv::Mat cvx::convert(const std::list<std::vector<double> >& lv);
 
 template int cvx::match<int>(cv::Mat m, cv::Mat query, bool debug);
 template int cvx::match<float>(cv::Mat m, cv::Mat query, bool debug);

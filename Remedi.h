@@ -32,12 +32,15 @@
 using namespace std;
 
 // My structures' typedefs
+typedef std::map<std::string,std::vector<bool> >  ViewInteraction;
 typedef std::map<std::string,std::vector<ForegroundRegion> > ViewDetection;
 typedef std::map<std::string,std::map<std::string,std::map<std::string,GroundtruthRegion> > > ViewGroundtruth;
 
+typedef std::map<std::string,ViewInteraction> SequenceInteraction;
 typedef std::map<std::string,ViewDetection> SequenceDetection;
 typedef std::map<std::string,ViewGroundtruth> SequenceGroundtruth;
 
+typedef std::map<std::string,SequenceInteraction> Interaction;
 typedef std::map<std::string,SequenceDetection> Detection;
 typedef std::map<std::string,SequenceGroundtruth> Groundtruth;
 
@@ -278,9 +281,11 @@ private:
     void findInteractions(std::vector<ColorPointCloudPtr> candidates, std::vector<ColorPointCloudPtr> interactors, std::vector<bool>& mask, float leafSize);
     bool isInteractive(ColorPointCloudPtr tabletopRegionCluster, ColorPointCloudPtr interactionCloud, float tol);
     
-    void evaluateFrame(const std::map<std::string,std::map<std::string,GroundtruthRegion> > gt, const std::vector<ForegroundRegion> dt, DetectionResult& result);
+    void evaluateFrame(const std::map<std::string,std::map<std::string,GroundtruthRegion> >& gt, const std::vector<ForegroundRegion>& dt, DetectionResult& result);
     void evaluateFrame(const vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > >& gt, const vector<std::map<std::string,std::map<std::string,pcl::PointXYZ> > >& gtCentroids, const std::vector<std::vector<std::pair<int, Cloudject::Ptr> > >& correspondences, DetectionResult& result);
-
+    
+    void evaluateFrame2(const std::vector<ColorDepthFrame::Ptr>& frames, const vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > >& gt, std::vector<std::vector<std::pair<int, Cloudject::Ptr> > >& correspondences, std::vector<const char*> objectLabels, std::vector<std::vector<DetectionResult> >& result);
+    void evaluateFrame2(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& gt, std::vector<ForegroundRegion>& dt, std::vector<const char*> objectLabels, std::vector<DetectionResult>& result);
 };
 
 // Static methods
@@ -295,7 +300,9 @@ namespace remedi
 
     void loadGroundtruth(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, Groundtruth& gt);
     void getGroundtruthForTraining(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, const std::vector<const char*> objectsLabels, const Groundtruth& gt, Groundtruth& gtTr);
-
+    
+    void loadInteraction(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<std::string> objectLabels, Interaction& iact);
+    
     void getTrainingCloudjectsWithDescriptor(std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> partitions, int p, std::vector<const char*> annotationLabels, const Groundtruth& gt, std::string descriptorType, std::list<MockCloudject::Ptr>& cloudjects);
     void getTestCloudjectsWithDescriptor(std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> partitions, int p, const Groundtruth& gt, std::string descriptorType, std::list<MockCloudject::Ptr>& cloudjects);
 
@@ -315,6 +322,23 @@ namespace remedi
     
     void findContentions(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, float tol, std::vector<std::vector<std::pair<int,Cloudject::Ptr> > >& contentions, std::vector<std::vector<Rectangle3D> >& rectangles);
     void _getDetectionRectangles(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, bool bRegistrate, std::vector<std::vector<Rectangle3D> >& rectangles);
+    
+    template<typename RegionT>
+    Rectangle3D computeRectangleFromRegion(ColorDepthFrame::Ptr frame, RegionT region);
+    template<typename RegionT>
+    pcl::PointXYZ computeCentroidFromRegion(ColorDepthFrame::Ptr frame, RegionT region);
+    void precomputeRectangles3D(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& annotations, std::map<std::string,std::map<std::string,Rectangle3D> >& rectangles);
+    void precomputeRectangles3D(ColorDepthFrame::Ptr frame, const std::vector<ForegroundRegion>& detections, std::vector<Rectangle3D>& rectangles);
+    void precomputeCentroids(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& annotations, std::map<std::string,std::map<std::string,pcl::PointXYZ> >& centroids);
+    void precomputeCentroids(ColorDepthFrame::Ptr frame, const std::vector<ForegroundRegion>& detections, std::vector<pcl::PointXYZ>& centroids);
+
+    float rectangleOverlap(cv::Rect a, cv::Rect b);
+    float rectangleInclusion(cv::Rect a, cv::Rect b);
+    cv::Rect rectangleIntersection(cv::Rect a, cv::Rect b);
+
+    float rectangleInclusion(Rectangle3D a, Rectangle3D b);
+    float rectangleOverlap(Rectangle3D a, Rectangle3D b);
+    Rectangle3D rectangleIntersection(Rectangle3D a, Rectangle3D b);
 }
 
 #endif

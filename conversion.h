@@ -82,4 +82,6 @@ template<typename T>
 std::vector<std::vector<T> > matTow(cv::Mat mat);
 
 template<typename PointT>
-pcl::PointXYZ computeCentroid(pcl::PointCloud<PointT> pCloud);
+pcl::PointXYZ computeCentroid(const pcl::PointCloud<PointT>& pCloud);
+template<typename PointT>
+void computeRectangle3D(const pcl::PointCloud<PointT>& pCloud, pcl::PointXYZ& min, pcl::PointXYZ& max);

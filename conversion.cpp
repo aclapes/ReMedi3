@@ -742,9 +742,9 @@ std::vector<std::vector<pcl::PointXYZ> > matTow(cv::Mat mat)
 
 
 template<typename PointT>
-pcl::PointXYZ computeCentroid(pcl::PointCloud<PointT> pCloud)
+pcl::PointXYZ computeCentroid(const pcl::PointCloud<PointT>& cloud)
 {
-    int n = pCloud.points.size();
+    int n = cloud.points.size();
     
     double x = .0;
     double y = .0;
@@ -753,16 +753,49 @@ pcl::PointXYZ computeCentroid(pcl::PointCloud<PointT> pCloud)
     int c = 0;
     for (int i = 0; i < n; ++i)
     {
-        if (pCloud.points[i].z > .0)
+        if (cloud.points[i].z > .0)
         {
-            x += pCloud.points[i].x;
-            y += pCloud.points[i].y;
-            z += pCloud.points[i].z;
+            x += cloud.points[i].x;
+            y += cloud.points[i].y;
+            z += cloud.points[i].z;
             c++;
         }
     }
     
     return pcl::PointXYZ(x/c, y/c, z/c);
+}
+
+template<typename PointT>
+void computeRectangle3D(const pcl::PointCloud<PointT>& cloud, pcl::PointXYZ& min, pcl::PointXYZ& max)
+{
+    double minx, miny, minz;
+    double maxx, maxy, maxz;
+    minx = miny = minz = std::numeric_limits<double>::max();
+    maxx = maxy = maxz = std::numeric_limits<double>::lowest();
+    
+    for (int i = 0; i < cloud.points.size(); ++i)
+    {
+        if (cloud.points[i].z > .0)
+        {
+            if (cloud.points[i].x > maxx)
+                maxx = cloud.points[i].x;
+            else if (cloud.points[i].x < minx)
+                minx = cloud.points[i].x;
+            
+            if (cloud.points[i].y > maxy)
+                maxy = cloud.points[i].y;
+            else if (cloud.points[i].y < miny)
+                miny = cloud.points[i].y;
+            
+            if (cloud.points[i].z > maxz)
+                maxz = cloud.points[i].z;
+            else if (cloud.points[i].z < minz)
+                minz = cloud.points[i].z;
+        }
+    }
+    
+    min = pcl::PointXYZ(minx, miny, minz);
+    max = pcl::PointXYZ(maxx, maxy, maxz);
 }
 
 template std::string to_string_with_precision<float>(const float a_value, const int n);
@@ -783,5 +816,8 @@ template std::vector<std::vector<double> > matTow(cv::Mat mat);
 template void biggestEuclideanCluster<pcl::PointXYZ>(pcl::PointCloud<pcl::PointXYZ>::Ptr, int, int, float, pcl::PointCloud<pcl::PointXYZ>&);
 template void biggestEuclideanCluster<pcl::PointXYZRGB>(pcl::PointCloud<pcl::PointXYZRGB>::Ptr, int, int, float, pcl::PointCloud<pcl::PointXYZRGB>&);
 
-template pcl::PointXYZ computeCentroid(pcl::PointCloud<pcl::PointXYZ> pCloud);
-template pcl::PointXYZ computeCentroid(pcl::PointCloud<pcl::PointXYZRGB> pCloud);
+template pcl::PointXYZ computeCentroid(const pcl::PointCloud<pcl::PointXYZ>&);
+template pcl::PointXYZ computeCentroid(const pcl::PointCloud<pcl::PointXYZRGB>&);
+
+template void computeRectangle3D(const pcl::PointCloud<pcl::PointXYZ>&, pcl::PointXYZ&, pcl::PointXYZ&);
+template void computeRectangle3D(const pcl::PointCloud<pcl::PointXYZRGB>&, pcl::PointXYZ&, pcl::PointXYZ&);
