@@ -22,6 +22,7 @@
 #include "Cloudject.hpp"
 #include "CloudjectSVMClassificationPipeline.h"
 
+#include "pclxtended.h"
 #include "io.h"
 
 #include <set>
@@ -31,7 +32,10 @@
 
 using namespace std;
 
-// My structures' typedefs
+//
+// Typedefs
+//
+
 typedef std::map<std::string,std::vector<bool> >  ViewInteraction;
 typedef std::map<std::string,std::vector<ForegroundRegion> > ViewDetection;
 typedef std::map<std::string,std::map<std::string,std::map<std::string,GroundtruthRegion> > > ViewGroundtruth;
@@ -59,73 +63,6 @@ typedef pcl::PointCloud<FPFHSignature> FPFHDescription;
 typedef pcl::PointCloud<FPFHSignature>::Ptr FPFHDescriptionPtr;
 typedef pcl::PointCloud<PFHRGBSignature> PFHRGBDescription;
 typedef pcl::PointCloud<PFHRGBSignature>::Ptr PFHRGBDescriptionPtr;
-
-class Rectangle3D
-{
-public:
-    pcl::PointXYZ min;
-    pcl::PointXYZ max;
-    
-    Rectangle3D () {}
-    Rectangle3D (const Rectangle3D& rhs) { *this = rhs; }
-    Rectangle3D& operator=(const Rectangle3D& rhs)
-    {
-        if (this != &rhs)
-        {
-            min = rhs.min;
-            max = rhs.max;
-        }
-        return *this;
-    }
-    
-    float area()
-    {
-        return ((max.x > min.x) ? (max.x - min.x) : 0.f) *
-               ((max.y > min.y) ? (max.y - min.y) : 0.f) *
-               ((max.z > min.z) ? (max.z - min.z) : 0.f);
-    }
-    friend std::ostream& operator<<(std::ostream& os, const Rectangle3D& r)
-    {
-        return os << "[" << r.min.x << "," << r.min.y << "," << r.min.z << ";\n"
-                         << r.max.x << "," << r.max.y << "," << r.max.z << "]";
-    }
-};
-
-class DetectionResult
-{
-public:
-    int tp;
-    int fp;
-    int fn;
-    
-    DetectionResult() : tp(0), fp(0), fn(0) {}
-    DetectionResult (const DetectionResult& rhs) { *this = rhs; }
-    
-    DetectionResult& operator=(const DetectionResult& rhs)
-    {
-        if (this != &rhs)
-        {
-            tp = rhs.tp;
-            fp = rhs.fp;
-            fn = rhs.fn;
-        }
-        return *this;
-    }
-    
-    DetectionResult& operator+=(const DetectionResult& rhs)
-    {
-        tp += rhs.tp;
-        fp += rhs.fp;
-        fn += rhs.fn;
-        
-        return *this;
-    }
-    
-    cv::Vec3f toVector()
-    {
-        return cv::Vec3f(tp,fp,fn);
-    }
-};
 
 class ReMedi
 {
@@ -203,18 +140,6 @@ public:
     
     // Normal functioning of the system
     void run();
-    
-    void setMultiviewDetectionStrategy(int strategy);
-    void setMultiviewLateFusionNormalization(bool normalization);
-    void setMultiviewActorCorrespondenceThresh(float thresh);
-    void setInteractionThresh(float thresh);
-    
-    void detect(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& gt, Detection& dt, const CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pipeline);
-    void detectMonocular(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& gt, Detection& dt, const CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pipeline);
-    void detectMultiview(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& gt, Detection& dt, const CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pipeline);
-    
-//    void evaluate(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& groundtruth, const Detection& detection,  int& tp, int& fp, int& fn);
-    std::vector<DetectionResult> getDetectionResults();
 
 //    static void loadGroundtruth(std::string parent, std::vector<std::string> seqDirnames, std::string subdir, std::string dirname, std::vector<const char*> views, std::vector<const char*> objectsNames, Groundtruth& gt);
     
@@ -265,27 +190,6 @@ private:
     TableModeler::Ptr m_pTableModeler;
     
     BackgroundSubtractor<cv::BackgroundSubtractorMOG2, ColorDepthFrame>::Ptr m_pBackgroundSubtractor;
-    
-    int m_MultiviewDetectionStrategy;
-    bool m_bMultiviewLateFusionNormalization;
-    float m_MultiviewActorCorrespThresh;
-    float m_InteractionThresh;
-    
-    std::vector<DetectionResult> m_DetectionResults;
-    
-    //
-    // Private methods
-    //
-    
-    void findActors(std::vector<Cloudject::Ptr> candidates, std::vector<ColorPointCloudPtr> interactors, std::vector<Cloudject::Ptr>& actors, float leafSize, std::vector<Cloudject::Ptr>& interactedActors);
-    void findInteractions(std::vector<ColorPointCloudPtr> candidates, std::vector<ColorPointCloudPtr> interactors, std::vector<bool>& mask, float leafSize);
-    bool isInteractive(ColorPointCloudPtr tabletopRegionCluster, ColorPointCloudPtr interactionCloud, float tol);
-    
-    void evaluateFrame(const std::map<std::string,std::map<std::string,GroundtruthRegion> >& gt, const std::vector<ForegroundRegion>& dt, DetectionResult& result);
-    void evaluateFrame(const vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > >& gt, const vector<std::map<std::string,std::map<std::string,pcl::PointXYZ> > >& gtCentroids, const std::vector<std::vector<std::pair<int, Cloudject::Ptr> > >& correspondences, DetectionResult& result);
-    
-    void evaluateFrame2(const std::vector<ColorDepthFrame::Ptr>& frames, const vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > >& gt, std::vector<std::vector<std::pair<int, Cloudject::Ptr> > >& correspondences, std::vector<const char*> objectLabels, std::vector<std::vector<DetectionResult> >& result);
-    void evaluateFrame2(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& gt, std::vector<ForegroundRegion>& dt, std::vector<const char*> objectLabels, std::vector<DetectionResult>& result);
 };
 
 // Static methods
@@ -307,38 +211,11 @@ namespace remedi
     void getTestCloudjectsWithDescriptor(std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> partitions, int p, const Groundtruth& gt, std::string descriptorType, std::list<MockCloudject::Ptr>& cloudjects);
 
     void getTestSequences(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> partitions, int p, std::vector<Sequence<ColorDepthFrame>::Ptr>& sequencesTe);
+        
+    void findContentions(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, float tol, std::vector<std::vector<std::pair<int,Cloudject::Ptr> > >& contentions, std::vector<std::vector<pclx::Rectangle3D> >& rectangles);
+    void getDetectionRectangles(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, bool bRegistrate, std::vector<std::vector<pclx::Rectangle3D> >& rectangles);
     
-    void MatToColoredPointCloud(cv::Mat depth, cv::Mat color, cv::Mat mask, int pos[2], pcl::PointCloud<pcl::PointXYZRGB>& cloud);
-    
-    void findCorrespondences(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, float tol, std::vector<std::vector<std::pair<int,Cloudject::Ptr> > >& correspondences, std::vector<std::vector<PointT> >& positions);
-    void _findCorrespondences(std::vector<std::vector<PointT> > positions, float tol, std::vector<std::vector<std::pair<std::pair<int,int>,PointT> > >&  correspondences);
-    void findNextCorrespondence(std::vector<std::vector<PointT> >& detections, std::vector<std::vector<bool> >& assignations, int v, float tol, std::vector<std::pair<std::pair<int,int>,PointT> >& chain);
-    void _getDetectionPositions(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, bool bRegistrate, std::vector<std::vector<PointT> >& positions);
-    
-//    void findCorrespondencesBasedOnInclusion(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, float tol, std::vector<std::vector<std::pair<int,Cloudject::Ptr> > >& correspondences, std::vector<std::vector<Rectangle3D> >& rectangles);
-//    void _findCorrespondences(std::vector<std::vector<Rectangle3D> > rectangles, float tol, std::vector<std::vector<std::pair<std::pair<int,int>,Rectangle3D> > >&  correspondences);
-//    void findNextCorrespondence(std::vector<std::vector<Rectangle3D> >& detections, int v, float tol, std::vector<std::pair<std::pair<int,int>,Rectangle3D> >& chain);
-//    void _getDetectionRectangles(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, bool bRegistrate, std::vector<std::vector<Rectangle3D> >& rectangles);
-    
-    void findContentions(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, float tol, std::vector<std::vector<std::pair<int,Cloudject::Ptr> > >& contentions, std::vector<std::vector<Rectangle3D> >& rectangles);
-    void _getDetectionRectangles(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, bool bRegistrate, std::vector<std::vector<Rectangle3D> >& rectangles);
-    
-    template<typename RegionT>
-    Rectangle3D computeRectangleFromRegion(ColorDepthFrame::Ptr frame, RegionT region);
-    template<typename RegionT>
-    pcl::PointXYZ computeCentroidFromRegion(ColorDepthFrame::Ptr frame, RegionT region);
-    void precomputeRectangles3D(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& annotations, std::map<std::string,std::map<std::string,Rectangle3D> >& rectangles);
-    void precomputeRectangles3D(ColorDepthFrame::Ptr frame, const std::vector<ForegroundRegion>& detections, std::vector<Rectangle3D>& rectangles);
-    void precomputeCentroids(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& annotations, std::map<std::string,std::map<std::string,pcl::PointXYZ> >& centroids);
-    void precomputeCentroids(ColorDepthFrame::Ptr frame, const std::vector<ForegroundRegion>& detections, std::vector<pcl::PointXYZ>& centroids);
-
-    float rectangleOverlap(cv::Rect a, cv::Rect b);
-    float rectangleInclusion(cv::Rect a, cv::Rect b);
-    cv::Rect rectangleIntersection(cv::Rect a, cv::Rect b);
-
-    float rectangleInclusion(Rectangle3D a, Rectangle3D b);
-    float rectangleOverlap(Rectangle3D a, Rectangle3D b);
-    Rectangle3D rectangleIntersection(Rectangle3D a, Rectangle3D b);
+    void computeScalingFactorsOfCategories(cv::Mat predictions, cv::Mat distsToMargin, cv::Mat& factors);
 }
 
 #endif

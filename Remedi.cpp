@@ -32,11 +32,7 @@ ReMedi::ReMedi()
 : m_fID(0),
   m_pRegisterer(new InteractiveRegisterer),
   m_bSetRegistererCorrespondences(false),
-  m_pTableModeler(new TableModeler),
-  m_MultiviewDetectionStrategy(0),
-  m_bMultiviewLateFusionNormalization(false),
-  m_MultiviewActorCorrespThresh(3),
-  m_InteractionThresh(0.075)
+  m_pTableModeler(new TableModeler)
 {
     m_pBackgroundSubtractor = BackgroundSubtractor<cv::BackgroundSubtractorMOG2, ColorDepthFrame>::Ptr(new BackgroundSubtractor<cv::BackgroundSubtractorMOG2, ColorDepthFrame>);
 }
@@ -60,13 +56,6 @@ ReMedi& ReMedi::operator=(const ReMedi& rhs)
         m_pTableModeler = rhs.m_pTableModeler;
         
         m_pBackgroundSubtractor = rhs.m_pBackgroundSubtractor;
-        
-        m_MultiviewDetectionStrategy = rhs.m_MultiviewDetectionStrategy;
-        m_bMultiviewLateFusionNormalization = rhs.m_bMultiviewLateFusionNormalization;
-        m_MultiviewActorCorrespThresh = rhs.m_MultiviewActorCorrespThresh;
-        m_InteractionThresh = rhs.m_InteractionThresh;
-        
-        m_DetectionResults = rhs.m_DetectionResults;
     }
     
     return *this;
@@ -359,43 +348,6 @@ void remedi::loadInteraction(const std::vector<Sequence<ColorDepthFrame>::Ptr> s
     }
 }
 
-cv::Rect remedi::rectangleIntersection(cv::Rect a, cv::Rect b)
-{
-    int aib_min_x = max(a.x, b.x);
-    int aib_min_y = max(a.y, b.y);
-    int aib_max_x = min(a.x + a.width - 1, b.x + b.width - 1);
-    int aib_max_y = min(a.y + a.height - 1, b.y + b.height - 1);
-    
-    int width = aib_max_x - aib_min_x + 1;
-    int height = aib_max_y - aib_min_y + 1;
-    cv::Rect aib (aib_min_x,
-                  aib_min_y,
-                  width > 0 ? width : 0,
-                  height > 0 ? height : 0);
-    return aib;
-}
-
-// Auxiliary function for varianceSubsampling(...)
-float remedi::rectangleOverlap(cv::Rect a, cv::Rect b)
-{
-    cv::Rect aib = remedi::rectangleIntersection(a,b);
-    
-    float overlap = ((float) aib.area()) / (a.area() + b.area() - aib.area());
-    
-    return overlap;
-}
-
-// Auxiliary function for getTrainingCloudjects(...)
-// Check the amount of inclusion of "a" in "b"
-float remedi::rectangleInclusion(cv::Rect a, cv::Rect b)
-{
-    cv::Rect aib = remedi::rectangleIntersection(a,b);
-    
-    float inclusion = ((float) aib.area()) / min(a.area(),b.area());
-    
-    return inclusion;
-}
-
 void remedi::getGroundtruthForTraining(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, const std::vector<const char*> annotationLabels, const Groundtruth& gt, Groundtruth& gtTr)
 {
     gtTr.clear();
@@ -455,7 +407,7 @@ void remedi::getGroundtruthForTraining(const std::vector<Sequence<ColorDepthFram
                                 for (jt = prevAnnotationsF[lbl].begin(); jt != prevAnnotationsF[lbl].begin(); ++jt)
                                 {
                                     GroundtruthRegion preva = jt->second;
-                                    float ovl = remedi::rectangleOverlap(a.getRect(), preva.getRect());
+                                    float ovl = cvx::rectangleOverlap(a.getRect(), preva.getRect());
                                     if (ovl < 0.9)
                                         annotationsTrF[lbl][std::to_string(a.getID())] = a;
                                 }
@@ -493,54 +445,54 @@ void remedi::segmentCloudjects(ColorDepthFrame::Ptr frame, cv::Mat foreground, s
         cv::Mat cropDepth (frame->getDepth(), r);
     
         int pos[2] = {r.x, r.y}; // otherwise the conversion assumes 640x480 or (320x240)
-        remedi::MatToColoredPointCloud(cropDepth, cropColor, cropFgMask, pos, *(pCj->getCloud()));
+        unsigned short range[2] = {MIN_DEPTH,MAX_DEPTH};
+        MatToColoredPointCloud(cropDepth, cropColor, cropFgMask, pos, range, *(pCj->getCloud()));
     
         // Return it in a list
         cloudjects[i] = pCj;
     }
 }
 
-// Weighted overlap between two Region objects. It uses the rectangles
-// for the efficient computation of the intersetion. If the intersection
-// is not empty, compute in the intersection region the overlap measure.
-// Eventually, weight this overlap by the minimum size of the two
-// non-cropped overlapping regions.
-float weightedOverlapBetweenRegions(Region& region1, Region& region2)
-{
-    cv::Rect rect1 = region1.getRect();
-    cv::Rect rect2 = region2.getRect();
-    cv::Rect irect = remedi::rectangleIntersection(rect1, rect2);
-    
-    // RETURN 0 (no intersection)
-    if ( !(irect.width > 0 && irect.height > 0) )
-        return .0f;
-
-    cv::Mat patch1 = region1.getMask();
-    cv::Mat patch2 = region2.getMask();
-    
-    // Roi the intersection in the two patches
-    cv::Mat roi1 ( patch1, cv::Rect(irect.x - rect1.x, irect.y - rect1.y,
-                                      irect.width, irect.height) );
-    cv::Mat roi2 ( patch2, cv::Rect(irect.x - rect2.x, irect.y - rect2.y,
-                                      irect.width, irect.height) );
-    assert (roi1.rows == roi2.rows && roi1.cols == roi2.cols);
-    
-    cv::Mat iroi = roi1 & roi2;
-    
-    int count1 = cv::countNonZero(patch1); // A
-    int count2 = cv::countNonZero(patch2); // B
-    int icount = cv::countNonZero(iroi); // A,B , i.e. A and B
-    
-    // Overlap calculion based on Jaccard index: |A,B|/|AUB|
-    float ovl = ((float) icount) / (count1 + count2 - icount); // {AUB} = A + B - {A,B}
-    float weight = (((float) icount) / min(count1,count2)); // scale in proportion to min(A,B)
-    
-    float wovl = ovl * weight;
-    
-    // RETURN the weighted overlap
-    return wovl;
-    
-}
+//// Weighted overlap between two Region objects. It uses the rectangles
+//// for the efficient computation of the intersetion. If the intersection
+//// is not empty, compute in the intersection region the overlap measure.
+//// Eventually, weight this overlap by the minimum size of the two
+//// non-cropped overlapping regions.
+//float weightedOverlapBetweenRegions(Region& region1, Region& region2)
+//{
+//    cv::Rect rect1 = region1.getRect();
+//    cv::Rect rect2 = region2.getRect();
+//    cv::Rect irect = cvx::rectangleIntersection(rect1, rect2);
+//    
+//    // RETURN 0 (no intersection)
+//    if ( !(irect.width > 0 && irect.height > 0) )
+//        return .0f;
+//
+//    cv::Mat patch1 = region1.getMask();
+//    cv::Mat patch2 = region2.getMask();
+//    
+//    // Roi the intersection in the two patches
+//    cv::Mat roi1 ( patch1, cv::Rect(irect.x - rect1.x, irect.y - rect1.y,
+//                                      irect.width, irect.height) );
+//    cv::Mat roi2 ( patch2, cv::Rect(irect.x - rect2.x, irect.y - rect2.y,
+//                                      irect.width, irect.height) );
+//    assert (roi1.rows == roi2.rows && roi1.cols == roi2.cols);
+//    
+//    cv::Mat iroi = roi1 & roi2;
+//    
+//    int count1 = cv::countNonZero(patch1); // A
+//    int count2 = cv::countNonZero(patch2); // B
+//    int icount = cv::countNonZero(iroi); // A,B , i.e. A and B
+//    
+//    // Overlap calculion based on Jaccard index: |A,B|/|AUB|
+//    float ovl = ((float) icount) / (count1 + count2 - icount); // {AUB} = A + B - {A,B}
+//    float weight = (((float) icount) / min(count1,count2)); // scale in proportion to min(A,B)
+//    
+//    float wovl = ovl * weight;
+//    
+//    // RETURN the weighted overlap
+//    return wovl;
+//}
 
 void remedi::getTrainingCloudjectsWithDescriptor(std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> partitions, int p, std::vector<const char*> annotationLabels, const Groundtruth& gt, std::string descriptorType, std::list<MockCloudject::Ptr>& cloudjects)
 {
@@ -643,7 +595,7 @@ void remedi::getTrainingCloudjectsWithDescriptor(std::vector<Sequence<ColorDepth
                             {
                                 GroundtruthRegion a = jt->second;
                                 a.allocateMask();
-                                float wovl = weightedOverlapBetweenRegions(regionsF[i], a);
+                                float wovl = cvx::weightedOverlapBetweenRegions(regionsF[i].getMask(), a.getMask(), regionsF[i].getRect(), a.getRect());
                                 
 #ifdef DEBUG_TRAINING_CONSTRUCTION_OVERLAPS
                                 if (bDebug)
@@ -813,7 +765,8 @@ void remedi::getTestCloudjectsWithDescriptor(std::vector<Sequence<ColorDepthFram
                             {
                                 GroundtruthRegion a = jt->second;
                                 a.allocateMask();
-                                float wovl = weightedOverlapBetweenRegions(regionsF[i], a);
+                                float wovl = cvx::weightedOverlapBetweenRegions(regionsF[i].getMask(), a.getMask(),
+                                                                                regionsF[i].getRect(), a.getRect());
                                 a.releaseMask();
                                 
                                 if (wovl > .01f) regionsF[i].addLabel(jt->second.getCategory());
@@ -842,860 +795,6 @@ void remedi::getTestSequences(std::vector<Sequence<ColorDepthFrame>::Ptr> sequen
     {
         if (partitions[s] == p)
             sequencesTe.push_back(sequences[s]);
-    }
-}
-
-// Evaluate detection performance in a frame (multiple views)
-void ReMedi::evaluateFrame(const vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > >& gt, const vector<std::map<std::string,std::map<std::string,pcl::PointXYZ> > >& gtCentroids, const std::vector<std::vector<std::pair<int, Cloudject::Ptr> > >& correspondences, DetectionResult& result)
-{
-    result.tp = result.fp = result.fn = 0;
-    
-    // Auxiliary structure to compute FN (after result.result.tp and FP)
-    std::map<std::string,int> matches;
-    
-    std::map<std::string,std::map<std::string,GroundtruthRegion> >::const_iterator itr;
-    std::map<std::string,GroundtruthRegion>::const_iterator jtr;
-    
-    for (int v = 0; v < gt.size(); v++)
-        for (itr = gt[v].begin(); itr != gt[v].end(); ++itr)
-            if (itr->first.compare("arms") != 0 && itr->first.compare("others") != 0)
-                    matches[itr->first] = 0;
-
-    // Compute TP and FP
-    for (int i = 0; i < correspondences.size(); i++)
-    {
-        pcl::PointXYZ p = correspondences[i][0].second->getCloudCentroid();
-        
-        const std::set<std::string> labels = correspondences[i][0].second->getRegionLabels();
-        std::set<std::string>::iterator it;
-
-        int tpAux = 0;
-        for (it = labels.begin(); it != labels.end(); ++it)
-        {
-            for (int v = 0; v < gt.size(); v++)
-            {
-                if (gt[v].count(*it) > 0)
-                {
-                    std::map<std::string,GroundtruthRegion> catgt = gt[v].at(*it);
-                    std::map<std::string,GroundtruthRegion>::iterator jt;
-                    for (jt = catgt.begin(); jt != catgt.end(); ++jt)
-                    {
-                        pcl::PointXYZ q = gtCentroids[v].at(*it).at(jt->first);
-                        float d = sqrt(pow(p.x-q.x,2)+pow(p.y-q.y,2)+pow(p.z-q.z,2));
-                        // is the detected in the correct spot?
-                        if (d <= 0.15)
-                        {
-//                            std::cout << *it << " found in " << std::to_string(v) << std::endl;
-                            tpAux++;
-                            matches[*it] ++;
-                        }
-                    }
-                }
-            }
-        }
-        
-        result.tp += tpAux;
-        result.fp += labels.size() - tpAux;
-    }
-    
-    //  Compute FN (annotations without at least one match)
-    std::map<std::string,int>::iterator it;
-    for (it = matches.begin(); it != matches.end(); ++it)
-        if (matches[it->first] == 0) result.fn++; // match, not even once
-}
-
-// Evaluate detection performance in a frame
-void ReMedi::evaluateFrame(const std::map<std::string,std::map<std::string,GroundtruthRegion> >& gt, const std::vector<ForegroundRegion>& dt, DetectionResult& result)
-{
-    // Iterate over the dt vector to determine TP and FP
-    result.tp = result.fp = result.fn = 0;
-    
-    std::map<std::string,int> matches;
-    
-    std::map<std::string,std::map<std::string,GroundtruthRegion> >::const_iterator itr;
-
-    // Auxiliary structure to compute FN (after TP and FP)
-    for (itr = gt.begin(); itr != gt.end(); ++itr)
-        if (itr->first.compare("arms") != 0 && itr->first.compare("others") != 0)
-                matches[itr->first] = false;
-    
-    // Compute TP and FP first
-    for (int i = 0; i < dt.size(); i++)
-    {
-        const std::set<std::string> labels = dt[i].getLabels();
-        
-        std::set<std::string>::iterator it;
-        for (it = labels.begin(); it != labels.end(); ++it)
-        {
-            // There is not even groundtruth object with such label
-            if (gt.count(*it) == 0)
-            {
-                result.fp++;
-            }
-            else // and if there is..
-            {
-                std::map<std::string,GroundtruthRegion> catgt = gt.at(*it);
-                std::map<std::string,GroundtruthRegion>::iterator jt;
-                for (jt = catgt.begin(); jt != catgt.end(); ++jt)
-                {
-                    // is the detected in the correct spot?
-                    if (remedi::rectangleOverlap(dt[i].getRect(),jt->second.getRect()) > 0)
-                    {
-                        result.tp++;
-                        // Count matches to this annotation
-                        matches[*it] ++;
-                    }
-                    else
-                    {
-                        result.fp++;
-                    }
-                }
-            }
-        }
-    }
-    
-    //  Compute FN (annotations without at least one match)
-//    for (it = gt.begin(); it != gt.end(); ++it)
-//        if (it->first.compare("arms") != 0 && it->first.compare("others") != 0)
-//            for (jt = it->second.begin(); jt != it->second.end(); ++jt)
-//                if (!matches[it->first][jt->first]) fn++; // match, not even once
-    std::map<std::string,int>::iterator it;
-    for (it= matches.begin(); it != matches.end(); ++it)
-        if (matches[it->first] == 0) result.fn++; // match, not even once
-}
-
-// Evaluate detection performance in a frame per object (multiple views)
-void ReMedi::evaluateFrame2(const std::vector<ColorDepthFrame::Ptr>& frames, const std::vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > >& gt, std::vector<std::vector<std::pair<int, Cloudject::Ptr> > >& correspondences, std::vector<const char*> objectLabels, std::vector<std::vector<DetectionResult> >& result)
-{
-    result.clear();
-    result.resize(gt.size(), std::vector<DetectionResult>(objectLabels.size()));
-    
-    std::vector<std::map<std::string,int> > matches (correspondences.size()); // correspondences x labels
-    
-    std::vector<std::map<std::string,std::map<std::string,Rectangle3D> > > gtrects (gt.size());
-    for (int v = 0; v < gt.size(); v++)
-    {
-        remedi::precomputeRectangles3D(frames[v], gt[v], gtrects[v]);
-        
-        for (int k = 0; k < objectLabels.size(); k++)
-        {
-            std::string name = objectLabels[k];
-            
-            // TP and FN
-            if (gt[v].count(name) > 0) // any object of this kind annotated in frame?
-            {
-                // An object can consist of several annotations (a book in two parts because of an occlusion)
-                // Try two match any of the parts with a detection
-                bool bDetectedAnnotation = false;
-                
-                std::map<std::string,GroundtruthRegion>::const_iterator it = gt[v].at(name).begin();
-                std::map<std::string,Rectangle3D>::const_iterator rt = gtrects[v].at(name).begin();
-                for ( ; (it != gt[v].at(name).end()) && !bDetectedAnnotation; ++it, ++rt)
-                {
-                    for (int i = 0; i < correspondences.size(); i++)
-                    {
-                        Rectangle3D a = rt->second;
-                        Rectangle3D b;
-                        for (int j = 0; j < correspondences[i].size(); j++)
-                        {
-                            if (correspondences[i][j].first == v)
-                            {
-                                Cloudject::Ptr pCj = correspondences[i][j].second;
-                                pCj->getCloudRectangle(b.min, b.max);
-                                if (pCj->isRegionLabel(name) && remedi::rectangleInclusion(a,b) > 0.5)
-                                {
-                                    //if (matches[j][name] < pCj->getRegionLabels().size())
-                                    //{
-                                        matches[i][name]++;
-                                        bDetectedAnnotation = true;
-                                    //}
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                bDetectedAnnotation ? result[v][k].tp++ : result[v][k].fn++;
-            }
-            
-            // FPs
-            for (int i = 0; i < correspondences.size(); i++)
-            {
-                Cloudject::Ptr pCj = correspondences[i][0].second;
-                if (pCj->isRegionLabel(name))
-                {
-                    int nonmatched = pCj->getRegionLabels().size() - matches[i][name];
-                    if (nonmatched > 0)
-                    {
-                        result[v][k].fp += nonmatched;
-                    }
-                }
-            }
-        }
-
-    }
-}
-
-// Evaluate detection performance in a frame per object
-void ReMedi::evaluateFrame2(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& gt, std::vector<ForegroundRegion>& dt, std::vector<const char*> objectLabels, std::vector<DetectionResult>& result)
-{
-    result.resize(objectLabels.size());
-    
-    // Precompute rectangles
-    std::map<std::string,std::map<std::string,Rectangle3D> > gtrects;
-    std::vector<Rectangle3D> dtrects;
-    
-    remedi::precomputeRectangles3D(frame, gt, gtrects);
-    remedi::precomputeRectangles3D(frame, dt, dtrects);
-    
-    // First TP and FN, but this will help to compute the FPs later (keeps track of matched or TPs)
-    std::vector<std::map<std::string,int> > matches (dt.size()); // detections x labels
-    
-    for (int k = 0; k < objectLabels.size(); k++)
-    {
-        std::string name = objectLabels[k];
-        
-        // TP and FN
-        if (gt.count(name) > 0) // any object of this kind annotated in frame?
-        {
-            // An object can consist of several annotations (a book in two parts because of an occlusion)
-            // Try two match any of the parts with a detection
-            bool bDetectedAnnotation = false;
-            
-            std::map<std::string,GroundtruthRegion>::const_iterator it = gt.at(name).begin();
-            std::map<std::string,Rectangle3D>::const_iterator rt = gtrects.at(name).begin();
-            for ( ; (it != gt.at(name).end()) && !bDetectedAnnotation; ++it, ++rt)
-            {
-                for (int j = 0; j < dt.size(); j++)
-                {
-                    Rectangle3D a = rt->second;
-                    Rectangle3D b = dtrects[j];
-                    if (dt[j].isLabel(name) && remedi::rectangleInclusion(a,b) > 0.5)
-                    {
-                        if (matches[j][name] < dt[j].getLabels().size())
-                        {
-                            matches[j].at(name) ++;
-                            bDetectedAnnotation = true;
-                        }
-                    }
-                }
-            }
-            
-            bDetectedAnnotation ? result[k].tp++ : result[k].fn++;
-        }
-        
-        // FPs
-        for (int i = 0; i < dt.size(); i++)
-        {
-            if (dt[i].isLabel(name))
-            {
-                int nonmatched = dt[i].getLabels().size() - matches[i][name];
-                if (nonmatched > 0)
-                {
-                    result[k].fp += nonmatched;
-                }
-            }
-        }
-    }
-}
-
-
-//void ReMedi::evaluate(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& gt, const Detection& dt, int& tp, int& fp, int& fn)
-//{
-//    tp = fp = fn = 0;
-//    for (int s = 0; s < sequences.size(); s++)
-//    {
-//        sequences[s]->restart();
-//        while (sequences[s]->hasNextFrames())
-//        {
-//            sequences[s]->next();
-//            std::vector<std::string> fids = sequences[s]->getFramesFilenames();
-//            for (int v = 0; v < sequences[s]->getNumOfViews(); v++)
-//            {
-//                int tpF, fpF, fnF;
-//                evaluateFrame(gt.at(sequences[s]->getName()).at(sequences[s]->getViewName(v)).at(fids[v]),
-//                              dt.at(sequences[s]->getName()).at(sequences[s]->getViewName(v)).at(fids[v]),
-//                              tpF, fpF, fnF);
-//                tp += tpF;
-//                fp += fpF;
-//                fn += fnF;
-//            }
-//        }
-//    }
-//}
-
-std::vector<DetectionResult> ReMedi::getDetectionResults()
-{
-    return m_DetectionResults; // one per view
-}
-
-void ReMedi::setMultiviewDetectionStrategy(int strategy)
-{
-    m_MultiviewDetectionStrategy = strategy;
-}
-
-void ReMedi::setMultiviewLateFusionNormalization(bool bNormalization)
-{
-    m_bMultiviewLateFusionNormalization = bNormalization;
-}
-
-void ReMedi::setMultiviewActorCorrespondenceThresh(float thresh)
-{
-    m_MultiviewActorCorrespThresh = thresh;
-}
-
-void ReMedi::setInteractionThresh(float thresh)
-{
-    m_InteractionThresh = thresh;
-}
-
-void ReMedi::detect(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& gt, Detection& dt, const CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pipeline)
-{
-    if (m_MultiviewDetectionStrategy == DETECT_MONOCULAR)
-        detectMonocular(sequences, objectsLabels, gt, dt, pipeline);
-    else if (m_MultiviewDetectionStrategy == DETECT_MULTIVIEW)
-        detectMultiview(sequences, objectsLabels, gt, dt, pipeline);
-}
-
-void ReMedi::detectMonocular(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& gt, Detection& dt, const CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pipeline)
-{
-    m_DetectionResults.resize(m_pBgSeq->getNumOfViews());
-
-    for (int s = 0; s < sequences.size(); s++)
-    {
-        std::string resultsParent = string(PARENT_PATH) + string(RESULTS_SUBDIR)
-        + sequences[s]->getName() + "/" + string(KINECT_SUBSUBDIR);
-        
-        int V = sequences[s]->getNumOfViews();
-
-#ifdef DO_VISUALIZE_DETECTIONS
-        pcl::visualization::PCLVisualizer::Ptr pVis (new pcl::visualization::PCLVisualizer);
-        std::vector<int> vp (V);
-        for (int v = 0; v < V; v++)
-        {
-            pVis->createViewPort(v*(1.f/V), 0, (v+1)*(1.f/V), 1, vp[v]);
-            pVis->setBackgroundColor (1, 1, 1, vp[v]);
-            m_pRegisterer->setDefaultCamera(pVis, vp[v]);
-        }
-#endif
-        std::cout << "[" << std::endl;
-        sequences[s]->restart();
-        while (sequences[s]->hasNextFrames())
-        {
-            vector<ColorDepthFrame::Ptr> frames = sequences[s]->nextFrames();
-            m_pRegisterer->setInputFrames(frames);
-            m_pRegisterer->registrate(frames);
-            
-            std::vector<cv::Mat> tabletops;
-            std::vector<cv::Mat> interactions;
-            m_pTableModeler->getTabletopMask(frames, tabletops);
-            m_pTableModeler->getInteractionMask(frames, interactions);
-            
-            vector<string> fids = sequences[s]->getFramesFilenames();
-            
-            // Prepare the interactors from the different views
-            
-            std::vector<ColorPointCloudPtr> interactors (sequences[s]->getNumOfViews());
-            for (int v = 0; v < sequences[s]->getNumOfViews(); v++)
-            {
-                interactors[v] = ColorPointCloudPtr(new ColorPointCloud);
-                cv::Mat aux;
-                cvx::open(interactions[v] & ~tabletops[v], 2, aux);
-                frames[v]->getRegisteredColoredPointCloud(aux, *(interactors[v]));
-            }
-            
-            // Distinguish actors from interactors
-            std::vector<std::vector<Cloudject::Ptr> > nonInteractedActors (sequences[s]->getNumOfViews());
-            std::vector<std::vector<Cloudject::Ptr> > interactedActors (sequences[s]->getNumOfViews());
-            
-            for (int v = 0; v < V; v++)
-            {
-                std::vector<ForegroundRegion> regionsF;
-                remedi::io::readPredictionRegions(resultsParent + string(CLOUDJECTS_DIRNAME)
-                                                  + sequences[s]->getViewName(v), fids[v], regionsF, true);
-                
-                // Read the cloudjects representing the selected regions
-                std::vector<Cloudject::Ptr> cloudjectsF;
-                remedi::io::readCloudjectsWithDescriptor(resultsParent + string(CLOUDJECTS_DIRNAME) + sequences[s]->getViewName(v), fids[v], regionsF, "pfhrgb250", cloudjectsF, true);
-                
-                for (int i = 0; i < cloudjectsF.size(); i++)
-                    cloudjectsF[i]->setRegistrationTransformation(frames[v]->getRegistrationTransformation());
-                
-                findActors(cloudjectsF, interactors, nonInteractedActors[v], 0.02, interactedActors[v]);
-            }
-            
-            for (int v = 0; v < V; v++)
-            {
-                for (int i = 0; i < nonInteractedActors[v].size(); i++)
-                {
-                    std::vector<int> predictions;
-                    std::vector<float> distsToMargin;
-                    predictions = pipeline->predict(nonInteractedActors[v][i], distsToMargin);
-                    
-                    ForegroundRegion r = nonInteractedActors[v][i]->getRegion();
-                    for (int i = 0; i < predictions.size(); i++)
-                        if (predictions[i] > 0) r.addLabel(objectsLabels[i]);
-                    
-                    dt[sequences[s]->getName()][sequences[s]->getViewName(v)][fids[v]].push_back(r);
-                }
-                
-                std::vector<DetectionResult> objResult;
-                evaluateFrame2(frames[v],
-                               gt.at(sequences[s]->getName()).at(sequences[s]->getViewName(v)).at(fids[v]),
-                               dt.at(sequences[s]->getName()).at(sequences[s]->getViewName(v)).at(fids[v]),
-                               objectsLabels,
-                               objResult);
-                
-                DetectionResult result;
-                for (int i = 0; i < objResult.size(); i++)
-                    result += objResult[i];
-                
-                std::cout << std::to_string(result.tp) << "\t" << std::to_string(result.fp) << "\t" << std::to_string(result.fn);
-                std::cout << ((v < sequences[s]->getNumOfViews() - 1) ?  "\t" : ";\n");
-                
-                m_DetectionResults[v] += result;
-            }
-            
-#ifdef DO_VISUALIZE_DETECTIONS
-            for (int v = 0; v < V; v++)
-            {
-                pVis->removeAllPointClouds(vp[v]);
-                pVis->removeAllShapes(vp[v]);
-                
-                for (int i = 0; i < interactors.size(); i++)
-                    pVis->addPointCloud(interactors[i], "interactor" + std::to_string(v) + "-" + std::to_string(i), vp[v] );
-                
-                for (int i = 0; i < interactedActors[v].size(); i++)
-                {
-                    pVis->addPointCloud(interactedActors[v][i]->getRegisteredCloud(), "nactor" + std::to_string(v) + "-" + std::to_string(i), vp[v] );
-                    pVis->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 0, 0, "nactor" + std::to_string(v) + "-" + std::to_string(i), vp[v]);
-                }
-                
-                for (int i = 0; i < nonInteractedActors[v].size(); i++)
-                {
-                    pVis->addPointCloud(nonInteractedActors[v][i]->getRegisteredCloud(), "actor" + std::to_string(v) + "-" + std::to_string(i), vp[v] );
-                    pVis->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, g_Colors[i%14][0], g_Colors[i%14][1], g_Colors[i%14][2], "actor" + std::to_string(v) + "-" + std::to_string(i), vp[v]);
-                }
-            }
-
-            pVis->spinOnce();
-#endif //DO_VISUALIZE_DETECTIONS
-        }
-        std::cout << "];" << std::endl;
-    }
-}
-
-void ReMedi::detectMultiview(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectsLabels, const Groundtruth& gt, Detection& dt, const CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pipeline)
-{
-    m_DetectionResults.resize(1);
-    
-    for (int s = 0; s < sequences.size(); s++)
-    {
-        std::string resultsParent = string(PARENT_PATH) + string(RESULTS_SUBDIR)
-        + sequences[s]->getName() + "/" + string(KINECT_SUBSUBDIR);
-        
-#ifdef DO_VISUALIZE_DETECTIONS
-        pcl::visualization::PCLVisualizer::Ptr pVis (new pcl::visualization::PCLVisualizer);
-        
-        int V = sequences[s]->getNumOfViews();
-        std::vector<int> vp (V);
-        for (int v = 0; v < V; v++)
-        {
-            pVis->createViewPort(v*(1.f/V), 0, (v+1)*(1.f/V), 1, vp[v]);
-            pVis->setBackgroundColor (1, 1, 1, vp[v]);
-            m_pRegisterer->setDefaultCamera(pVis, vp[v]);
-        }
-#endif
-        std::cout << "[" << std::endl;
-        sequences[s]->restart();
-        while (sequences[s]->hasNextFrames())
-        {
-            vector<ColorDepthFrame::Ptr> frames = sequences[s]->nextFrames();
-            m_pRegisterer->setInputFrames(frames);
-            m_pRegisterer->registrate(frames);
-
-            std::vector<cv::Mat> tabletops;
-            std::vector<cv::Mat> interactions;
-            m_pTableModeler->getTabletopMask(frames, tabletops);
-            m_pTableModeler->getInteractionMask(frames, interactions);
-            
-            vector<string> fids = sequences[s]->getFramesFilenames();
-            
-            // Prepare the interactors from the different views
-            
-            std::vector<ColorPointCloudPtr> interactors (sequences[s]->getNumOfViews());
-            for (int v = 0; v < sequences[s]->getNumOfViews(); v++)
-            {
-                interactors[v] = ColorPointCloudPtr(new ColorPointCloud);
-                cv::Mat aux;
-                cvx::open(interactions[v] & ~tabletops[v], 2, aux);
-                frames[v]->getRegisteredColoredPointCloud(aux, *(interactors[v]));
-            }
-            
-            // Distinguish actors from interactors
-            std::vector<std::vector<Cloudject::Ptr> > nonInteractedActors (sequences[s]->getNumOfViews());
-            std::vector<std::vector<Cloudject::Ptr> > interactedActors (sequences[s]->getNumOfViews());
-            
-            for (int v = 0; v < sequences[s]->getNumOfViews(); v++)
-            {
-                std::vector<ForegroundRegion> regionsF;
-                remedi::io::readPredictionRegions(resultsParent + string(CLOUDJECTS_DIRNAME)
-                                                  + sequences[s]->getViewName(v), fids[v], regionsF, true);
-                
-                // Read the cloudjects representing the selected regions
-                std::vector<Cloudject::Ptr> cloudjectsF;
-                remedi::io::readCloudjectsWithDescriptor(resultsParent + string(CLOUDJECTS_DIRNAME) + sequences[s]->getViewName(v), fids[v], regionsF, "pfhrgb250", cloudjectsF, true);
-                
-                for (int i = 0; i < cloudjectsF.size(); i++)
-                    cloudjectsF[i]->setRegistrationTransformation(frames[v]->getRegistrationTransformation());
-                
-                findActors(cloudjectsF, interactors, nonInteractedActors[v], 0.02, interactedActors[v]);
-            }
-
-            // Find the correspondences among actor clouds
-            std::vector<std::vector<std::pair<int, Cloudject::Ptr> > > correspondences;
-            std::vector<std::vector<PointT> > positions;
-            remedi::findCorrespondences(frames, nonInteractedActors, OR_CORRESPONDENCE_TOLERANCE, correspondences, positions); // false (not to registrate)
-            
-            for (int i = 0; i < correspondences.size(); i++)
-            {
-                std::vector<std::vector<float> > distsToMargin (correspondences[i].size());
-                std::vector<std::vector<int> > predictions (correspondences[i].size());
-                std::vector<float> marginNormFactors (correspondences[i].size());
-                for (int v = 0; v < correspondences[i].size(); v++)
-                {
-                    predictions[v] = pipeline->predict(correspondences[i][v].second, distsToMargin[v]);
-                    for (int j = 0; j < distsToMargin.size(); j++)
-                        marginNormFactors += abs(distsToMargin[v][j]);
-                }
-                
-                std::vector<int> predictionsFused (objectsLabels.size());
-                for (int j = 0; j < objectsLabels.size(); j++)
-                {
-                    float distToMarginFused = .0f;
-                    float W = .0f;
-                    for (int v = 0; v < correspondences[i].size(); v++)
-                    {
-                        pcl::PointXYZ c = correspondences[i][v].second->getCloudCentroid();
-                        // Inverse distance weighting
-                        float wsq = 1.f / pow(sqrt(pow(c.x,2) + pow(c.y,2) + pow(c.z,2)), 4);
-                        distToMarginFused += (wsq * distsToMargin[v][j] / marginNormFactors[v]);
-                        W += wsq;
-                    }
-                    predictionsFused[j] = ((distToMarginFused/W) < 0 ? 1 : -1);
-                }
-                
-                for (int v = 0; v < correspondences[i].size(); v++)
-                {
-                    for (int j = 0; j < objectsLabels.size(); j++)
-                        if (predictionsFused[j] > 0) correspondences[i][v].second->addRegionLabel(objectsLabels[j]);
-//                        if (predictions[v][j] > 0) correspondences[i][v].second->addRegionLabel(objectsLabels[j]);
-                }
-            }
-            
-            std::vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > > annotationsF (V);
-            for (int v = 0; v < sequences[s]->getNumOfViews(); v++)
-                annotationsF[v] = gt.at(sequences[s]->getName()).at(sequences[s]->getViewName(v)).at(fids[v]);
-            
-            std::vector<std::vector<DetectionResult> > results;
-            evaluateFrame2(frames, annotationsF, correspondences, objectsLabels, results);
-            
-            for (int v = 0; v < sequences[s]->getNumOfViews(); v++)
-            {
-                DetectionResult result;
-                for (int i = 0; i < results[v].size(); i++)
-                    result += results[v][i];
-                
-                std::cout << std::to_string(result.tp) << "\t" << std::to_string(result.fp) << "\t" << std::to_string(result.fn) << (v < sequences[s]->getNumOfViews() - 1 ? "\t" : ";\n");
-            }
-//            m_DetectionResults[0] += result;
-            
-#ifdef DO_VISUALIZE_DETECTIONS
-            for (int v = 0; v < V; v++)
-            {
-                pVis->removeAllPointClouds(vp[v]);
-                pVis->removeAllShapes(vp[v]);
-                
-                for (int i = 0; i < interactors.size(); i++)
-                    pVis->addPointCloud(interactors[i], "interactor" + std::to_string(v) + "-" + std::to_string(i), vp[v] );
-                
-                for (int i = 0; i < interactedActors[v].size(); i++)
-                {
-                    pVis->addPointCloud(interactedActors[v][i]->getRegisteredCloud(), "nactor" + std::to_string(v) + "-" + std::to_string(i), vp[v] );
-                    pVis->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 0, 0, "nactor" + std::to_string(v) + "-" + std::to_string(i), vp[v]);
-                }
-                
-                for (int i = 0; i < positions[v].size(); i++)
-                {
-                    pVis->addSphere(positions[v][i], 0.025, ((v == 0) ? 1 : 0), ((v == 0) ? 0 : 1), 0, "sphere" + std::to_string(v) + "-" + std::to_string(i), vp[0] );
-                }
-            }
-            
-            for (int i = 0; i < correspondences.size(); i++) for (int j = 0; j < correspondences[i].size(); j++)
-            {
-                int v = correspondences[i][j].first;
-                pVis->addPointCloud(correspondences[i][j].second->getRegisteredCloud(), "actor" + std::to_string(v) + "-" + std::to_string(i), vp[0] );
-                pVis->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, g_Colors[i%14][0], g_Colors[i%14][1], g_Colors[i%14][2], "actor" + std::to_string(v) + "-" + std::to_string(i), vp[0]);
-            }
-            
-            pVis->spinOnce();
-#endif
-        }
-        std::cout << "];" << std::endl;
-    }
-}
-
-void downsample(ColorPointCloudPtr pCloud, float leafSize, ColorPointCloud& cloudFiltered)
-{
-    if (leafSize == 0.f)
-    {
-        cloudFiltered = *pCloud; // copy
-    }
-    else
-    {
-        pcl::VoxelGrid<ColorPointT> vg;
-        vg.setInputCloud(pCloud);
-        vg.setLeafSize(leafSize, leafSize, leafSize);
-        vg.filter(cloudFiltered);
-    }
-}
-
-void ReMedi::findActors(std::vector<Cloudject::Ptr> candidates, std::vector<ColorPointCloudPtr> interactors, std::vector<Cloudject::Ptr>& actors, float leafSize, std::vector<Cloudject::Ptr>& interactedActors)
-{
-    actors.clear();
-    interactedActors.clear();
-    
-    std::vector<ColorPointCloudPtr> _candidates (candidates.size());
-    for (int i = 0; i < candidates.size(); i++)
-        _candidates[i] = candidates[i]->getRegisteredCloud();
-    
-    std::vector<bool> interactionsMask;
-    findInteractions(_candidates, interactors, interactionsMask, leafSize);
-    
-    assert (interactionsMask.size() == _candidates.size());
-    
-    actors.reserve(candidates.size());
-    interactedActors.reserve(candidates.size());
-    
-    for (int i = 0; i < candidates.size(); i++)
-    {
-        if (!interactionsMask[i])
-            actors.push_back(candidates[i]);
-        else
-            interactedActors.push_back(candidates[i]);
-    }
-}
-
-void ReMedi::findInteractions(std::vector<ColorPointCloudPtr> candidates, std::vector<ColorPointCloudPtr> interactors, std::vector<bool>& mask, float leafSize)
-{
-    mask.clear();
-    mask.resize(candidates.size(), false);
-
-    std::vector<ColorPointCloudPtr> interactorsFilt;
-    bool bMainInteractorsPresent = false;
-    
-    for (int i = 0; i < interactors.size(); i++)
-    {
-        ColorPointCloudPtr pInteractorFilt (new ColorPointCloud);
-        downsample(interactors[i], leafSize, *pInteractorFilt);
-        
-        ColorPointCloudPtr pMainInteractorFilt (new ColorPointCloud);
-        biggestEuclideanCluster(pInteractorFilt, 250, 25000, leafSize, *pMainInteractorFilt);
-        
-        if (pMainInteractorFilt->size() > 0)
-            interactorsFilt.push_back(pMainInteractorFilt);
-    }
-
-    if (!interactorsFilt.empty())
-    {
-        std::vector<ColorPointCloudPtr> candidatesCloudsFilt (candidates.size());
-        for (int i = 0; i < candidates.size(); i++)
-        {
-            ColorPointCloudPtr pCandidateCloudFilt (new ColorPointCloud);
-            downsample(candidates[i], leafSize, *pCandidateCloudFilt);
-            
-            candidatesCloudsFilt[i] = pCandidateCloudFilt;
-        }
-        
-        // Check for each cluster that lies on the table
-        for (int j = 0; j < interactorsFilt.size(); j++) for (int i = 0; i < candidatesCloudsFilt.size(); i++)
-            if (isInteractive(candidatesCloudsFilt[i], interactorsFilt[j], 4.*leafSize))
-                mask[i] = true;
-    }
-}
-
-bool ReMedi::isInteractive(ColorPointCloudPtr tabletopRegionCluster, ColorPointCloudPtr interactionCloud, float tol)
-{
-    bool interactive = false;
-    
-    // if some of its points
-    for (int k_i = 0; k_i < tabletopRegionCluster->points.size() && !interactive; k_i++)
-    {
-        if (tabletopRegionCluster->points[k_i].z > 0)
-        {
-            // some point of the interaction region.
-            for (int k_j = 0; k_j < interactionCloud->points.size() && !interactive; k_j++)
-            {
-                if (interactionCloud->points[k_j].z > 0)
-                {
-                    ColorPointT p = tabletopRegionCluster->points[k_i];
-                    ColorPointT q = interactionCloud->points[k_j];
-                    
-                    // If they are practically contiguous, they must had been part of the same cloud
-                    float pqDist = sqrt(pow(p.x - q.x, 2) + pow(p.y - q.y, 2) + pow(p.z - q.z, 2));
-                    interactive = (pqDist <= tol); // if tabletop cluster is stick to any cluster
-                    // in the interaction region, we say it is interactive
-                    // and become an interactor
-                }
-            }
-        }
-    }
-    
-    return interactive;
-}
-
-void remedi::MatToColoredPointCloud(cv::Mat depth, cv::Mat color, cv::Mat mask, int pos[2], pcl::PointCloud<pcl::PointXYZRGB>& cloud)
-{
-    cloud.height = mask.rows;
-    cloud.width =  mask.cols;
-    cloud.resize(mask.rows * mask.cols);
-    cloud.is_dense = true;
-    
-    float invfocal = (1/285.63f) / (X_RESOLUTION/320.f); // Kinect inverse focal length. If depth map resolution
-    
-    float z;
-    float rwx, rwy, rwz;
-    pcl::PointXYZRGB p;
-    
-    for (unsigned int y = 0; y < mask.rows; y++) for (unsigned int x = 0; x < mask.cols; x++)
-    {
-        if (mask.at<unsigned char>(y,x) > 0)
-        {
-            z = (float) depth.at<unsigned short>(y+pos[1],x+pos[0]) /*z_us*/;
-            
-            if (z > MIN_DEPTH && z < MAX_DEPTH)
-            {
-                rwx = ((x+pos[0]) - 320.0) * invfocal * z;
-                rwy = ((y+pos[1]) - 240.0) * invfocal * z;
-                rwz = z;
-                
-                p.x = rwx/1000.f;
-                p.y = rwy/1000.f;
-                p.z = rwz/1000.f;
-                
-                cv::Vec3b c = color.at<cv::Vec3b>(y+pos[1],x+pos[0]);
-                p.b = c[0];
-                p.g = c[1];
-                p.r = c[2];
-                
-                cloud.at(x,y) = p;
-            }
-        }
-    }
-}
-
-void remedi::findCorrespondences(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, float tol, std::vector<std::vector<std::pair<int,Cloudject::Ptr> > >& correspondences, std::vector<std::vector<PointT> >& positions)
-{
-    correspondences.clear();
-    
-    // Correspondences found using the positions of the clouds' centroids
-    //    std::vector<std::vector<PointT> > positions;
-    _getDetectionPositions(frames, detections, true, positions); // registrate is "true"
-    
-    std::vector<std::vector<std::pair<std::pair<int,int>,PointT> > > _correspondences;
-    _findCorrespondences(positions, tol, _correspondences);
-    
-    // Bc we want to have chains of clouds (not points) and the views to which they correspond, transform _correspondences -> correspondences
-    correspondences.clear();
-    for (int i = 0; i < _correspondences.size(); i++)
-    {
-        std::vector<std::pair<int,Cloudject::Ptr> > chain; // clouds chain
-        for (int j = 0; j < _correspondences[i].size(); j++)
-        {
-            int v   = _correspondences[i][j].first.first;
-            int idx = _correspondences[i][j].first.second;
-            
-            chain += std::pair<int,Cloudject::Ptr>(v, detections[v][idx]);
-        }
-        correspondences += chain;
-    }
-}
-
-void remedi::_findCorrespondences(std::vector<std::vector<PointT> > positions, float tol, std::vector<std::vector<std::pair<std::pair<int,int>,PointT> > >& correspondences)
-{
-    correspondences.clear();
-    
-    // Keep already made assignations, to cut search paths
-    std::vector<std::vector<bool> > assignations (positions.size());
-    for (int v = 0; v < positions.size(); v++)
-        assignations[v].resize(positions[v].size(), false);
-    
-    // Cumbersome internal (from this function) structure:
-    // Vector of chains
-    // A chain is a list of points
-    // These points have somehow attached the 'view' and the 'index in the view'.
-    for (int v = 0; v < positions.size(); v++)
-    {
-        for (int i = 0; i < positions[v].size(); i++)
-        {
-            if (!assignations[v][i])
-            {
-                std::vector<std::pair<std::pair<int,int>,PointT> > chain; // points chain
-                chain += std::pair<std::pair<int,int>,PointT>(std::pair<int,int>(v,i), positions[v][i]);
-                assignations[v][i] = true;
-                
-                if (tol > 0)
-                    findNextCorrespondence(positions, assignations, v+1, tol, chain); // recursion
-                
-                correspondences += chain;
-            }
-        }
-    }
-}
-
-
-void remedi::findNextCorrespondence(std::vector<std::vector<PointT> >& positions, std::vector<std::vector<bool> >& assignations, int v, float tol, std::vector<std::pair<std::pair<int,int>,PointT> >& chain)
-{
-    if (v == positions.size())
-    {
-        return;
-    }
-    else
-    {
-        int candidateIdx = -1;
-        bool bMoreThanOneCandidate = false;
-        for (int j = 0; (j < positions[v].size()) && !bMoreThanOneCandidate; j++)
-        {
-            if (!assignations[v][j])
-            {
-                PointT q = positions[v][j]; // candidate
-                
-                // To be a strong candidate is to fulfill the tolerance condition
-                // for all the chain's former points
-                bool bStrongCandidate = true;
-                for (int i = 0; i < chain.size(); i++)
-                {
-                    PointT p = chain[i].second;
-                    float d = sqrt(pow(p.x - q.x, 2) + pow(p.y - q.y, 2) + pow(p.z - q.z, 2));
-                    
-                    bStrongCandidate &= (d <= tol);
-                }
-                // If strong, nominate as temporary candidate
-                if (bStrongCandidate)
-                {
-                    if (candidateIdx < 0) candidateIdx = j;
-                    else bMoreThanOneCandidate = true;
-                }
-            }
-        }
-        // If one (and just one) candidate was found
-        if (candidateIdx >= 0 && !bMoreThanOneCandidate)
-        {
-            chain += std::pair<std::pair<int,int>,PointT>(std::pair<int,int>(v,candidateIdx), positions[v][candidateIdx]);
-            assignations[v][candidateIdx] = true;
-        }
-        
-        findNextCorrespondence(positions, assignations, v+1, tol, chain);
     }
 }
 
@@ -1739,35 +838,13 @@ void remedi::findNextCorrespondence(std::vector<std::vector<PointT> >& positions
 //    }
 //}
 
-
-void remedi::_getDetectionPositions(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, bool bRegistrate, std::vector<std::vector<PointT> >& positions)
-{
-    positions.clear();
-    
-    positions.resize(detections.size());
-    for (int v = 0; v < detections.size(); v++)
-    {
-        std::vector<PointT> viewPositions (detections[v].size());
-        
-        for (int i = 0; i < detections[v].size(); i++)
-        {
-            if (!bRegistrate)
-                viewPositions[i] = detections[v][i]->getCloudCentroid();
-            else
-                viewPositions[i] = detections[v][i]->getRegisteredCloudCentroid();
-        }
-        
-        positions[v] = viewPositions;
-    }
-}
-
-void remedi::findContentions(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, float tol, std::vector<std::vector<std::pair<int,Cloudject::Ptr> > >& contentions, std::vector<std::vector<Rectangle3D> >& rectangles)
+void remedi::findContentions(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, float tol, std::vector<std::vector<std::pair<int,Cloudject::Ptr> > >& contentions, std::vector<std::vector<pclx::Rectangle3D> >& rectangles)
 {
     contentions.clear();
     
     // Correspondences found using the positions of the clouds' centroids
     //    std::vector<std::vector<PointT> > positions;
-    _getDetectionRectangles(frames, detections, true, rectangles); // registrate is "true"
+    getDetectionRectangles(frames, detections, true, rectangles); // registrate is "true"
     
     for (int v_i = 0; v_i < frames.size(); v_i++) for (int i = 0; i < detections[v_i].size(); i++)
     {
@@ -1776,10 +853,8 @@ void remedi::findContentions(std::vector<ColorDepthFrame::Ptr> frames, std::vect
         
         for (int v_j = v_i+1; v_j < frames.size(); v_j++) for (int j = 0; j < detections[v_j].size(); j++)
         {
-            float inc = remedi::rectangleInclusion(rectangles[v_i][i], rectangles[v_j][j]);
-//            std::cout << rectangles[v_i][i] << std::endl;
-//            std::cout << rectangles[v_j][j] << std::endl;
-//            std::cout << inc << std::endl;
+            float inc = pclx::rectangleInclusion(rectangles[v_i][i], rectangles[v_j][j]);
+
             if (inc > tol)
                 chain += std::pair<int,Cloudject::Ptr>(v_j, detections[v_j][j]);
         }
@@ -1788,14 +863,14 @@ void remedi::findContentions(std::vector<ColorDepthFrame::Ptr> frames, std::vect
     }
 }
 
-void remedi::_getDetectionRectangles(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, bool bRegistrate, std::vector<std::vector<Rectangle3D> >& rectangles)
+void remedi::getDetectionRectangles(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, bool bRegistrate, std::vector<std::vector<pclx::Rectangle3D> >& rectangles)
 {
     rectangles.clear();
 
     rectangles.resize(detections.size());
     for (int v = 0; v < detections.size(); v++)
     {
-        std::vector<Rectangle3D> viewRectangles (detections[v].size());
+        std::vector<pclx::Rectangle3D> viewRectangles (detections[v].size());
 
         for (int i = 0; i < detections[v].size(); i++)
         {
@@ -1803,119 +878,75 @@ void remedi::_getDetectionRectangles(std::vector<ColorDepthFrame::Ptr> frames, s
                 detections[v][i]->getCloudRectangle(viewRectangles[i].min, viewRectangles[i].max);
             else
                 detections[v][i]->getRegisteredCloudRectangle(viewRectangles[i].min, viewRectangles[i].max);
-            
-            //std::cout << viewRectangles[i] << std::endl;
-        } //std::cout << std::endl;
+        }
         
         rectangles[v] = viewRectangles;
     }
 }
 
-template<typename RegionT>
-Rectangle3D remedi::computeRectangleFromRegion(ColorDepthFrame::Ptr frame, RegionT region)
+//void standardize()
+//{
+//    for (int i = 0; i < mat.cols; i++)
+//    {
+//        cv::Scalar mean_p, std_p;
+//        cv::meanStddev(mat.col(i), mean_p, std_p);
+//    }
+//}
+//
+//void computeOutliersMask(cv::Mat mat, float thresh, cv::Mat& mask)
+//{
+//    for (int i = 0; i < mat.cols; i++)
+//    {
+//        cv::Scalar mean_p, std_p;
+//        cv::meanStddev(mat.col(i), mean_p, std_p);
+//        cv::meanStddev(mat.col(i), mean_p, std_p);
+//        
+//    }
+//}
+
+void remedi::computeScalingFactorsOfCategories(cv::Mat predictions, cv::Mat distsToMargin, cv::Mat& factors)
 {
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud (new pcl::PointCloud<pcl::PointXYZRGB>);
+    assert (predictions.size() == distsToMargin.size());
     
-    region.allocateMask();
-    int pos[2] = {region.getRect().x, region.getRect().y};
-    remedi::MatToColoredPointCloud(frame->getDepth(), frame->getColor(), region.getMask(), pos, *pCloud);
-    region.releaseMask();
+    factors.release();
     
-    Rectangle3D rectangle;
-    computeRectangle3D(*pCloud,rectangle.min,rectangle.max);
+    cv::Mat distsToMarginCStd (distsToMargin.rows, distsToMargin.cols, distsToMargin.type());
+
+    cv::Mat P, N;
     
-    return rectangle;
+    cv::Mat inliers;
+    for (int j = 0; j < predictions.cols; j++)
+    {
+        cv::Mat p = (predictions.col(j) > 0);
+        cv::Mat n = (predictions.col(j) < 0);
+        
+        cv::Scalar pMean, pStd, nMean, nStd;
+        cv::meanStdDev(distsToMargin.col(j), pMean, pStd, p);
+        cv::meanStdDev(distsToMargin.col(j), nMean, nStd, n);
+
+        cv::Mat pDistsToMarginStdCol = (distsToMargin.col(j) - pMean.val[0]) / pStd.val[0];
+        cv::Mat nDistsToMarginStdCol = (distsToMargin.col(j) - nMean.val[0]) / nStd.val[0];
+        
+        pDistsToMarginStdCol.copyTo(distsToMarginCStd.col(j), p);
+        nDistsToMarginStdCol.copyTo(distsToMarginCStd.col(j), n);
+        
+        if (P.empty()) P = p.clone();
+        else cv::hconcat(P,p,P);
+        if (N.empty()) N = n.clone();
+        else cv::hconcat(N,n,N);
+    }
+    inliers = ((distsToMarginCStd > -3) & distsToMarginCStd < 3);
+    
+    cv::Mat sqDistsToMargin;
+    cv::pow(distsToMargin, 2, sqDistsToMargin);
+    
+    factors.create(sqDistsToMargin.cols, 2, cv::DataType<float>::type);
+    for (int j = 0; j < predictions.cols; j++)
+    {
+        factors.at<float>(j,0) = cv::mean(sqDistsToMargin.col(j), N.col(j) & inliers.col(j)).val[0];
+        factors.at<float>(j,1) = cv::mean(sqDistsToMargin.col(j), P.col(j) & inliers.col(j)).val[0];
+    }
 }
-
-template<typename RegionT>
-pcl::PointXYZ remedi::computeCentroidFromRegion(ColorDepthFrame::Ptr frame, RegionT region)
-{
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud (new pcl::PointCloud<pcl::PointXYZRGB>);
-    
-    region.allocateMask();
-    int pos[2] = {region.getRect().x, region.getRect().y};
-    remedi::MatToColoredPointCloud(frame->getDepth(), frame->getColor(), region.getMask(), pos, *pCloud);
-    region.releaseMask();
-    
-    pcl::PointXYZ centroid = computeCentroid(*pCloud);
-    
-    return centroid;
-}
-
-void remedi::precomputeRectangles3D(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& annotations, std::map<std::string,std::map<std::string,Rectangle3D> >& rectangles)
-{
-    std::map<std::string,std::map<std::string,GroundtruthRegion> >::const_iterator it;
-    std::map<std::string,GroundtruthRegion>::const_iterator jt;
-    for (it = annotations.begin(); it != annotations.end(); ++it)
-        for (jt = it->second.begin(); jt != it->second.end(); ++jt)
-            rectangles[it->first][jt->first] = remedi::computeRectangleFromRegion(frame, annotations.at(it->first).at(jt->first));
-}
-
-void remedi::precomputeRectangles3D(ColorDepthFrame::Ptr frame, const std::vector<ForegroundRegion>& detections, std::vector<Rectangle3D>& rectangles)
-{
-    rectangles.resize(detections.size());
-    for (int i = 0; i < detections.size(); ++i)
-        rectangles[i] = remedi::computeRectangleFromRegion(frame, detections[i]);
-}
-
-void remedi::precomputeCentroids(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& annotations, std::map<std::string,std::map<std::string,pcl::PointXYZ> >& centroids)
-{
-    std::map<std::string,std::map<std::string,GroundtruthRegion> >::const_iterator it;
-    std::map<std::string,GroundtruthRegion>::const_iterator jt;
-    for (it = annotations.begin(); it != annotations.end(); ++it)
-        for (jt = it->second.begin(); jt != it->second.end(); ++jt)
-            centroids[it->first][jt->first] = remedi::computeCentroidFromRegion(frame, annotations.at(it->first).at(jt->first));
-}
-
-void remedi::precomputeCentroids(ColorDepthFrame::Ptr frame, const std::vector<ForegroundRegion>& detections, std::vector<pcl::PointXYZ>& centroids)
-{
-    centroids.resize(detections.size());
-    for (int i = 0; i < detections.size(); ++i)
-        centroids[i] = remedi::computeCentroidFromRegion(frame, detections[i]);
-}
-
-Rectangle3D remedi::rectangleIntersection(Rectangle3D a, Rectangle3D b)
-{
-    float aib_min_x = max(a.min.x, b.min.x);
-    float aib_min_y = max(a.min.y, b.min.y);
-    float aib_min_z = max(a.min.z, b.min.z);
-    
-    float aib_max_x = min(a.max.x, b.max.x);
-    float aib_max_y = min(a.max.y, b.max.y);
-    float aib_max_z = min(a.max.z, b.max.z);
-    
-    Rectangle3D aib;
-    aib.min = pcl::PointXYZ(aib_min_x, aib_min_y, aib_min_z);
-    aib.max = pcl::PointXYZ(aib_max_x, aib_max_y, aib_max_z);
-    
-    return aib;
-}
-
-// Auxiliary function for varianceSubsampling(...)
-float remedi::rectangleOverlap(Rectangle3D a, Rectangle3D b)
-{
-    Rectangle3D aib = remedi::rectangleIntersection(a,b);
-    
-    float overlap =  aib.area() / (a.area() + b.area() - aib.area());
-    
-    return overlap;
-}
-
-// Auxiliary function for getTrainingCloudjects(...)
-// Check the amount of inclusion of "a" in "b"
-float remedi::rectangleInclusion(Rectangle3D a, Rectangle3D b)
-{
-    Rectangle3D aib = remedi::rectangleIntersection(a,b);
-    
-    //    float aibArea = aib.area();
-    //    float aArea = a.area();
-    //    float bArea = b.area();
-    float inclusion = aib.area() / min(a.area(),b.area());
-    
-    return inclusion;
-}
-
-
 
 //void remedi::findCorrespondencesBasedOnInclusion(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, float tol, std::vector<std::vector<std::pair<int,Cloudject::Ptr> > >& correspondences, std::vector<std::vector<Rectangle3D> >& rectangles)
 //{
@@ -1982,7 +1013,7 @@ float remedi::rectangleInclusion(Rectangle3D a, Rectangle3D b)
 //        {
 //            for (int j = 0; j < rectangles[v].size(); j++)
 //            {
-//                float inc = rectangleInclusion(chain[i].second, rectangles[v][j]);
+//                float inc = cvx::rectangleInclusion(chain[i].second, rectangles[v][j]);
 //                if (inc > 0.5)
 //                    chain += std::pair<std::pair<int,int>,Rectangle3D>(std::pair<int,int>(v,j), rectangles[v][j]);
 //            }

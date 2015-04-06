@@ -956,6 +956,79 @@ void cvx::combine(cv::InputArray src1, cv::InputArray src2, int dim, cv::OutputA
     dst.getMatRef() = _dst;
 }
 
+cv::Rect cvx::rectangleIntersection(cv::Rect a, cv::Rect b)
+{
+    int aib_min_x = std::max(a.x, b.x);
+    int aib_min_y = std::max(a.y, b.y);
+    int aib_max_x = std::min(a.x + a.width - 1, b.x + b.width - 1);
+    int aib_max_y = std::min(a.y + a.height - 1, b.y + b.height - 1);
+    
+    int width = aib_max_x - aib_min_x + 1;
+    int height = aib_max_y - aib_min_y + 1;
+    cv::Rect aib (aib_min_x,
+                  aib_min_y,
+                  width > 0 ? width : 0,
+                  height > 0 ? height : 0);
+    return aib;
+}
+
+// Auxiliary function for varianceSubsampling(...)
+float cvx::rectangleOverlap(cv::Rect a, cv::Rect b)
+{
+    cv::Rect aib = cvx::rectangleIntersection(a,b);
+    
+    float overlap = ((float) aib.area()) / (a.area() + b.area() - aib.area());
+    
+    return overlap;
+}
+
+// Auxiliary function for getTrainingCloudjects(...)
+// Check the amount of inclusion of "a" in "b"
+float cvx::rectangleInclusion(cv::Rect a, cv::Rect b)
+{
+    cv::Rect aib = cvx::rectangleIntersection(a,b);
+    
+    float inclusion = ((float) aib.area()) / std::min(a.area(),b.area());
+    
+    return inclusion;
+}
+
+// Weighted overlap between two Region objects. It uses the rectangles
+// for the efficient computation of the intersetion. If the intersection
+// is not empty, compute in the intersection region the overlap measure.
+// Eventually, weight this overlap by the minimum size of the two
+// non-cropped overlapping regions.
+float cvx::weightedOverlapBetweenRegions(cv::Mat src1, cv::Mat src2, cv::Rect r1, cv::Rect r2)
+{
+    cv::Rect irect = cvx::rectangleIntersection(r1, r2);
+    
+    // RETURN 0 (no intersection)
+    if ( !(irect.width > 0 && irect.height > 0) )
+        return .0f;
+    
+    // Roi the intersection in the two patches
+    cv::Mat roi1 ( src1, cv::Rect(irect.x - r1.x, irect.y - r1.y,
+                                    irect.width, irect.height) );
+    cv::Mat roi2 ( src2, cv::Rect(irect.x - r1.x, irect.y - r1.y,
+                                    irect.width, irect.height) );
+    assert (roi1.rows == roi2.rows && roi1.cols == roi2.cols);
+    
+    cv::Mat iroi = roi1 & roi2;
+    
+    int count1 = cv::countNonZero(src1); // A
+    int count2 = cv::countNonZero(src2); // B
+    int icount = cv::countNonZero(iroi); // A,B , i.e. A and B
+    
+    // Overlap calculion based on Jaccard index: |A,B|/|AUB|
+    float ovl = ((float) icount) / (count1 + count2 - icount); // {AUB} = A + B - {A,B}
+    float weight = (((float) icount) / std::min(count1,count2)); // scale in proportion to min(A,B)
+    
+    float wovl = ovl * weight;
+    
+    // RETURN the weighted overlap
+    return wovl;
+}
+
 template void cvx::convert(cv::Mat mat, std::vector<std::vector<uchar> >& vv);
 template void cvx::convert(cv::Mat mat, std::vector<std::vector<ushort> >& vv);
 template void cvx::convert(cv::Mat mat, std::vector<std::vector<int> >& vv);

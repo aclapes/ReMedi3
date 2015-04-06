@@ -9,7 +9,10 @@
 #ifndef remedi2_constants_h
 #define remedi2_constants_h
 
-// Data-related constants
+//
+// Constants
+//
+
 #ifdef __APPLE__
 #define PARENT_PATH                         "../../../Data/"
 #elif _WIN32 || _WIN64
@@ -94,7 +97,6 @@ static const char* g_AnnotationLabels[] = {"dish","pillbox","book","tetrabrick",
 
 #define NUM_REPETITIONS                     3
 
-// Marker colors (as many as objects at least)
 static float g_Colors[][3] = {
     {1, 0, 0},
     {0, 1, 0},
@@ -117,10 +119,12 @@ static float g_Colors[][3] = {
     {0, .25, .5}
 };
 
+//
+// Enums
+//
+
 enum { COLOR = 0, DEPTH = 1, COLOR_WITH_SHADOWS = 2, COLORDEPTH = 3 };
 enum { DESCRIPTION_FPFH, DESCRIPTION_PFHRGB };
 enum { DETECT_MONOCULAR, DETECT_MULTIVIEW };
-
-#define DO_VISUALIZE_DETECTIONS
 
 #endif

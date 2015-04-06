@@ -115,6 +115,12 @@ namespace cvx
     void findRowsToColsAssignation(cv::Mat scores, cv::Mat& matches);
     
     void combine(cv::InputArray src1, cv::InputArray src2, int dim, cv::OutputArray dst);
+    
+    float rectangleOverlap(cv::Rect a, cv::Rect b);
+    float rectangleInclusion(cv::Rect a, cv::Rect b);
+    cv::Rect rectangleIntersection(cv::Rect a, cv::Rect b);
+    float weightedOverlapBetweenRegions(cv::Mat src1, cv::Mat src2, cv::Rect r1, cv::Rect r2);
+    
 }
 
 #endif /* defined(__remedi2__cvxtended__) */
