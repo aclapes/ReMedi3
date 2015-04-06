@@ -454,7 +454,9 @@ int runDetection(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> s
                 for (int i = 0; i < detectionValCombs.size(); i++)
                 {
                     pCjDetectionPipeline->setMultiviewDetectionStrategy(DETECT_MULTIVIEW);
-                    pCjDetectionPipeline->setMultiviewLateFusionNormalization(cvx::convert<float>(scalingsMat)); // floats' Mat to vv<float>
+                    std::vector<std::vector<float> > scalings;
+                    cvx::convert<float>(scalingsMat, scalings);
+                    pCjDetectionPipeline->setMultiviewLateFusionNormalization(); // floats' Mat to vv<float>
                     pCjDetectionPipeline->setMultiviewActorCorrespondenceThresh(detectionValCombs[i][0]);
                     pCjDetectionPipeline->setInteractionThresh(detectionValCombs[i][1]);
                     pCjDetectionPipeline->setClassificationPipeline(classificationPipelines[r]);
