@@ -24,10 +24,6 @@
 using namespace boost::assign;
 namespace fs = boost::filesystem;
 
-//#define DEBUG_TRAINING_CONSTRUCTION_OVERLAPS
-//#define DEBUG_TRAINING_CONSTRUCTION_SELECTION
-//#define DO_VISUALIZE_DETECTIONS
-
 ReMedi::ReMedi()
 : m_fID(0),
   m_pRegisterer(new InteractiveRegisterer),

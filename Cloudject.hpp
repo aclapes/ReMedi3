@@ -32,7 +32,7 @@
 
 #include "conversion.h"
 #include "constants.h"
-#include "pclextended.h"
+#include "pclxtended.h"
 
 
 class Cloudject
@@ -243,6 +243,16 @@ public:
         centroid.getVector4fMap() = _centroid;
 
         return centroid;
+    }
+    
+    boost::shared_ptr<pcl::VoxelGrid<pcl::PointXYZRGB> > getRegisteredGrid()
+    {
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloudTmp (new pcl::PointCloud<pcl::PointXYZRGB>);
+        boost::shared_ptr<pcl::VoxelGrid<pcl::PointXYZRGB> > pGrid (new pcl::VoxelGrid<pcl::PointXYZRGB>);
+        
+        pclx::voxelize(getRegisteredCloud(), *pCloudTmp, *pGrid, Eigen::Vector3f(.01f,.01f,.01f));
+        
+        return pGrid;
     }
     
     void getCloudRectangle(pcl::PointXYZ& min, pcl::PointXYZ& max)

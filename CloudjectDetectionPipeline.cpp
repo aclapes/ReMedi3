@@ -126,7 +126,7 @@ void CloudjectDetectionPipeline::detectMonocular()
         
         int V = m_Sequences[s]->getNumOfViews();
         
-#ifdef DO_VISUALIZE_DETECTIONS
+#ifdef DEBUG_VISUALIZE_DETECTIONS
         pcl::visualization::PCLVisualizer::Ptr pVis (new pcl::visualization::PCLVisualizer);
         std::vector<int> vp (V);
         for (int v = 0; v < V; v++)
@@ -215,7 +215,7 @@ void CloudjectDetectionPipeline::detectMonocular()
                 m_DetectionResults[v] += result;
             }
             
-#ifdef DO_VISUALIZE_DETECTIONS
+#ifdef DEBUG_VISUALIZE_DETECTIONS
             for (int v = 0; v < V; v++)
             {
                 pVis->removeAllPointClouds(vp[v]);
@@ -238,7 +238,7 @@ void CloudjectDetectionPipeline::detectMonocular()
             }
             
             pVis->spinOnce();
-#endif //DO_VISUALIZE_DETECTIONS
+#endif //DEBUG_VISUALIZE_DETECTIONS
         }
         std::cout << "];" << std::endl;
     }
@@ -254,7 +254,7 @@ void CloudjectDetectionPipeline::detectMultiview()
         + m_Sequences[s]->getName() + "/" + string(KINECT_SUBSUBDIR);
         
         int V = m_Sequences[s]->getNumOfViews();
-#ifdef DO_VISUALIZE_DETECTIONS
+#ifdef DEBUG_VISUALIZE_DETECTIONS
         pcl::visualization::PCLVisualizer::Ptr pVis (new pcl::visualization::PCLVisualizer);
         
         std::vector<int> vp (V + 1);
@@ -313,8 +313,10 @@ void CloudjectDetectionPipeline::detectMultiview()
             
             // Find the correspondences among actor clouds
             std::vector<std::vector<std::pair<int, Cloudject::Ptr> > > correspondences;
-            std::vector<std::vector<PointT> > positions;
-            findCorrespondences(frames, nonInteractedActors, OR_CORRESPONDENCE_TOLERANCE, correspondences, positions); // false (not to registrate)
+//            std::vector<std::vector<PointT> > positions;
+//            findCorrespondences(frames, nonInteractedActors, OR_CORRESPONDENCE_TOLERANCE, correspondences, positions); // false (not to registrate)
+            std::vector<std::vector<VoxelGridPtr> > grids;
+            findCorrespondences(frames, nonInteractedActors, 0, correspondences, grids); // false (not to registrate)
             
             for (int i = 0; i < correspondences.size(); i++)
             {
@@ -366,7 +368,7 @@ void CloudjectDetectionPipeline::detectMultiview()
             }
 //            m_DetectionResults[0] += result;
             
-#ifdef DO_VISUALIZE_DETECTIONS
+#ifdef DEBUG_VISUALIZE_DETECTIONS
             for (int v = 0; v < V; v++)
             {
                 pVis->removeAllPointClouds(vp[v]);
@@ -519,6 +521,7 @@ void CloudjectDetectionPipeline::getDetectionGrids(std::vector<ColorDepthFrame::
 //                viewGrids[i] = detections[v][i]->getCloudCentroid();
 //            else
 //                viewGrids[i] = detections[v][i]->getRegisteredCloudCentroid();
+            viewGrids[i] = detections[v][i]->getRegisteredGrid();
         }
         
         grids[v] = viewGrids;
