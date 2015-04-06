@@ -127,3 +127,131 @@ void pclx::findNextCorrespondence(std::vector<std::vector<pcl::PointXYZ> >& posi
     }
 }
 
+template<typename PointT>
+void pclx::voxelize(typename pcl::PointCloud<PointT>::Ptr pCloud, pcl::PointCloud<PointT>& vloud, pcl::VoxelGrid<PointT>& vox, Eigen::Vector3f leafSize)
+{
+    vox.setInputCloud(pCloud);
+    vox.setLeafSize(leafSize.x(), leafSize.y(), leafSize.z());
+    
+    // Reading errors are at (x,y,0), so filter z=0 values
+    vox.setFilterFieldName("z");
+    vox.setFilterLimits(-std::numeric_limits<float>::min(),std::numeric_limits<float>::min());
+    vox.setFilterLimitsNegative(true);
+    
+    vox.setSaveLeafLayout(true); // the most important thing!
+    vox.filter(vloud);
+}
+
+template<typename PointT>
+float pclx::computeInclusion3d(typename pcl::PointCloud<PointT>::Ptr pCloud1, typename pcl::PointCloud<PointT>::Ptr pCloud2, Eigen::Vector3f leafSize)
+{
+    pcl::VoxelGrid<PointT> vox1, vox2;
+    pcl::PointCloud<PointT> vloud1, vloud2;
+    
+    voxelize(pCloud1, vloud1, vox1, leafSize);
+    voxelize(pCloud2, vloud2, vox2, leafSize);
+    
+    return pclx::computeInclusion3d(vox1, vox2);
+}
+
+template<typename PointT>
+float pclx::computeInclusion3d(pcl::VoxelGrid<PointT>& vox1, pcl::VoxelGrid<PointT>& vox2)
+{
+    int voxels1, voxels2, voxelsI;
+    pclx::countIntersections3d(vox1, vox2, voxels1, voxels2, voxelsI);
+    
+    float inc = ((float) voxelsI) / std::min(voxels1, voxels2);
+    return inc;
+}
+
+template<typename PointT>
+float pclx::computeOverlap3d(typename pcl::PointCloud<PointT>::Ptr pCloud1, typename pcl::PointCloud<PointT>::Ptr pCloud2, Eigen::Vector3f leafSize)
+{
+    pcl::VoxelGrid<PointT> vox1, vox2;
+    pcl::PointCloud<PointT> vloud1, vloud2;
+    
+    voxelize(pCloud1, vloud1, vox1, leafSize);
+    voxelize(pCloud2, vloud2, vox2, leafSize);
+    
+    return pclx::computeOverlap3d(vox1, vox2);
+}
+
+template<typename PointT>
+float pclx::computeOverlap3d(pcl::VoxelGrid<PointT>& vox1, pcl::VoxelGrid<PointT>& vox2)
+{
+    int voxels1, voxels2, voxelsI;
+    pclx::countIntersections3d(vox1, vox2, voxels1, voxels2, voxelsI);
+    
+    float ovl = ((float) voxelsI) / (voxels1 + voxels2 - voxelsI);
+    return ovl;
+}
+
+template<typename PointT>
+void pclx::countIntersections3d(pcl::VoxelGrid<PointT>& vox1, pcl::VoxelGrid<PointT>& vox2, int& voxels1, int& voxels2, int& voxelsI)
+{
+    voxels1 = voxels2 = voxelsI = 0;
+    
+    Eigen::Vector3i min1 = vox1.getMinBoxCoordinates();
+    Eigen::Vector3i min2 = vox2.getMinBoxCoordinates();
+    Eigen::Vector3i max1 = vox1.getMaxBoxCoordinates();
+    Eigen::Vector3i max2 = vox2.getMaxBoxCoordinates();
+    
+    Eigen::Vector3i minU (min1.x() < min2.x() ? min1.x() : min2.x(),
+                          min1.y() < min2.y() ? min1.y() : min2.y(),
+                          min1.z() < min2.z() ? min1.z() : min2.z());
+    Eigen::Vector3i maxU (max1.x() < max2.x() ? max1.x() : max2.x(),
+                          max1.y() < max2.y() ? max1.y() : max2.y(),
+                          max1.z() < max2.z() ? max1.z() : max2.z());
+    
+    for (int i = minU.x(); i < maxU.x(); i++)
+    {
+        for (int j = minU.y(); j < maxU.x(); j++)
+        {
+            for (int k = minU.z(); k < maxU.z(); k++)
+            {
+                int idx1 = vox1.getCentroidIndexAt(Eigen::Vector3i(i,j,k));
+                int idx2 = vox2.getCentroidIndexAt(Eigen::Vector3i(i,j,k));
+                
+                // Not the most readable if-structure but for the sake of
+                // efficiency
+                if (idx1 != -1)
+                {
+                    if (idx2 != -1)
+                    {
+                        voxelsI++;
+                        voxels2++;
+                    }
+                    
+                    voxels1++;
+                }
+                else if (idx2 != -1)
+                {
+                    if (idx1 != -1)
+                    {
+                        voxelsI++;
+                        voxels1++;
+                    }
+                    
+                    voxels2++;
+                }
+            }
+        }
+    }
+}
+
+
+template void pclx::voxelize(pcl::PointCloud<pcl::PointXYZ>::Ptr pCloud, pcl::PointCloud<pcl::PointXYZ>& vloud, pcl::VoxelGrid<pcl::PointXYZ>& vox, Eigen::Vector3f leafSize);
+template void pclx::voxelize( pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud, pcl::PointCloud<pcl::PointXYZRGB>& vloud, pcl::VoxelGrid<pcl::PointXYZRGB>& vox, Eigen::Vector3f leafSize);
+
+template float pclx::computeOverlap3d<pcl::PointXYZ>(pcl::PointCloud<pcl::PointXYZ>::Ptr pCloud1,  pcl::PointCloud<pcl::PointXYZ>::Ptr pCloud2, Eigen::Vector3f leafSize);
+template float pclx::computeOverlap3d<pcl::PointXYZRGB>(pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud1, pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud2, Eigen::Vector3f leafSize);
+template float pclx::computeOverlap3d<pcl::PointXYZ>(pcl::VoxelGrid<pcl::PointXYZ>& vox1, pcl::VoxelGrid<pcl::PointXYZ>& vox2);
+template float pclx::computeOverlap3d<pcl::PointXYZRGB>(pcl::VoxelGrid<pcl::PointXYZRGB>& vox1, pcl::VoxelGrid<pcl::PointXYZRGB>& vox2);
+
+template float pclx::computeInclusion3d<pcl::PointXYZ>(pcl::PointCloud<pcl::PointXYZ>::Ptr pCloud1,  pcl::PointCloud<pcl::PointXYZ>::Ptr pCloud2, Eigen::Vector3f leafSize);
+template float pclx::computeInclusion3d<pcl::PointXYZRGB>(pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud1, pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud2, Eigen::Vector3f leafSize);
+template float pclx::computeInclusion3d<pcl::PointXYZ>(pcl::VoxelGrid<pcl::PointXYZ>& vox1, pcl::VoxelGrid<pcl::PointXYZ>& vox2);
+template float pclx::computeInclusion3d<pcl::PointXYZRGB>(pcl::VoxelGrid<pcl::PointXYZRGB>& vox1, pcl::VoxelGrid<pcl::PointXYZRGB>& vox2);
+
+template void pclx::countIntersections3d(pcl::VoxelGrid<pcl::PointXYZ>& vox1, pcl::VoxelGrid<pcl::PointXYZ>& vox2, int& voxels1, int& voxels2, int& voxelsI);
+template void pclx::countIntersections3d(pcl::VoxelGrid<pcl::PointXYZRGB>& vox1, pcl::VoxelGrid<pcl::PointXYZRGB>& vox2, int& voxels1, int& voxels2, int& voxelsI);
