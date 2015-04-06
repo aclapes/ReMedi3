@@ -32,6 +32,7 @@
 
 #include "conversion.h"
 #include "constants.h"
+#include "pclextended.h"
 
 
 class Cloudject

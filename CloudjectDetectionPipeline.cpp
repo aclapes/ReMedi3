@@ -504,6 +504,27 @@ void CloudjectDetectionPipeline::getDetectionPositions(std::vector<ColorDepthFra
     }
 }
 
+void CloudjectDetectionPipeline::getDetectionGrids(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, bool bRegistrate, std::vector<std::vector<VoxelGridPtr> >& grids)
+{
+    grids.clear();
+    
+    grids.resize(detections.size());
+    for (int v = 0; v < detections.size(); v++)
+    {
+        std::vector<VoxelGridPtr> viewGrids (detections[v].size());
+        
+        for (int i = 0; i < detections[v].size(); i++)
+        {
+//            if (!bRegistrate)
+//                viewGrids[i] = detections[v][i]->getCloudCentroid();
+//            else
+//                viewGrids[i] = detections[v][i]->getRegisteredCloudCentroid();
+        }
+        
+        grids[v] = viewGrids;
+    }
+}
+
 bool CloudjectDetectionPipeline::isInteractive(ColorPointCloudPtr tabletopRegionCluster, ColorPointCloudPtr interactionCloud, float tol)
 {
     bool interactive = false;
@@ -544,6 +565,33 @@ void CloudjectDetectionPipeline::findCorrespondences(std::vector<ColorDepthFrame
     
     std::vector<std::vector<std::pair<std::pair<int,int>,PointT> > > _correspondences;
     pclx::findCorrespondences(positions, tol, _correspondences);
+    
+    // Bc we want to have chains of clouds (not points) and the views to which they correspond, transform _correspondences -> correspondences
+    correspondences.clear();
+    for (int i = 0; i < _correspondences.size(); i++)
+    {
+        std::vector<std::pair<int,Cloudject::Ptr> > chain; // clouds chain
+        for (int j = 0; j < _correspondences[i].size(); j++)
+        {
+            int v   = _correspondences[i][j].first.first;
+            int idx = _correspondences[i][j].first.second;
+            
+            chain.push_back( std::pair<int,Cloudject::Ptr>(v, detections[v][idx]) );
+        }
+        correspondences.push_back( chain );
+    }
+}
+
+void CloudjectDetectionPipeline::findCorrespondences(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, float tol, std::vector<std::vector<std::pair<int,Cloudject::Ptr> > >& correspondences, std::vector<std::vector<VoxelGridPtr> >& grids)
+{
+    correspondences.clear();
+    
+    // Correspondences found using the positions of the clouds' centroids
+    //    std::vector<std::vector<PointT> > positions;
+    getDetectionGrids(frames, detections, true, grids); // registrate is "true"
+    
+    std::vector<std::vector<std::pair<std::pair<int,int>,VoxelGridPtr> > > _correspondences;
+    pclx::findCorrespondences(grids, tol, _correspondences);
     
     // Bc we want to have chains of clouds (not points) and the views to which they correspond, transform _correspondences -> correspondences
     correspondences.clear();
