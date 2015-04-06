@@ -127,6 +127,85 @@ void pclx::findNextCorrespondence(std::vector<std::vector<pcl::PointXYZ> >& posi
     }
 }
 
+void pclx::findCorrespondences(std::vector<std::vector<VoxelGridPtr> > grids, float tol, std::vector<std::vector<std::pair<std::pair<int,int>,VoxelGridPtr> > >& correspondences)
+{
+    correspondences.clear();
+    
+    // Keep already made assignations, to cut search paths
+    std::vector<std::vector<bool> > assignations (grids.size());
+    for (int v = 0; v < grids.size(); v++)
+        assignations[v].resize(grids[v].size(), false);
+    
+    // Cumbersome internal (from this function) structure:
+    // Vector of chains
+    // A chain is a list of points
+    // These points have somehow attached the 'view' and the 'index in the view'.
+    for (int v = 0; v < grids.size(); v++)
+    {
+        for (int i = 0; i < grids[v].size(); i++)
+        {
+            if (!assignations[v][i])
+            {
+                std::vector<std::pair<std::pair<int,int>,VoxelGridPtr> > chain; // points chain
+                chain.push_back( std::pair<std::pair<int,int>,VoxelGridPtr>(std::pair<int,int>(v,i), grids[v][i]) );
+                assignations[v][i] = true;
+                
+                if (tol > 0)
+                    findNextCorrespondence(grids, assignations, v+1, tol, chain); // recursion
+                
+                correspondences.push_back(chain);
+            }
+        }
+    }
+}
+
+
+void pclx::findNextCorrespondence(std::vector<std::vector<VoxelGridPtr> >& grids, std::vector<std::vector<bool> >& assignations, int v, float tol, std::vector<std::pair<std::pair<int,int>,VoxelGridPtr> >& chain)
+{
+    if (v == grids.size())
+    {
+        return;
+    }
+    else
+    {
+        int candidateIdx = -1;
+        bool bMoreThanOneCandidate = false;
+        for (int j = 0; (j < grids[v].size()) && !bMoreThanOneCandidate; j++)
+        {
+            if (!assignations[v][j])
+            {
+                VoxelGridPtr q = grids[v][j]; // candidate
+                
+                // To be a strong candidate is to fulfill the tolerance condition
+                // for all the chain's former points
+                bool bStrongCandidate = true;
+                for (int i = 0; i < chain.size(); i++)
+                {
+                    VoxelGridPtr p = chain[i].second;
+                    float inc = pclx::computeInclusion3d(*q,*p);
+                    
+                    bStrongCandidate &= (inc > tol);
+                }
+                // If strong, nominate as temporary candidate
+                if (bStrongCandidate)
+                {
+                    if (candidateIdx < 0) candidateIdx = j;
+                    else bMoreThanOneCandidate = true;
+                }
+            }
+        }
+        // If one (and just one) candidate was found
+        if (candidateIdx >= 0 && !bMoreThanOneCandidate)
+        {
+            chain.push_back( std::pair<std::pair<int,int>,VoxelGridPtr>(std::pair<int,int>(v,candidateIdx), grids[v][candidateIdx]) );
+            assignations[v][candidateIdx] = true;
+        }
+        
+        findNextCorrespondence(grids, assignations, v+1, tol, chain);
+    }
+}
+
+
 template<typename PointT>
 void pclx::voxelize(typename pcl::PointCloud<PointT>::Ptr pCloud, pcl::PointCloud<PointT>& vloud, pcl::VoxelGrid<PointT>& vox, Eigen::Vector3f leafSize)
 {

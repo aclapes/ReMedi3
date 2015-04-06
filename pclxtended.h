@@ -13,6 +13,10 @@
 #include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
 #include <pcl/filters/voxel_grid.h>
+#include <boost/shared_ptr.hpp>
+
+typedef pcl::VoxelGrid<pcl::PointXYZRGB> VoxelGrid;
+typedef boost::shared_ptr<pcl::VoxelGrid<pcl::PointXYZRGB> > VoxelGridPtr;
 
 namespace pclx
 {
@@ -61,6 +65,9 @@ namespace pclx
     
     void findCorrespondences(std::vector<std::vector<pcl::PointXYZ> > positions, float tol, std::vector<std::vector<std::pair<std::pair<int,int>,pcl::PointXYZ> > >&  correspondences);
     void findNextCorrespondence(std::vector<std::vector<pcl::PointXYZ> >& detections, std::vector<std::vector<bool> >& assignations, int v, float tol, std::vector<std::pair<std::pair<int,int>,pcl::PointXYZ> >& chain);
+    
+    void findCorrespondences(std::vector<std::vector<VoxelGridPtr> > grids, float tol, std::vector<std::vector<std::pair<std::pair<int,int>,VoxelGridPtr> > >&  correspondences);
+    void findNextCorrespondence(std::vector<std::vector<VoxelGridPtr> >& grids, std::vector<std::vector<bool> >& assignations, int v, float tol, std::vector<std::pair<std::pair<int,int>,VoxelGridPtr> >& chain);
     
     template<typename PointT>
     void voxelize(typename pcl::PointCloud<PointT>::Ptr pCloud, pcl::PointCloud<PointT>& vloud, pcl::VoxelGrid<PointT>& vox, Eigen::Vector3f leafSize);
