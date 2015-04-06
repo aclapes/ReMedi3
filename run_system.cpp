@@ -398,27 +398,27 @@ int runDetection(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> s
             pCjDetectionPipeline->setInteractiveRegisterer(pSys->getRegisterer());
             pCjDetectionPipeline->setTableModeler(pSys->getTableModeler());
 
-            // MONOCULAR
-            for (int r = 0; r < NUM_REPETITIONS; r++)
-            {
-                for (int i = 0; i < detectionValCombs.size(); i++)
-                {
-                    pCjDetectionPipeline->setMultiviewDetectionStrategy(DETECT_MONOCULAR);
-                    pCjDetectionPipeline->setMultiviewActorCorrespondenceThresh(detectionValCombs[i][0]);
-                    pCjDetectionPipeline->setInteractionThresh(detectionValCombs[i][1]);
-                    pCjDetectionPipeline->setClassificationPipeline(classificationPipelines[r]);
-                    
-                    pCjDetectionPipeline->detect();
-                    
-//                    std::vector<DetectionResult> dtResultsFold = pSys->getDetectionResults();
-//                    for (int v = 0; v < dtResultsFold.size(); v++)
-//                        dtMonocularResults[t][r].at<cv::Vec3f>(i,v) = dtResultsFold[v].toVector();
-                }
-                
-//                cv::FileStorage fs ("detection-monocular_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r) + ".yml", cv::FileStorage::WRITE);
-//                fs << "detections" << dtMonocularResults[t][r];
-//                fs.release();
-            }
+//            // MONOCULAR
+//            for (int r = 0; r < NUM_REPETITIONS; r++)
+//            {
+//                for (int i = 0; i < detectionValCombs.size(); i++)
+//                {
+//                    pCjDetectionPipeline->setMultiviewDetectionStrategy(DETECT_MONOCULAR);
+//                    pCjDetectionPipeline->setMultiviewActorCorrespondenceThresh(detectionValCombs[i][0]);
+//                    pCjDetectionPipeline->setInteractionThresh(detectionValCombs[i][1]);
+//                    pCjDetectionPipeline->setClassificationPipeline(classificationPipelines[r]);
+//                    
+//                    pCjDetectionPipeline->detect();
+//                    
+////                    std::vector<DetectionResult> dtResultsFold = pSys->getDetectionResults();
+////                    for (int v = 0; v < dtResultsFold.size(); v++)
+////                        dtMonocularResults[t][r].at<cv::Vec3f>(i,v) = dtResultsFold[v].toVector();
+//                }
+//                
+////                cv::FileStorage fs ("detection-monocular_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r) + ".yml", cv::FileStorage::WRITE);
+////                fs << "detections" << dtMonocularResults[t][r];
+////                fs.release();
+//            }
             
             // MULTIVIEW
             for (int r = 0; r < NUM_REPETITIONS; r++)

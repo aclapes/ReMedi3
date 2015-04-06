@@ -257,10 +257,10 @@ void CloudjectDetectionPipeline::detectMultiview()
 #ifdef DO_VISUALIZE_DETECTIONS
         pcl::visualization::PCLVisualizer::Ptr pVis (new pcl::visualization::PCLVisualizer);
         
-        std::vector<int> vp (V);
-        for (int v = 0; v < V; v++)
+        std::vector<int> vp (V + 1);
+        for (int v = 0; v < (V + 1); v++)
         {
-            pVis->createViewPort(v*(1.f/V), 0, (v+1)*(1.f/V), 1, vp[v]);
+            pVis->createViewPort(v*(1.f/(V+1)), 0, (v+1)*(1.f/(V+1)), 1, vp[v]);
             pVis->setBackgroundColor (1, 1, 1, vp[v]);
             m_pRegisterer->setDefaultCamera(pVis, vp[v]);
         }
@@ -371,7 +371,10 @@ void CloudjectDetectionPipeline::detectMultiview()
             {
                 pVis->removeAllPointClouds(vp[v]);
                 pVis->removeAllShapes(vp[v]);
-                
+            }
+            
+            for (int v = 0; v < V; v++)
+            {
                 for (int i = 0; i < interactors.size(); i++)
                     pVis->addPointCloud(interactors[i], "interactor" + std::to_string(v) + "-" + std::to_string(i), vp[v] );
                 

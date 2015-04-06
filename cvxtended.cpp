@@ -1009,7 +1009,7 @@ float cvx::weightedOverlapBetweenRegions(cv::Mat src1, cv::Mat src2, cv::Rect r1
     // Roi the intersection in the two patches
     cv::Mat roi1 ( src1, cv::Rect(irect.x - r1.x, irect.y - r1.y,
                                     irect.width, irect.height) );
-    cv::Mat roi2 ( src2, cv::Rect(irect.x - r1.x, irect.y - r1.y,
+    cv::Mat roi2 ( src2, cv::Rect(irect.x - r2.x, irect.y - r2.y,
                                     irect.width, irect.height) );
     assert (roi1.rows == roi2.rows && roi1.cols == roi2.cols);
     
