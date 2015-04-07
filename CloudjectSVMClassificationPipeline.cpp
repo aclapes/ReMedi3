@@ -242,7 +242,7 @@ void CloudjectSVMClassificationPipelineBase<T>::validate(cv::Mat XTr, cv::Mat XT
     {
         for (int j = 0; j < YTr.cols; j++)
         {
-            CvSVM::CvSVM svm;
+            CvSVM svm;
             svm.train(XTr, YTr.col(j), cv::Mat(), cv::Mat(),
                       CvSVMParams(CvSVM::C_SVC, CvSVM::RBF, 0, m_ClassifiersValParamCombs[i][0], 0, m_ClassifiersValParamCombs[i][1], 0, 0, 0, cvTermCriteria(CV_TERMCRIT_ITER+CV_TERMCRIT_EPS, 500, 1e-4)));
             
@@ -805,7 +805,7 @@ float CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::validate()
                 // of categories)
                 std::map<std::string,cv::Mat> XMap;
                 stratify(m_X, m_Countings, m_Y, XMap);
-                int sq = std::floor(m_qValParam[i] / m_Categories.size());
+                int sq = std::floorf(m_qValParam[i] / m_Categories.size());
                 bow(XMap, (sq == 0) ? 1 : sq, gQ[i]);
             }
         }
@@ -840,7 +840,7 @@ float CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::validate()
                     bow(XTr, m_qValParam[i], Q);
                 else
                 {
-                    int sq = std::floor(m_qValParam[i] / m_Categories.size());
+                    int sq = std::floorf(m_qValParam[i] / m_Categories.size());
                     bow(XTrMap, (sq == 0) ? 1 : sq, Q);
                 }
             }
@@ -1210,7 +1210,7 @@ void CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::save(std::stri
 //    }
 //}
 
-template class CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>;
+//template class CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>;
 
 template void CloudjectSVMClassificationPipelineBase<pcl::PFHRGBSignature250>::setInputCloudjects(boost::shared_ptr<std::list<MockCloudject::Ptr> > cloudjects);
 template void CloudjectSVMClassificationPipelineBase<pcl::PFHRGBSignature250>::setCategories(std::vector<const char*> categories);
