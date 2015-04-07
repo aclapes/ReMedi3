@@ -263,7 +263,7 @@ void visualizeMonocular(pcl::visualization::PCLVisualizer::Ptr pViz, std::vector
         }
     }
     
-    pViz->spin();
+    pViz->spinOnce(50);
 }
 
 void CloudjectDetectionPipeline::detectMonocular()
@@ -357,11 +357,11 @@ void CloudjectDetectionPipeline::detectMonocular()
                                objectsResult);
                 
                 for (int i = 0; i < objectsResult.size(); i++)
-                    m_DetectionResults[v][i] = objectsResult[i];
+                    m_DetectionResults[v][i] += objectsResult[i];
                 
 #ifdef DEBUG_VISUALIZE_DETECTIONS
                 DetectionResult result;
-                for (int i = 0; i < objectsResults.size(); i++)
+                for (int i = 0; i < objectsResult.size(); i++)
                     result += objectsResult[i];
                 
                 std::cout << result.tp << "\t" << result.fp << "\t" << result.fn;
@@ -464,7 +464,7 @@ void visualizeMultiview(pcl::visualization::PCLVisualizer::Ptr pViz, std::vector
         }
     }
     
-    pViz->spin();
+    pViz->spinOnce(50);
 }
 
 void CloudjectDetectionPipeline::detectMultiview()
@@ -585,7 +585,7 @@ void CloudjectDetectionPipeline::detectMultiview()
             evaluateFrame2(frames, annotationsF, correspondences, margins, m_LeafSize, objectsResult);
             
             for (int i = 0; i < objectsResult.size(); i++)
-                m_DetectionResults[0][i] = objectsResult[i];
+                m_DetectionResults[0][i] += objectsResult[i];
             
 #ifdef DEBUG_VISUALIZE_DETECTIONS
             DetectionResult result; // for printing purposes
