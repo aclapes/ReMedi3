@@ -101,20 +101,20 @@ void BoundingBoxesGenerator::paintBox(cv::Mat *mask, boundingBox bb){
 void BoundingBoxesGenerator::expandObject(boundingBox& bbPoints, cv::Mat& modificableImg, cv::Mat depthImg, int x, int y, int &numPixels, cv::Mat& tempMask, int bbID){
     
     // We set the point to 0 so next time we create one bounding box, this pixel will not be longuer used
-    modificableImg.at<uint8_t>(y,x)=0;
-    tempMask.at<uint8_t>(y,x)=bbID;
+    modificableImg.at<unsigned char>(y,x)=0;
+    tempMask.at<unsigned char>(y,x)=bbID;
     
     for (int i=-1; i<=1; i++) for (int j=-1; j<=1; j++) {
         
         
-        if (modificableImg.at<uint8_t>(y+i,x+j)!=0){
+        if (modificableImg.at<unsigned char>(y+i,x+j)!=0){
             int diff,depth1,depth2;
             
             // Now check the depth difference
-            depth1=(depthImg.at<uint16_t>(y,x) /*>> 3*/);
-            depth2=(depthImg.at<uint16_t>(y+i,x+j) /*>> 3*/);
+            depth1=(depthImg.at<unsigned short>(y,x) /*>> 3*/);
+            depth2=(depthImg.at<unsigned short>(y+i,x+j) /*>> 3*/);
             diff = (int)std::abs((float)depth1 - (float)depth2);
-            //std::cout << "\nDEPTH 1=" << (int)(depthImg.at<uint16_t>(y,x) >> 3) << "DEPTH 2=" <<(int)(depthImg.at<uint16_t>(y+i,x+j) >> 3);
+            //std::cout << "\nDEPTH 1=" << (int)(depthImg.at<unsigned short>(y,x) >> 3) << "DEPTH 2=" <<(int)(depthImg.at<unsigned short>(y+i,x+j) >> 3);
             // If the points are not too far in depth
             if ( diff<=depthThreshold ) {
                 // Expand from the neighboor
@@ -161,8 +161,8 @@ bool BoundingBoxesGenerator::doOneBB(cv::Mat& modificableImg, cv::Mat depthImg, 
     while (y<ySize && !end){
         while (x<xSize && !end) {
             
-            uint8_t *pixel = modificableImg.ptr<uint8_t>(y,x);
-            uint16_t *dpixel = depthImg.ptr<uint16_t>(y,x);
+            unsigned char *pixel = modificableImg.ptr<unsigned char>(y,x);
+            unsigned short *dpixel = depthImg.ptr<unsigned short>(y,x);
             
             if ( (int)(*pixel) != 0 && (int)(*dpixel) > 0){
                 
