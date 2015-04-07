@@ -215,7 +215,7 @@ int run(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> sequences,
 // | Learning and prediction
 // *---------------------------------------------------------------------------*
 
-int runTrain(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> sequencesSids, const Groundtruth& gt, int beginFold = 0, int endFold = 0)
+int runClassificationTrain(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> sequencesSids, const Groundtruth& gt, int beginFold = 0, int endFold = 0)
 {
     int numOfAnnotations = sizeof(g_AnnotationLabels)/sizeof(g_AnnotationLabels[0]);
     std::vector<const char*> annotationLabels (g_AnnotationLabels, g_AnnotationLabels + numOfAnnotations);
@@ -235,7 +235,7 @@ int runTrain(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> seque
     // Train classifiers and measure recognition accuracy
     for (int t = beginFold; t < endFold; t++)
     {
-        std::cout << "Training in fold " << t << " (LOSOCV) .. " << std::endl;
+        std::cout << "Object classification train in fold " << t << " (LOSOCV) .. " << std::endl;
 
         std::vector<CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr> pipelines (NUM_REPETITIONS);
         bool bSuccess = true;
@@ -303,12 +303,12 @@ int runTrain(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> seque
     return 0;
 }
 
-int runPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> sequencesSids, const Groundtruth& gt, int beginFold = 0, int endFold = 0)
+int runClassificationPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> sequencesSids, const Groundtruth& gt, int beginFold = 0, int endFold = 0)
 {
     // Test recognition accuracy
     for (int t = beginFold; t < endFold; t++)
     {
-        std::cout << "Testing (object recognition) in fold " << t << " (LOSOCV) .." << std::endl;
+        std::cout << "Object classification prediction in fold " << t << " (LOSOCV) .." << std::endl;
 
         std::vector<CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr> pipelines (NUM_REPETITIONS);
         bool bSuccess = true;
@@ -348,27 +348,19 @@ int runPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> 
     return 0;
 }
 
-int runDetection(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> sequencesSids, const Groundtruth& gt, int beginFold = 0, int endFold = 0)
+int runDetectionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> sequencesSids, const Groundtruth& gt, int beginFold = 0, int endFold = 0)
 {
     int numOfObjects = sizeof(g_ObjectsLabels)/sizeof(g_ObjectsLabels[0]);
     std::vector<const char*> objectsLabels (g_ObjectsLabels, g_ObjectsLabels + numOfObjects);
-    
-    Detection dt;
     
     std::vector<std::vector<float> > detectionValParams;
     std::vector<float> interactionThresh;
     interactionThresh += 1, 2, 3, 6, 8;
     detectionValParams += interactionThresh;
     
-    std::vector<std::vector<float> > detectionValCombs;
-    expandParameters<float>(detectionValParams, detectionValCombs);
-    
-    std::vector<std::vector<cv::Mat> > dtMonocularResults (NUM_OF_SUBJECTS, std::vector<cv::Mat>(NUM_REPETITIONS,cv::Mat(detectionValCombs.size(),pSys->getBackgroundSequence()->getNumOfViews(),CV_32FC3)));
-    std::vector<std::vector<cv::Mat> > dtMultiviewResults (NUM_OF_SUBJECTS, std::vector<cv::Mat>(NUM_REPETITIONS,cv::Mat(detectionValCombs.size(),1,CV_32FC3)));
-    
     for (int t = beginFold; t < endFold; t++)
     {
-        std::cout << "Testing (object detection) in fold " << t << " (LOSOCV) .." << std::endl;
+        std::cout << "Detection validation in fold " << t << " (LOSOCV) .." << std::endl;
 
         std::vector<CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr> classificationPipelines (NUM_REPETITIONS);
         bool bSuccess = true;
@@ -400,20 +392,67 @@ int runDetection(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> s
 
             pCjDetectionPipeline->setValidationParameters(detectionValParams);
             
-            // MONOCULAR
             for (int r = 0; r < NUM_REPETITIONS; r++)
             {
                 pCjDetectionPipeline->setClassificationPipeline(classificationPipelines[r]);
+
+                // MONOCULAR
+                std::cout << "Validating MONOCULAR .. " << std::endl;
+                pCjDetectionPipeline->setMultiviewDetectionStrategy(DETECT_MONOCULAR);
+                
                 pCjDetectionPipeline->validate();
                 
-                pCjDetectionPipeline->save("detection_training_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
+                pCjDetectionPipeline->save("detection_monocular_training_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
+                
+                // MULTIVIEW
+                std::cout << "Validating MULTIVIEW .. " << std::endl;
+                pCjDetectionPipeline->setMultiviewDetectionStrategy(DETECT_MULTIVIEW);
+                
+                // Load predictions and dists to margin
+                std::vector<cv::Mat> predictionsTr, distsToMarginTr;
+                for (int tt = 0; tt < NUM_OF_SUBJECTS; tt++)
+                {
+                    if (tt != t)
+                    {
+                        cv::FileStorage fs;
+                        fs.open("testing_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r) + ".yml", cv::FileStorage::READ);
+                        if (fs.isOpened())
+                        {
+                            cv::Mat aux;
+                            fs["predictions"] >> aux;
+                            predictionsTr.push_back(aux);
+                            fs["distsToMargin"] >> aux;
+                            distsToMarginTr.push_back(aux);
+                        }
+                    }
+                }
+                cv::Mat predictions, distsToMargin;
+                vconcat(predictionsTr, predictions);
+                vconcat(distsToMarginTr, distsToMargin);
+
+                // Set multiview-related parameters
+                cv::Mat scalingsMat;
+                remedi::computeScalingFactorsOfCategories(predictions, distsToMargin, scalingsMat);
+                pCjDetectionPipeline->setMultiviewLateFusionNormalization(cvx::convert<float>(scalingsMat)); // floats' Mat to vv<float>
+            
+                pCjDetectionPipeline->validate();
+                
+                pCjDetectionPipeline->save("detection_multiview_training_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
             }
         }
     }
     
+    return 0;
+}
+
+int runDetectionPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> sequencesSids, const Groundtruth& gt, int beginFold = 0, int endFold = 0)
+{
+    int numOfObjects = sizeof(g_ObjectsLabels)/sizeof(g_ObjectsLabels[0]);
+    std::vector<const char*> objectsLabels (g_ObjectsLabels, g_ObjectsLabels + numOfObjects);
+    
     for (int t = beginFold; t < endFold; t++)
     {
-        std::cout << "Testing (object detection) in fold " << t << " (LOSOCV) .." << std::endl;
+        std::cout << "Detection prediction in fold " << t << " (LOSOCV) .." << std::endl;
         
         std::vector<CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr> classificationPipelines (NUM_REPETITIONS);
         std::vector<CloudjectDetectionPipeline::Ptr> detectionPipelines (NUM_REPETITIONS);
@@ -457,59 +496,13 @@ int runDetection(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> s
 //                    std::vector<DetectionResult> dtResultsFold = pSys->getDetectionResults();
 //                    for (int v = 0; v < dtResultsFold.size(); v++)
 //                        dtMonocularResults[t][r].at<cv::Vec3f>(i,v) = dtResultsFold[v].toVector();
-                }
-                
+            }
+        }
+        
 //                cv::FileStorage fs ("detection-monocular_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r) + ".yml", cv::FileStorage::WRITE);
 //                fs << "detections" << dtMonocularResults[t][r];
 //                fs.release();
-            }
-            
-//            // MULTIVIEW
-//            for (int r = 0; r < NUM_REPETITIONS; r++)
-//            {
-//                // Load predictions and dists to margin
-//                std::vector<cv::Mat> predictionsTr, distsToMarginTr;
-//                for (int tt = 0; tt < NUM_OF_SUBJECTS; tt++)
-//                {
-//                    if (tt != t)
-//                    {
-//                        cv::FileStorage fs;
-//                        fs.open("testing_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r) + ".yml", cv::FileStorage::READ);
-//                        if (fs.isOpened())
-//                        {
-//                            cv::Mat aux;
-//                            fs["predictions"] >> aux;
-//                            predictionsTr.push_back(aux);
-//                            fs["distsToMargin"] >> aux;
-//                            distsToMarginTr.push_back(aux);
-//                        }
-//                    }
-//                }
-//                
-//                cv::Mat predictions, distsToMargin;
-//                vconcat(predictionsTr, predictions);
-//                vconcat(distsToMarginTr, distsToMargin);
-//                
-//                // Use the distribution of margins to find the dispersion (std)
-//                // of both positive and negatives to use them as scale factors
-//                cv::Mat scalingsMat;
-//                remedi::computeScalingFactorsOfCategories(predictions, distsToMargin, scalingsMat);
-//                
-//                for (int i = 0; i < detectionValCombs.size(); i++)
-//                {
-//                    pCjDetectionPipeline->setMultiviewDetectionStrategy(DETECT_MULTIVIEW);
-//                    pCjDetectionPipeline->setMultiviewActorCorrespondenceThresh(detectionValCombs[i][0]);
-//                    pCjDetectionPipeline->setInteractionThresh(detectionValCombs[i][1]);
-//                    pCjDetectionPipeline->setClassificationPipeline(classificationPipelines[r]);
-//                    
-//                    std::vector<std::vector<float> > scalings;
-//                    cvx::convert<float>(scalingsMat, scalings);
-//                    pCjDetectionPipeline->setMultiviewLateFusionNormalization(scalings); // floats' Mat to vv<float>
-//
-//                    pCjDetectionPipeline->detect();
-//                }
-//            }
-        }
+    }
     
 	return 0;
 }
@@ -523,10 +516,13 @@ int main(int argc, char** argv)
     int beginFold = 0, endFold = 0;
     pcl::console::parse_2x_arguments(argc, argv, "-F", beginFold, endFold);
     
-    bool bTrain, bPrediction, bDetection;
-    bTrain      = (pcl::console::find_argument(argc, argv, "-T") >= 0);
-    bPrediction = (pcl::console::find_argument(argc, argv, "-P") >= 0);
-    bDetection  = (pcl::console::find_argument(argc, argv, "-D") >= 0);
+    bool bClassificationTrain, bClassificationPrediction,
+        bDetectionValidation, bDetectionPrediction;
+    
+    bClassificationTrain      = (pcl::console::find_argument(argc, argv, "-Ct") >= 0);
+    bClassificationPrediction = (pcl::console::find_argument(argc, argv, "-Cp") >= 0);
+    bDetectionValidation      = (pcl::console::find_argument(argc, argv, "-Dv") >= 0);
+    bDetectionPrediction      = (pcl::console::find_argument(argc, argv, "-Dp") >= 0);
     
     // *-----------------------------------------------------------------------*
     // | Read & list the paths of the seqs from PARENT_PATH/SEQUENCES_SUBDIR/
@@ -595,12 +591,14 @@ int main(int argc, char** argv)
     Groundtruth gt;
     remedi::loadGroundtruth(sequences, gt);
     
-    if (bTrain)
-        runTrain(pSys, sequences, sequencesSids, gt, (beginFold < endFold) ? beginFold : 0, (beginFold < endFold) ? endFold : NUM_OF_SUBJECTS);
-    if (bPrediction)
-        runPrediction(pSys, sequences, sequencesSids, gt, (beginFold < endFold) ? beginFold : 0, (beginFold < endFold) ? endFold : NUM_OF_SUBJECTS);
-    if (bDetection)
-        runDetection(pSys, sequences, sequencesSids, gt, (beginFold < endFold) ? beginFold : 0, (beginFold < endFold) ? endFold : NUM_OF_SUBJECTS);
+    if (bClassificationTrain)
+        runClassificationTrain(pSys, sequences, sequencesSids, gt, (beginFold < endFold) ? beginFold : 0, (beginFold < endFold) ? endFold : NUM_OF_SUBJECTS);
+    if (bClassificationPrediction)
+        runClassificationPrediction(pSys, sequences, sequencesSids, gt, (beginFold < endFold) ? beginFold : 0, (beginFold < endFold) ? endFold : NUM_OF_SUBJECTS);
+    if (bDetectionValidation)
+        runDetectionValidation(pSys, sequences, sequencesSids, gt, (beginFold < endFold) ? beginFold : 0, (beginFold < endFold) ? endFold : NUM_OF_SUBJECTS);
+    if (bDetectionPrediction)
+        runDetectionPrediction(pSys, sequences, sequencesSids, gt, (beginFold < endFold) ? beginFold : 0, (beginFold < endFold) ? endFold : NUM_OF_SUBJECTS);
     
     return 0;
 }

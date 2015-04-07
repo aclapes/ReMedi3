@@ -7,13 +7,13 @@
 //
 
 #include "CloudjectDetectionPipeline.h"
+#include "constants.h"
 #include "statistics.h"
 #include <pcl/point_types.h>
 
 CloudjectDetectionPipeline::CloudjectDetectionPipeline() :
-    m_MultiviewDetectionStrategy(0),
-    m_MultiviewActorCorrespThresh(3),
-    m_InteractionThresh(0.075)
+    m_MultiviewDetectionStrategy(DETECT_MONOCULAR),
+    m_InteractionThresh(3)
 {
     
 }
@@ -36,7 +36,6 @@ CloudjectDetectionPipeline& CloudjectDetectionPipeline::operator=(const Cloudjec
         m_Gt = rhs.m_Gt;
         
         m_MultiviewDetectionStrategy = rhs.m_MultiviewDetectionStrategy;
-        m_MultiviewActorCorrespThresh = rhs.m_MultiviewActorCorrespThresh;
         m_InteractionThresh = rhs.m_InteractionThresh;
         m_LeafSize = rhs.m_LeafSize;
         
@@ -82,11 +81,6 @@ void CloudjectDetectionPipeline::setMultiviewDetectionStrategy(int strategy)
 void CloudjectDetectionPipeline::setMultiviewLateFusionNormalization(std::vector<std::vector<float> > scalings)
 {
     m_LateFusionScalings = scalings;
-}
-
-void CloudjectDetectionPipeline::setMultiviewActorCorrespondenceThresh(float thresh)
-{
-    m_MultiviewActorCorrespThresh = thresh;
 }
 
 void CloudjectDetectionPipeline::setInteractionThresh(float thresh)
@@ -167,11 +161,14 @@ void CloudjectDetectionPipeline::save(std::string filename, std::string extensio
         fs.open(filenameWithSuffix, cv::FileStorage::WRITE | cv::FileStorage::FORMAT_YAML);
     
     fs << "multiviewDetectionStrategy" << m_MultiviewDetectionStrategy;
-    fs << "multiviewActorCorrespThresh" << m_MultiviewActorCorrespThresh;
     fs << "interactionThresh" << m_InteractionThresh;
     fs << "leafSizeX" << m_LeafSize.x();
     fs << "leafSizeY" << m_LeafSize.y();
     fs << "leafSizeZ" << m_LeafSize.z();
+    
+    fs << "numViews" << ((int) m_LateFusionScalings.size());
+    for (int v = 0; v < m_LateFusionScalings.size(); v++)
+        fs << ("lateFusionScalings-" + boost::lexical_cast<std::string>(v)) << m_LateFusionScalings[v];
     
     fs.release();
 }
@@ -189,7 +186,6 @@ bool CloudjectDetectionPipeline::load(std::string filename, std::string extensio
         return false;
     
     fs["multiviewDetectionStrategy"] >> m_MultiviewDetectionStrategy;
-    fs["multiviewActorCorrespThresh"] >> m_MultiviewActorCorrespThresh;
     fs["interactionThresh"] >> m_InteractionThresh;
     
     float leafSizeX, leafSizeY, leafSizeZ;
@@ -198,7 +194,15 @@ bool CloudjectDetectionPipeline::load(std::string filename, std::string extensio
     fs["leafSizeZ"] >> leafSizeZ;
     m_LeafSize = Eigen::Vector3f(leafSizeX,leafSizeY,leafSizeZ);
     
+    int V;
+    fs["numViews"] >> V;
+    m_LateFusionScalings.resize(V);
+    for (int v = 0; v < V; v++)
+        fs["lateFusionScalings-" + boost::lexical_cast<std::string>(v)] >> m_LateFusionScalings[v];
+    
     fs.release();
+    
+    return true;
 }
 
 std::vector<std::vector<DetectionResult> > CloudjectDetectionPipeline::getDetectionResults()

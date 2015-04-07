@@ -796,6 +796,16 @@ cv::Mat cvx::convert(const std::list<std::vector<T> >& lv)
     return m;
 }
 
+template<typename T>
+std::vector<std::vector<T> > cvx::convert(cv::Mat m)
+{
+    std::vector<std::vector<T> > vv;
+    
+    convert<T>(m,vv);
+    
+    return vv;
+}
+
 void cvx::vconcat(std::vector<cv::Mat> array, cv::Mat& mat)
 {
     if (array.size() > 0)
@@ -1064,6 +1074,12 @@ template cv::Mat cvx::convert(const std::list<std::vector<ushort> >& lv);
 template cv::Mat cvx::convert(const std::list<std::vector<int> >& lv);
 template cv::Mat cvx::convert(const std::list<std::vector<float> >& lv);
 template cv::Mat cvx::convert(const std::list<std::vector<double> >& lv);
+
+template std::vector<std::vector<uchar> > cvx::convert(cv::Mat m);
+template std::vector<std::vector<ushort> > cvx::convert(cv::Mat m);
+template std::vector<std::vector<int> > cvx::convert(cv::Mat m);
+template std::vector<std::vector<float> > cvx::convert(cv::Mat m);
+template std::vector<std::vector<double> > cvx::convert(cv::Mat m);
 
 template int cvx::match<int>(cv::Mat m, cv::Mat query, bool debug);
 template int cvx::match<float>(cv::Mat m, cv::Mat query, bool debug);

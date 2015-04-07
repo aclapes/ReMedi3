@@ -150,22 +150,18 @@ private:
     
     InteractiveRegisterer::Ptr m_pRegisterer;
     TableModeler::Ptr m_pTableModeler;
-    
+    CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr m_ClassificationPipeline;
+
     Groundtruth m_Gt;
     
     int m_MultiviewDetectionStrategy;
-    float m_MultiviewActorCorrespThresh;
     float m_InteractionThresh;
     Eigen::Vector3f m_LeafSize;
     
-    std::vector<std::vector<float> > m_LateFusionScalings;
-    
+    std::vector<std::vector<float> > m_LateFusionScalings; // in case of multiview
     std::vector<std::vector<float> > m_ValParams;
-
-    CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr m_ClassificationPipeline;
     
     std::vector<std::vector<DetectionResult> > m_DetectionResults;
-    
     
     //
     // Private methods
