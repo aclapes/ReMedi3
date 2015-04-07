@@ -128,9 +128,15 @@ public:
     
     void setMultiviewLateFusionNormalization(std::vector<std::vector<float> > scalings);
     
-    void detect();
+    void setValidationParameters(std::vector<std::vector<float> > parameters);
+    void validate();
     
-    std::vector<DetectionResult> getDetectionResults();
+    void save(std::string filename, std::string extension = ".yml");
+    bool load(std::string filename, std::string extension = ".yml");
+    
+    void detect();
+    std::vector<std::vector<DetectionResult> > getDetectionResults();
+    
     
     typedef boost::shared_ptr<CloudjectDetectionPipeline> Ptr;
     
@@ -154,9 +160,12 @@ private:
     
     std::vector<std::vector<float> > m_LateFusionScalings;
     
+    std::vector<std::vector<float> > m_ValParams;
+
     CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr m_ClassificationPipeline;
     
-    std::vector<DetectionResult> m_DetectionResults;
+    std::vector<std::vector<DetectionResult> > m_DetectionResults;
+    
     
     //
     // Private methods
@@ -178,7 +187,7 @@ private:
     void evaluateFrame(const std::map<std::string,std::map<std::string,GroundtruthRegion> >& gt, const std::vector<ForegroundRegion>& dt, DetectionResult& result);
     void evaluateFrame(const vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > >& gt, const vector<std::map<std::string,std::map<std::string,pcl::PointXYZ> > >& gtCentroids, const std::vector<std::vector<std::pair<int, Cloudject::Ptr> > >& correspondences, DetectionResult& result);
     void evaluateFrame2(const std::vector<ColorDepthFrame::Ptr>& frames, const vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > >& gt, std::vector<std::vector<std::pair<int, Cloudject::Ptr> > >& correspondences, std::vector<std::vector<float> > margins, Eigen::Vector3f leafSize,  std::vector<DetectionResult>& result);
-    void evaluateFrame2(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& gt, std::vector<ForegroundRegion>& dt, std::vector<DetectionResult>& result);
+    void evaluateFrame2(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& gt, std::vector<Cloudject::Ptr>& detections, std::vector<std::vector<float> > margins, Eigen::Vector3f leafSize, std::vector<DetectionResult>& result);
     
     template<typename RegionT>
     VoxelGridPtr computeGridFromRegion(ColorDepthFrame::Ptr frame, RegionT region, Eigen::Vector3f leafSize, bool bRegistrate = false);
