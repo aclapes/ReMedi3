@@ -393,6 +393,7 @@ int runDetection(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> s
             pCjDetectionPipeline->setInputSequences(sequencesTe);
             pCjDetectionPipeline->setCategories(objectsLabels);
             
+            pCjDetectionPipeline->setLeafSize(Eigen::Vector3f(.02f,.02f,.02f));
             pCjDetectionPipeline->setDetectionGroundtruth(gt);
             
             pCjDetectionPipeline->setInteractiveRegisterer(pSys->getRegisterer());

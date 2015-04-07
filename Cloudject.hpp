@@ -274,6 +274,16 @@ public:
         return centroid;
     }
     
+    boost::shared_ptr<pcl::VoxelGrid<pcl::PointXYZRGB> > getGrid()
+    {
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloudTmp (new pcl::PointCloud<pcl::PointXYZRGB>);
+        boost::shared_ptr<pcl::VoxelGrid<pcl::PointXYZRGB> > pGrid (new pcl::VoxelGrid<pcl::PointXYZRGB>);
+        
+        pclx::voxelize(m_pCloud, *pCloudTmp, *pGrid, m_LeafSize);
+        
+        return pGrid;
+    }
+    
     boost::shared_ptr<pcl::VoxelGrid<pcl::PointXYZRGB> > getRegisteredGrid()
     {
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloudTmp (new pcl::PointCloud<pcl::PointXYZRGB>);

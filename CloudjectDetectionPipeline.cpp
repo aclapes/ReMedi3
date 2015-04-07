@@ -38,6 +38,7 @@ CloudjectDetectionPipeline& CloudjectDetectionPipeline::operator=(const Cloudjec
         m_MultiviewDetectionStrategy = rhs.m_MultiviewDetectionStrategy;
         m_MultiviewActorCorrespThresh = rhs.m_MultiviewActorCorrespThresh;
         m_InteractionThresh = rhs.m_InteractionThresh;
+        m_LeafSize = rhs.m_LeafSize;
         
         m_LateFusionScalings = rhs.m_LateFusionScalings;
         
@@ -91,6 +92,11 @@ void CloudjectDetectionPipeline::setMultiviewActorCorrespondenceThresh(float thr
 void CloudjectDetectionPipeline::setInteractionThresh(float thresh)
 {
     m_InteractionThresh = thresh;
+}
+
+void CloudjectDetectionPipeline::setLeafSize(Eigen::Vector3f leafSize)
+{
+    m_LeafSize = leafSize;
 }
 
 void CloudjectDetectionPipeline::setClassificationPipeline(CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pipeline)
@@ -405,7 +411,7 @@ void CloudjectDetectionPipeline::detectMultiview()
                 
                 for (int i = 0; i < cloudjectsF.size(); i++)
                 {
-                    cloudjectsF[i]->setLeafSize(Eigen::Vector3f(.02f,.02f,.02f));
+                    cloudjectsF[i]->setLeafSize(m_LeafSize);
                     cloudjectsF[i]->setRegistrationTransformation(frames[v]->getRegistrationTransformation());
                 }
                 
@@ -419,6 +425,7 @@ void CloudjectDetectionPipeline::detectMultiview()
             std::vector<std::vector<VoxelGridPtr> > grids;
             findCorrespondences(frames, nonInteractedActors, 0.05, correspondences, grids); // false (not to registrate)
             
+            std::vector<std::vector<float> > margins (correspondences.size());
             for (int i = 0; i < correspondences.size(); i++)
             {
                 std::vector<std::vector<float> > distsToMargin (correspondences[i].size());
@@ -428,6 +435,7 @@ void CloudjectDetectionPipeline::detectMultiview()
                     predictions[v] = m_ClassificationPipeline->predict(correspondences[i][v].second, distsToMargin[v]);
                 
                 std::vector<int> predictionsFused (m_Categories.size());
+                std::vector<float> marginsFused (m_Categories.size());
                 for (int j = 0; j < m_Categories.size(); j++)
                 {
                     float distToMarginFused = .0f;
@@ -442,7 +450,10 @@ void CloudjectDetectionPipeline::detectMultiview()
                         W += wsq;
                     }
                     predictionsFused[j] = ((distToMarginFused/W) < 0 ? 1 : -1);
+                    marginsFused[j] = distToMarginFused/W;
                 }
+                
+                margins[i] = marginsFused;
                 
                 for (int v = 0; v < correspondences[i].size(); v++)
                 {
@@ -456,18 +467,14 @@ void CloudjectDetectionPipeline::detectMultiview()
             for (int v = 0; v < m_Sequences[s]->getNumOfViews(); v++)
                 annotationsF[v] = m_Gt.at(m_Sequences[s]->getName()).at(m_Sequences[s]->getViewName(v)).at(fids[v]);
             
-            std::vector<std::vector<DetectionResult> > results;
-            evaluateFrame2(frames, annotationsF, correspondences, results);
+            std::vector<DetectionResult> results;
+            evaluateFrame2(frames, annotationsF, correspondences, margins, m_LeafSize, results);
             
-            for (int v = 0; v < m_Sequences[s]->getNumOfViews(); v++)
-            {
-                DetectionResult result;
-                for (int i = 0; i < results[v].size(); i++)
-                    result += results[v][i];
-                
-                std::cout << std::to_string(result.tp) << "\t" << std::to_string(result.fp) << "\t" << std::to_string(result.fn) << (v < m_Sequences[s]->getNumOfViews() - 1 ? "\t" : ";\n");
-            }
-//            m_DetectionResults[0] += result;
+            DetectionResult result;
+            for (int i = 0; i < results.size(); i++)
+                result += results[i];
+            
+            std::cout << std::to_string(result.tp) << "\t" << std::to_string(result.fp) << "\t" << std::to_string(result.fn) << ";" << std::endl;
             
 #ifdef DEBUG_VISUALIZE_DETECTIONS
             visualizeMultiview(pViz, vp, interactors, interactedActors, correspondences);
@@ -803,74 +810,82 @@ void CloudjectDetectionPipeline::evaluateFrame(const std::map<std::string,std::m
 }
 
 // Evaluate detection performance in a frame per object (multiple views)
-void CloudjectDetectionPipeline::evaluateFrame2(const std::vector<ColorDepthFrame::Ptr>& frames, const std::vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > >& gt, std::vector<std::vector<std::pair<int, Cloudject::Ptr> > >& correspondences, std::vector<std::vector<DetectionResult> >& result)
+void CloudjectDetectionPipeline::evaluateFrame2(const std::vector<ColorDepthFrame::Ptr>& frames, const std::vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > >& gt, std::vector<std::vector<std::pair<int, Cloudject::Ptr> > >& correspondences, std::vector<std::vector<float> > margins, Eigen::Vector3f leafSize, std::vector<DetectionResult>& result)
 {
+    assert(correspondences.size() == margins.size());
+    
     result.clear();
-    result.resize(gt.size(), std::vector<DetectionResult>(m_Categories.size()));
+    result.resize(m_Categories.size());
+
+    std::vector<float> maxmargins (m_Categories.size(), 0);
+    std::vector<int> indices (m_Categories.size(), -1);
     
-    std::vector<std::map<std::string,int> > matches (correspondences.size()); // correspondences x labels
-    
-    std::vector<std::map<std::string,std::map<std::string,pclx::Rectangle3D> > > gtrects (gt.size());
+    std::vector<std::map<std::string,std::map<std::string,VoxelGridPtr> > > gtgrids (gt.size());
     for (int v = 0; v < gt.size(); v++)
+        precomputeGrids(frames[v], gt[v], leafSize, gtgrids[v], true);
+    
+    for (int i = 0; i < margins.size(); i++)
     {
-        precomputeRectangles3D(frames[v], gt[v], gtrects[v]);
-        
-        for (int k = 0; k < m_Categories.size(); k++)
+        for (int k = 0; k < margins[i].size(); k++)
         {
-            std::string name = m_Categories[k];
-            
-            // TP and FN
-            if (gt[v].count(name) > 0) // any object of this kind annotated in frame?
+            // A detectoin gives a positive for m_Categories[k] category
+            if (margins[i][k] < maxmargins[k]) // worth checking?
             {
-                // An object can consist of several annotations (a book in two parts because of an occlusion)
-                // Try two match any of the parts with a detection
-                bool bDetectedAnnotation = false;
-                
-                std::map<std::string,GroundtruthRegion>::const_iterator it = gt[v].at(name).begin();
-                std::map<std::string,pclx::Rectangle3D>::const_iterator rt = gtrects[v].at(name).begin();
-                for ( ; (it != gt[v].at(name).end()) && !bDetectedAnnotation; ++it, ++rt)
+                bool bMatched = false;
+                // #checks = detection views x subannotations
+                for (int j = 0; (j < correspondences[i].size()) && !bMatched; j++)
                 {
-                    for (int i = 0; i < correspondences.size(); i++)
+                    VoxelGridPtr pDetectionGrid = correspondences[i][j].second->getRegisteredGrid();
+                    
+                    for (int v = 0; (v < gt.size()) && !bMatched; v++)
                     {
-                        pclx::Rectangle3D a = rt->second;
-                        pclx::Rectangle3D b;
-                        for (int j = 0; j < correspondences[i].size(); j++)
+                        if (gt[v].count(m_Categories[k]) > 0)
                         {
-                            if (correspondences[i][j].first == v)
+                            std::map<std::string,VoxelGridPtr> categoryGrids = gtgrids[v][m_Categories[k]];
+                            std::map<std::string,VoxelGridPtr>::iterator it = categoryGrids.begin();
+                            for ( ; (it != categoryGrids.end()) && !bMatched; ++it)
                             {
-                                Cloudject::Ptr pCj = correspondences[i][j].second;
-                                pCj->getCloudRectangle(b.min, b.max);
-                                if (pCj->isRegionLabel(name) && pclx::rectangleInclusion(a,b) > 0.25)
-                                {
-                                    //if (matches[j][name] < pCj->getRegionLabels().size())
-                                    //{
-                                    matches[i][name]++;
-                                    bDetectedAnnotation = true;
-                                    //}
-                                }
+                                VoxelGridPtr pAnnotGrid = it->second;
+                                float inc = pclx::computeInclusion3d(*pDetectionGrid, *pAnnotGrid);
+                                if (inc > 0)
+                                    bMatched = true;
                             }
                         }
                     }
                 }
                 
-                bDetectedAnnotation ? result[v][k].tp++ : result[v][k].fn++;
-            }
-            
-            // FPs
-            for (int i = 0; i < correspondences.size(); i++)
-            {
-                Cloudject::Ptr pCj = correspondences[i][0].second;
-                if (pCj->isRegionLabel(name))
+                if (bMatched)
                 {
-                    int nonmatched = pCj->getRegionLabels().size() - matches[i][name];
-                    if (nonmatched > 0)
+                    result[k].tp++;
+                    maxmargins[k] = margins[i][k];
+                    
+                    if (indices[k] >= 0)
                     {
-                        result[v][k].fp += nonmatched;
+                        result[k].fp++;
+                        result[k].tp--;
                     }
+                    indices[k] = i;
                 }
             }
+            else if (margins[i][k] < 0)
+            {
+                result[k].fp++;
+            }
         }
-        
+    }
+    
+    // If one of the categoryes undetected, but was annotated in one of the views' gt
+    for (int k = 0; k < indices.size(); k++)
+    {
+        if (indices[k] < 0)
+        {
+            bool bIsAnnotated = false;
+            for (int v = 0; v < gt.size(); v++) // over views' gt
+                if (gt[v].count(m_Categories[k]) > 0) // annotated?
+                    bIsAnnotated = true;
+            
+            if (bIsAnnotated) result[k].fn++;
+        }
     }
 }
 
@@ -938,7 +953,7 @@ void CloudjectDetectionPipeline::evaluateFrame2(ColorDepthFrame::Ptr frame, cons
 }
 
 template<typename RegionT>
-pclx::Rectangle3D CloudjectDetectionPipeline::computeRectangleFromRegion(ColorDepthFrame::Ptr frame, RegionT region)
+VoxelGridPtr CloudjectDetectionPipeline::computeGridFromRegion(ColorDepthFrame::Ptr frame, RegionT region, Eigen::Vector3f leafSize, bool bRegistrate)
 {
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud (new pcl::PointCloud<pcl::PointXYZRGB>);
     
@@ -948,10 +963,15 @@ pclx::Rectangle3D CloudjectDetectionPipeline::computeRectangleFromRegion(ColorDe
     MatToColoredPointCloud(frame->getDepth(), frame->getColor(), region.getMask(), pos, range, *pCloud);
     region.releaseMask();
     
-    pclx::Rectangle3D rectangle;
-    computeRectangle3D(*pCloud,rectangle.min,rectangle.max);
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr pRegCloud (new pcl::PointCloud<pcl::PointXYZRGB>);
+    if (bRegistrate)
+        pcl::transformPointCloud(*pCloud, *pRegCloud, frame->getRegistrationTransformation());
     
-    return rectangle;
+    pcl::PointCloud<pcl::PointXYZRGB> dummy;
+    VoxelGridPtr pGrid (new VoxelGrid);
+    pclx::voxelize((!bRegistrate ? pCloud : pRegCloud), dummy, *pGrid, leafSize);
+    
+    return pGrid;
 }
 
 template<typename RegionT>
@@ -968,6 +988,39 @@ pcl::PointXYZ CloudjectDetectionPipeline::computeCentroidFromRegion(ColorDepthFr
     pcl::PointXYZ centroid = computeCentroid(*pCloud);
     
     return centroid;
+}
+
+void CloudjectDetectionPipeline::precomputeGrids(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& annotations, Eigen::Vector3f leafSize, std::map<std::string,std::map<std::string,VoxelGridPtr> >& grids, bool bRegistrate)
+{
+    std::map<std::string,std::map<std::string,GroundtruthRegion> >::const_iterator it;
+    std::map<std::string,GroundtruthRegion>::const_iterator jt;
+    for (it = annotations.begin(); it != annotations.end(); ++it)
+        for (jt = it->second.begin(); jt != it->second.end(); ++jt)
+            grids[it->first][jt->first] = computeGridFromRegion(frame, annotations.at(it->first).at(jt->first), leafSize, bRegistrate);
+}
+
+void CloudjectDetectionPipeline::precomputeGrids(ColorDepthFrame::Ptr frame, const std::vector<ForegroundRegion>& detections, Eigen::Vector3f leafSize, std::vector<VoxelGridPtr>& grids, bool bRegistrate)
+{
+    grids.resize(detections.size());
+    for (int i = 0; i < detections.size(); ++i)
+        grids[i] = computeGridFromRegion(frame, detections[i], leafSize, bRegistrate);
+}
+
+template<typename RegionT>
+pclx::Rectangle3D CloudjectDetectionPipeline::computeRectangleFromRegion(ColorDepthFrame::Ptr frame, RegionT region)
+{
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud (new pcl::PointCloud<pcl::PointXYZRGB>);
+    
+    region.allocateMask();
+    int pos[2] = {region.getRect().x, region.getRect().y};
+    unsigned short range[2] = {MIN_DEPTH,MAX_DEPTH};
+    MatToColoredPointCloud(frame->getDepth(), frame->getColor(), region.getMask(), pos, range, *pCloud);
+    region.releaseMask();
+    
+    pclx::Rectangle3D rectangle;
+    computeRectangle3D(*pCloud,rectangle.min,rectangle.max);
+    
+    return rectangle;
 }
 
 void CloudjectDetectionPipeline::precomputeRectangles3D(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& annotations, std::map<std::string,std::map<std::string,pclx::Rectangle3D> >& rectangles)
