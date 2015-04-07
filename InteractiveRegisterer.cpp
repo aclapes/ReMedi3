@@ -444,15 +444,20 @@ void InteractiveRegisterer::ppCallback(const pcl::visualization::PointPickingEve
  */
 void InteractiveRegisterer::setDefaultCamera(VisualizerPtr pViz, int vid)
 {
+    setDefaultCamera(*pViz, vid);
+}
+
+void InteractiveRegisterer::setDefaultCamera(Visualizer& viz, int vid)
+{
     vector<pcl::visualization::Camera> cameras;
-    pViz->getCameras(cameras);
+    viz.getCameras(cameras);
     
     cameras[vid].pos[2] = m_CameraDistance;
     cameras[vid].focal[2] = 1.0;
     
     cameras[vid].view[1] = -1; // y dim upside-down
     
-    pViz->setCameraParameters(cameras[vid], vid);
+    viz.setCameraParameters(cameras[vid], vid);
 }
 
 /** \brief Get the set of first correspondences across the views

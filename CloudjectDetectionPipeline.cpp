@@ -115,6 +115,47 @@ std::vector<DetectionResult> CloudjectDetectionPipeline::getDetectionResults()
 // Private methods
 //
 
+void createVisualizationSetup(int V, InteractiveRegisterer::Ptr pRegisterer, pcl::visualization::PCLVisualizer& viz, std::vector<int>& vp)
+{
+    vp.resize(V + 1);
+    for (int v = 0; v < (V + 1); v++)
+    {
+        viz.createViewPort(v*(1.f/(V+1)), 0, (v+1)*(1.f/(V+1)), 1, vp[v]);
+        viz.setBackgroundColor (1, 1, 1, vp[v]);
+        viz.addCoordinateSystem(0.1, 0, 0, 0, "cs" + std::to_string(v), vp[v]);
+        pRegisterer->setDefaultCamera(viz, vp[v]);
+    }
+}
+
+void visualizeMonocular(pcl::visualization::PCLVisualizer::Ptr pViz, std::vector<int> vp, std::vector<ColorPointCloudPtr> interactors, std::vector<std::vector<Cloudject::Ptr> > interactions, std::vector<std::vector<Cloudject::Ptr> > actors)
+{
+    // Count the number of views (viewports - 1)
+    int V = vp.size() - 1;
+    
+    for (int v = 0; v < V; v++)
+    {
+        pViz->removeAllPointClouds(vp[v]);
+        pViz->removeAllShapes(vp[v]);
+        
+        for (int i = 0; i < interactors.size(); i++)
+            pViz->addPointCloud(interactors[i], "interactor" + std::to_string(v) + "-" + std::to_string(i), vp[v] );
+        
+        for (int i = 0; i < interactions[v].size(); i++)
+        {
+            pViz->addPointCloud(interactions[v][i]->getRegisteredCloud(), "nactor" + std::to_string(v) + "-" + std::to_string(i), vp[v] );
+            pViz->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 0, 0, "nactor" + std::to_string(v) + "-" + std::to_string(i), vp[v]);
+        }
+        
+        for (int i = 0; i < actors[v].size(); i++)
+        {
+            pViz->addPointCloud(actors[v][i]->getRegisteredCloud(), "actor" + std::to_string(v) + "-" + std::to_string(i), vp[v] );
+            pViz->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, g_Colors[i%14][0], g_Colors[i%14][1], g_Colors[i%14][2], "actor" + std::to_string(v) + "-" + std::to_string(i), vp[v]);
+        }
+    }
+    
+    pViz->spin();
+}
+
 void CloudjectDetectionPipeline::detectMonocular()
 {
     m_DetectionResults.resize(m_Sequences[0]->getNumOfViews());
@@ -127,15 +168,10 @@ void CloudjectDetectionPipeline::detectMonocular()
         int V = m_Sequences[s]->getNumOfViews();
         
 #ifdef DEBUG_VISUALIZE_DETECTIONS
-        pcl::visualization::PCLVisualizer::Ptr pVis (new pcl::visualization::PCLVisualizer);
-        std::vector<int> vp (V);
-        for (int v = 0; v < V; v++)
-        {void setInteractiveRegisterer(InteractiveRegisterer::Ptr ir);
-            void setTableModeler(TableModeler::Ptr tm);
-            pVis->createViewPort(v*(1.f/V), 0, (v+1)*(1.f/V), 1, vp[v]);
-            pVis->setBackgroundColor (1, 1, 1, vp[v]);
-            m_pRegisterer->setDefaultCamera(pVis, vp[v]);
-        }
+        pcl::visualization::PCLVisualizer::Ptr pViz (new pcl::visualization::PCLVisualizer);
+        std::vector<int> vp;
+        
+        createVisualizationSetup(V, m_pRegisterer, *pViz, vp);
 #endif
         std::cout << "[" << std::endl;
         m_Sequences[s]->restart();
@@ -216,32 +252,99 @@ void CloudjectDetectionPipeline::detectMonocular()
             }
             
 #ifdef DEBUG_VISUALIZE_DETECTIONS
-            for (int v = 0; v < V; v++)
-            {
-                pVis->removeAllPointClouds(vp[v]);
-                pVis->removeAllShapes(vp[v]);
-                
-                for (int i = 0; i < interactors.size(); i++)
-                    pVis->addPointCloud(interactors[i], "interactor" + std::to_string(v) + "-" + std::to_string(i), vp[v] );
-                
-                for (int i = 0; i < interactedActors[v].size(); i++)
-                {
-                    pVis->addPointCloud(interactedActors[v][i]->getRegisteredCloud(), "nactor" + std::to_string(v) + "-" + std::to_string(i), vp[v] );
-                    pVis->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 0, 0, "nactor" + std::to_string(v) + "-" + std::to_string(i), vp[v]);
-                }
-                
-                for (int i = 0; i < nonInteractedActors[v].size(); i++)
-                {
-                    pVis->addPointCloud(nonInteractedActors[v][i]->getRegisteredCloud(), "actor" + std::to_string(v) + "-" + std::to_string(i), vp[v] );
-                    pVis->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, g_Colors[i%14][0], g_Colors[i%14][1], g_Colors[i%14][2], "actor" + std::to_string(v) + "-" + std::to_string(i), vp[v]);
-                }
-            }
-            
-            pVis->spinOnce();
+            visualizeMonocular(pViz, vp, interactors, interactedActors, nonInteractedActors);
 #endif //DEBUG_VISUALIZE_DETECTIONS
         }
         std::cout << "];" << std::endl;
     }
+}
+
+void visualizeMultiview(pcl::visualization::PCLVisualizer::Ptr pViz, std::vector<int> vp, std::vector<ColorPointCloudPtr> interactors, std::vector<std::vector<Cloudject::Ptr> > interactions, std::vector<std::vector<std::pair<int, Cloudject::Ptr> > > correspondences)
+{
+    // Count the number of views (viewports - 1)
+    int V = vp.size() - 1;
+    
+    for (int v = 0; v < V; v++)
+    {
+        pViz->removeAllPointClouds(vp[v]);
+        pViz->removeAllShapes(vp[v]);
+    }
+    
+    for (int v = 0; v < V; v++)
+    {
+        for (int i = 0; i < interactors.size(); i++)
+            pViz->addPointCloud(interactors[i], "interactor" + std::to_string(v) + "-" + std::to_string(i), vp[v] );
+        
+        for (int i = 0; i < interactions[v].size(); i++)
+        {
+            pViz->addPointCloud(interactions[v][i]->getRegisteredCloud(), "nactor" + std::to_string(v) + "-" + std::to_string(i), vp[v] );
+            pViz->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 0, 0, "nactor" + std::to_string(v) + "-" + std::to_string(i), vp[v]);
+        }
+    }
+    
+    for (int i = 0; i < correspondences.size(); i++)
+    {
+        std::vector<VoxelGridPtr> grids (correspondences[i].size());
+        for (int j = 0; j < correspondences[i].size(); j++)
+        {
+            int v = correspondences[i][j].first;
+
+            // Visualize in color and boxed in the viewpoirt
+            
+            pViz->addPointCloud(correspondences[i][j].second->getRegisteredCloud(), "actor" + std::to_string(i) + "-" + std::to_string(j), vp[v] );
+            
+            grids[j] = correspondences[i][j].second->getRegisteredGrid();
+            Eigen::Vector3f leafSize = grids[j]->getLeafSize();
+            Eigen::Vector3i min = grids[j]->getMinBoxCoordinates();
+            Eigen::Vector3i max = grids[j]->getMaxBoxCoordinates();
+            
+            pViz->addCube(min.x() * leafSize.x(), max.x() * leafSize.x(), min.y() * leafSize.y(), max.y() * leafSize.y(), min.z() * leafSize.z(), max.z() * leafSize.z(), g_Colors[i%14][0], g_Colors[i%14][1], g_Colors[i%14][2], "cube" + std::to_string(i) + "-" + std::to_string(j), vp[v]);
+        
+            // Visualize shaded and with the grid boxes in the fusion viewport (to notice the overlap)
+            for (int x = min.x(); x < max.x(); x++) for (int y = min.y(); y < max.y(); y++) for (int z = min.z(); z < max.z(); z++)
+            {
+                if (grids[j]->getCentroidIndexAt(Eigen::Vector3i(x,y,z)) > 0)
+                    pViz->addCube(x * leafSize.x(), (x+1) * leafSize.x(), y * leafSize.y(), (y+1) * leafSize.y(), z * leafSize.z(), (z+1) * leafSize.z(), g_Colors[v%14][0], g_Colors[v%14][1], g_Colors[v%14][2], "cube" + std::to_string(i) + "-" + std::to_string(j) + "-" + std::to_string(x) + "-" + std::to_string(y) + "-" + std::to_string(z), vp[V]);
+            }
+        }
+        
+        Eigen::Vector3f leafSize = grids[0]->getLeafSize();
+        
+        for (int j1 = 0; j1 < correspondences[i].size(); j1++)
+        {
+            for (int j2 = j1 + 1; j2 < correspondences[i].size(); j2++)
+            {
+                Eigen::Vector3f leafSize = grids[j1]->getLeafSize();
+                Eigen::Vector3f leafSizeAux = grids[j2]->getLeafSize();
+                // Check they are equal
+                
+                Eigen::Vector3i min1 = grids[j1]->getMinBoxCoordinates();
+                Eigen::Vector3i min2 = grids[j2]->getMinBoxCoordinates();
+                Eigen::Vector3i max1 = grids[j1]->getMaxBoxCoordinates();
+                Eigen::Vector3i max2 = grids[j2]->getMaxBoxCoordinates();
+                
+                Eigen::Vector3i minI (min1.x() > min2.x() ? min1.x() : min2.x(),
+                                      min1.y() > min2.y() ? min1.y() : min2.y(),
+                                      min1.z() > min2.z() ? min1.z() : min2.z());
+                Eigen::Vector3i maxI (max1.x() < max2.x() ? max1.x() : max2.x(),
+                                      max1.y() < max2.y() ? max1.y() : max2.y(),
+                                      max1.z() < max2.z() ? max1.z() : max2.z());
+                
+                for (int x = minI.x(); x < maxI.x(); x++) for (int y = minI.y(); y < maxI.y(); y++) for (int z = minI.z(); z < maxI.z(); z++)
+                {
+                    int idx1 = grids[j1]->getCentroidIndexAt(Eigen::Vector3i(x,y,z));
+                    int idx2 = grids[j2]->getCentroidIndexAt(Eigen::Vector3i(x,y,z));
+                    if (idx1 != 1 && idx2 != -1)
+                    {
+                        std::string name = "ovl_sphere_" + std::to_string(i) + "-" + std::to_string(x) + "-" + std::to_string(y) + "-" + std::to_string(z);
+                        pViz->addSphere(pcl::PointXYZ(x*leafSize.x()+(leafSize.x()/2.f),y*leafSize.y()+(leafSize.y()/2.f),z*leafSize.z()+(leafSize.z()/2.f)), leafSize.x()/2.f, 0, 0, 1, name, vp[V]);
+                    }
+                }
+            }
+        }
+    }
+    
+    pViz->spin();
 }
 
 void CloudjectDetectionPipeline::detectMultiview()
@@ -255,16 +358,10 @@ void CloudjectDetectionPipeline::detectMultiview()
         
         int V = m_Sequences[s]->getNumOfViews();
 #ifdef DEBUG_VISUALIZE_DETECTIONS
-        pcl::visualization::PCLVisualizer::Ptr pVis (new pcl::visualization::PCLVisualizer);
+        pcl::visualization::PCLVisualizer::Ptr pViz (new pcl::visualization::PCLVisualizer);
+        std::vector<int> vp;
         
-        std::vector<int> vp (V + 1);
-        for (int v = 0; v < (V + 1); v++)
-        {
-            pVis->createViewPort(v*(1.f/(V+1)), 0, (v+1)*(1.f/(V+1)), 1, vp[v]);
-            pVis->setBackgroundColor (1, 1, 1, vp[v]);
-            pVis->addCoordinateSystem(0.1, 0, 0, 0, "cs" + std::to_string(v), vp[v]);
-            m_pRegisterer->setDefaultCamera(pVis, vp[v]);
-        }
+        createVisualizationSetup(V, m_pRegisterer, *pViz, vp);
 #endif
         std::cout << "[" << std::endl;
         m_Sequences[s]->restart();
@@ -373,63 +470,7 @@ void CloudjectDetectionPipeline::detectMultiview()
 //            m_DetectionResults[0] += result;
             
 #ifdef DEBUG_VISUALIZE_DETECTIONS
-            for (int v = 0; v < V; v++)
-            {
-                pVis->removeAllPointClouds(vp[v]);
-                pVis->removeAllShapes(vp[v]);
-            }
-            
-            for (int v = 0; v < V; v++)
-            {
-                for (int i = 0; i < interactors.size(); i++)
-                    pVis->addPointCloud(interactors[i], "interactor" + std::to_string(v) + "-" + std::to_string(i), vp[v] );
-                
-                for (int i = 0; i < interactedActors[v].size(); i++)
-                {
-                    pVis->addPointCloud(interactedActors[v][i]->getRegisteredCloud(), "nactor" + std::to_string(v) + "-" + std::to_string(i), vp[v] );
-                    pVis->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 0, 0, "nactor" + std::to_string(v) + "-" + std::to_string(i), vp[v]);
-                }
-                
-//                for (int i = 0; i < positions[v].size(); i++)
-//                {
-//                    pVis->addSphere(positions[v][i], 0.025, ((v == 0) ? 1 : 0), ((v == 0) ? 0 : 1), 0, "sphere" + std::to_string(v) + "-" + std::to_string(i), vp[0] );
-//                }
-                
-//                for (int i = 0; i < grids[v].size(); i++)
-//                {
-//                    VoxelGridPtr grid = grids[v][i];
-//                    Eigen::Vector3f leafSize = grid->getLeafSize();
-//                    Eigen::Vector3i min = grid->getMinBoxCoordinates();
-//                    Eigen::Vector3i max = grid->getMaxBoxCoordinates();
-//                    for (int x = min.x(); x < max.x(); x++) for (int y = min.y(); y < max.y(); y++) for (int z = min.z(); z < max.z(); z++)
-//                    {
-//                        float d = ((v == 0) ? -0.00001 : 0.00001);
-//                        if (grid->getCentroidIndexAt(Eigen::Vector3i(x,y,z)) > 0)
-//                            pVis->addCube(x * leafSize.x() + d, (x+1) * leafSize.x() + d, y * leafSize.y() + d, (y+1) * leafSize.y() + d, z * leafSize.z() + d, (z+1) * leafSize.z() + d, ((v == 0) ? 1 : 0), ((v == 0) ? 0 : 1), 0, "cube" + std::to_string(v) + "-" + std::to_string(i) + "-" + std::to_string(x) + "-" + std::to_string(y) + "-" + std::to_string(z), vp[0]);
-//                    }
-//                }
-            }
-            
-            for (int i = 0; i < correspondences.size(); i++) for (int j = 0; j < correspondences[i].size(); j++)
-            {
-                int v = correspondences[i][j].first;
-                pVis->addPointCloud(correspondences[i][j].second->getRegisteredCloud(), "actor" + std::to_string(i) + "-" + std::to_string(j), vp[0] );
-                pVis->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "actor" + std::to_string(i) + "-" + std::to_string(j), vp[0]);
-                pVis->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, g_Colors[i%14][0], g_Colors[i%14][1], g_Colors[i%14][2], "actor" + std::to_string(i) + "-" + std::to_string(j), vp[0]);
-                
-                VoxelGridPtr grid = correspondences[i][j].second->getRegisteredGrid();
-                Eigen::Vector3f leafSize = grid->getLeafSize();
-                Eigen::Vector3i min = grid->getMinBoxCoordinates();
-                Eigen::Vector3i max = grid->getMaxBoxCoordinates();
-                for (int x = min.x(); x < max.x(); x++) for (int y = min.y(); y < max.y(); y++) for (int z = min.z(); z < max.z(); z++)
-                {
-                    float d = ((v == 0) ? -0.00001 : 0.00001);
-                    if (grid->getCentroidIndexAt(Eigen::Vector3i(x,y,z)) > 0)
-                        pVis->addCube(x * leafSize.x() + d, (x+1) * leafSize.x() + d, y * leafSize.y() + d, (y+1) * leafSize.y() + d, z * leafSize.z() + d, (z+1) * leafSize.z() + d, g_Colors[i%14][0], g_Colors[i%14][1], g_Colors[i%14][2], "cube" + std::to_string(i) + "-" + std::to_string(j) + "-" + std::to_string(x) + "-" + std::to_string(y) + "-" + std::to_string(z), vp[0]);
-                }
-            }
-            
-            pVis->spin();
+            visualizeMultiview(pViz, vp, interactors, interactedActors, correspondences);
 #endif
         }
         std::cout << "];" << std::endl;

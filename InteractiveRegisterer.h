@@ -120,6 +120,7 @@ public:
     /** \brief Set the position of the camera in the PCLVisualizer
      */
     void setDefaultCamera(VisualizerPtr pViz, int vid);
+    void setDefaultCamera(Visualizer& pViz, int vid);
     
     
     typedef boost::shared_ptr<InteractiveRegisterer> Ptr;
