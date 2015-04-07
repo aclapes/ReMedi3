@@ -262,6 +262,7 @@ void CloudjectDetectionPipeline::detectMultiview()
         {
             pVis->createViewPort(v*(1.f/(V+1)), 0, (v+1)*(1.f/(V+1)), 1, vp[v]);
             pVis->setBackgroundColor (1, 1, 1, vp[v]);
+            pVis->addCoordinateSystem(0.1, 0, 0, 0, "cs" + std::to_string(v), vp[v]);
             m_pRegisterer->setDefaultCamera(pVis, vp[v]);
         }
 #endif
@@ -306,7 +307,10 @@ void CloudjectDetectionPipeline::detectMultiview()
                 remedi::io::readCloudjectsWithDescriptor(resultsParent + string(CLOUDJECTS_DIRNAME) + m_Sequences[s]->getViewName(v), fids[v], regionsF, "pfhrgb250", cloudjectsF, true);
                 
                 for (int i = 0; i < cloudjectsF.size(); i++)
+                {
+                    cloudjectsF[i]->setLeafSize(Eigen::Vector3f(.02f,.02f,.02f));
                     cloudjectsF[i]->setRegistrationTransformation(frames[v]->getRegistrationTransformation());
+                }
                 
                 findActors(cloudjectsF, interactors, nonInteractedActors[v], 0.02, interactedActors[v]);
             }
@@ -316,7 +320,7 @@ void CloudjectDetectionPipeline::detectMultiview()
 //            std::vector<std::vector<PointT> > positions;
 //            findCorrespondences(frames, nonInteractedActors, OR_CORRESPONDENCE_TOLERANCE, correspondences, positions); // false (not to registrate)
             std::vector<std::vector<VoxelGridPtr> > grids;
-            findCorrespondences(frames, nonInteractedActors, 0, correspondences, grids); // false (not to registrate)
+            findCorrespondences(frames, nonInteractedActors, 0.05, correspondences, grids); // false (not to registrate)
             
             for (int i = 0; i < correspondences.size(); i++)
             {
@@ -386,20 +390,46 @@ void CloudjectDetectionPipeline::detectMultiview()
                     pVis->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 0, 0, "nactor" + std::to_string(v) + "-" + std::to_string(i), vp[v]);
                 }
                 
-                for (int i = 0; i < positions[v].size(); i++)
-                {
-                    pVis->addSphere(positions[v][i], 0.025, ((v == 0) ? 1 : 0), ((v == 0) ? 0 : 1), 0, "sphere" + std::to_string(v) + "-" + std::to_string(i), vp[0] );
-                }
+//                for (int i = 0; i < positions[v].size(); i++)
+//                {
+//                    pVis->addSphere(positions[v][i], 0.025, ((v == 0) ? 1 : 0), ((v == 0) ? 0 : 1), 0, "sphere" + std::to_string(v) + "-" + std::to_string(i), vp[0] );
+//                }
+                
+//                for (int i = 0; i < grids[v].size(); i++)
+//                {
+//                    VoxelGridPtr grid = grids[v][i];
+//                    Eigen::Vector3f leafSize = grid->getLeafSize();
+//                    Eigen::Vector3i min = grid->getMinBoxCoordinates();
+//                    Eigen::Vector3i max = grid->getMaxBoxCoordinates();
+//                    for (int x = min.x(); x < max.x(); x++) for (int y = min.y(); y < max.y(); y++) for (int z = min.z(); z < max.z(); z++)
+//                    {
+//                        float d = ((v == 0) ? -0.00001 : 0.00001);
+//                        if (grid->getCentroidIndexAt(Eigen::Vector3i(x,y,z)) > 0)
+//                            pVis->addCube(x * leafSize.x() + d, (x+1) * leafSize.x() + d, y * leafSize.y() + d, (y+1) * leafSize.y() + d, z * leafSize.z() + d, (z+1) * leafSize.z() + d, ((v == 0) ? 1 : 0), ((v == 0) ? 0 : 1), 0, "cube" + std::to_string(v) + "-" + std::to_string(i) + "-" + std::to_string(x) + "-" + std::to_string(y) + "-" + std::to_string(z), vp[0]);
+//                    }
+//                }
             }
             
             for (int i = 0; i < correspondences.size(); i++) for (int j = 0; j < correspondences[i].size(); j++)
             {
                 int v = correspondences[i][j].first;
-                pVis->addPointCloud(correspondences[i][j].second->getRegisteredCloud(), "actor" + std::to_string(v) + "-" + std::to_string(i), vp[0] );
-                pVis->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, g_Colors[i%14][0], g_Colors[i%14][1], g_Colors[i%14][2], "actor" + std::to_string(v) + "-" + std::to_string(i), vp[0]);
+                pVis->addPointCloud(correspondences[i][j].second->getRegisteredCloud(), "actor" + std::to_string(i) + "-" + std::to_string(j), vp[0] );
+                pVis->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 2, "actor" + std::to_string(i) + "-" + std::to_string(j), vp[0]);
+                pVis->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, g_Colors[i%14][0], g_Colors[i%14][1], g_Colors[i%14][2], "actor" + std::to_string(i) + "-" + std::to_string(j), vp[0]);
+                
+                VoxelGridPtr grid = correspondences[i][j].second->getRegisteredGrid();
+                Eigen::Vector3f leafSize = grid->getLeafSize();
+                Eigen::Vector3i min = grid->getMinBoxCoordinates();
+                Eigen::Vector3i max = grid->getMaxBoxCoordinates();
+                for (int x = min.x(); x < max.x(); x++) for (int y = min.y(); y < max.y(); y++) for (int z = min.z(); z < max.z(); z++)
+                {
+                    float d = ((v == 0) ? -0.00001 : 0.00001);
+                    if (grid->getCentroidIndexAt(Eigen::Vector3i(x,y,z)) > 0)
+                        pVis->addCube(x * leafSize.x() + d, (x+1) * leafSize.x() + d, y * leafSize.y() + d, (y+1) * leafSize.y() + d, z * leafSize.z() + d, (z+1) * leafSize.z() + d, g_Colors[i%14][0], g_Colors[i%14][1], g_Colors[i%14][2], "cube" + std::to_string(i) + "-" + std::to_string(j) + "-" + std::to_string(x) + "-" + std::to_string(y) + "-" + std::to_string(z), vp[0]);
+                }
             }
             
-            pVis->spinOnce();
+            pVis->spin();
 #endif
         }
         std::cout << "];" << std::endl;

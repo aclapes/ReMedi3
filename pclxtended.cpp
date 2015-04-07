@@ -168,38 +168,28 @@ void pclx::findNextCorrespondence(std::vector<std::vector<VoxelGridPtr> >& grids
     }
     else
     {
-        int candidateIdx = -1;
-        bool bMoreThanOneCandidate = false;
-        for (int j = 0; (j < grids[v].size()) && !bMoreThanOneCandidate; j++)
+        std::vector<std::pair<std::pair<int,int>,VoxelGridPtr> > chainTmp;
+        for (int j = 0; j < grids[v].size(); j++)
         {
             if (!assignations[v][j])
             {
                 VoxelGridPtr q = grids[v][j]; // candidate
                 
-                // To be a strong candidate is to fulfill the tolerance condition
-                // for all the chain's former points
-                bool bStrongCandidate = true;
                 for (int i = 0; i < chain.size(); i++)
                 {
                     VoxelGridPtr p = chain[i].second;
                     float inc = pclx::computeInclusion3d(*q,*p);
                     
-                    bStrongCandidate &= (inc > tol);
-                }
-                // If strong, nominate as temporary candidate
-                if (bStrongCandidate)
-                {
-                    if (candidateIdx < 0) candidateIdx = j;
-                    else bMoreThanOneCandidate = true;
+                    if (inc > tol)
+                    {
+                        chainTmp.push_back( std::pair<std::pair<int,int>,VoxelGridPtr>(std::pair<int,int>(v,j), grids[v][j]) );
+                        assignations[v][j] = true;
+                    }
                 }
             }
         }
-        // If one (and just one) candidate was found
-        if (candidateIdx >= 0 && !bMoreThanOneCandidate)
-        {
-            chain.push_back( std::pair<std::pair<int,int>,VoxelGridPtr>(std::pair<int,int>(v,candidateIdx), grids[v][candidateIdx]) );
-            assignations[v][candidateIdx] = true;
-        }
+        
+        chain.insert(chain.end(), chainTmp.begin(), chainTmp.end());
         
         findNextCorrespondence(grids, assignations, v+1, tol, chain);
     }
@@ -209,13 +199,18 @@ void pclx::findNextCorrespondence(std::vector<std::vector<VoxelGridPtr> >& grids
 template<typename PointT>
 void pclx::voxelize(typename pcl::PointCloud<PointT>::Ptr pCloud, pcl::PointCloud<PointT>& vloud, pcl::VoxelGrid<PointT>& vox, Eigen::Vector3f leafSize)
 {
+    typename pcl::PointCloud<PointT>::Ptr pCloudAux = pCloud;
     vox.setInputCloud(pCloud);
     vox.setLeafSize(leafSize.x(), leafSize.y(), leafSize.z());
     
     // Reading errors are at (x,y,0), so filter z=0 values
-    vox.setFilterFieldName("z");
-    vox.setFilterLimits(-std::numeric_limits<float>::min(),std::numeric_limits<float>::min());
-    vox.setFilterLimitsNegative(true);
+//    vox.setFilterFieldName("x");
+//    vox.setFilterLimits(-2*leafSize.x(),2*leafSize.x());
+//    vox.setFilterFieldName("y");
+//    vox.setFilterLimits(-2*leafSize.y(),2*leafSize.y());
+//    vox.setFilterFieldName("z");
+//    vox.setFilterLimits(-2*leafSize.z(),2*leafSize.z());
+//    vox.setFilterLimitsNegative(true);
     
     vox.setSaveLeafLayout(true); // the most important thing!
     vox.filter(vloud);
@@ -239,8 +234,10 @@ float pclx::computeInclusion3d(pcl::VoxelGrid<PointT>& vox1, pcl::VoxelGrid<Poin
     int voxels1, voxels2, voxelsI;
     pclx::countIntersections3d(vox1, vox2, voxels1, voxels2, voxelsI);
     
-    float inc = ((float) voxelsI) / std::min(voxels1, voxels2);
-    return inc;
+    if (voxelsI < 1)
+        return 0.f;
+    else
+        return ((float) voxelsI) / std::min(voxels1, voxels2);
 }
 
 template<typename PointT>
@@ -261,8 +258,10 @@ float pclx::computeOverlap3d(pcl::VoxelGrid<PointT>& vox1, pcl::VoxelGrid<PointT
     int voxels1, voxels2, voxelsI;
     pclx::countIntersections3d(vox1, vox2, voxels1, voxels2, voxelsI);
     
-    float ovl = ((float) voxelsI) / (voxels1 + voxels2 - voxelsI);
-    return ovl;
+    if (voxelsI < 1)
+        return 0.f; // avoid zero-division
+    else
+        return ((float) voxelsI) / (voxels1 + voxels2 - voxelsI);
 }
 
 template<typename PointT>
@@ -272,21 +271,22 @@ void pclx::countIntersections3d(pcl::VoxelGrid<PointT>& vox1, pcl::VoxelGrid<Poi
     
     Eigen::Vector3i min1 = vox1.getMinBoxCoordinates();
     Eigen::Vector3i min2 = vox2.getMinBoxCoordinates();
+    
     Eigen::Vector3i max1 = vox1.getMaxBoxCoordinates();
     Eigen::Vector3i max2 = vox2.getMaxBoxCoordinates();
     
-    Eigen::Vector3i minU (min1.x() < min2.x() ? min1.x() : min2.x(),
-                          min1.y() < min2.y() ? min1.y() : min2.y(),
-                          min1.z() < min2.z() ? min1.z() : min2.z());
-    Eigen::Vector3i maxU (max1.x() < max2.x() ? max1.x() : max2.x(),
+    Eigen::Vector3i minI (min1.x() > min2.x() ? min1.x() : min2.x(),
+                          min1.y() > min2.y() ? min1.y() : min2.y(),
+                          min1.z() > min2.z() ? min1.z() : min2.z());
+    Eigen::Vector3i maxI (max1.x() < max2.x() ? max1.x() : max2.x(),
                           max1.y() < max2.y() ? max1.y() : max2.y(),
                           max1.z() < max2.z() ? max1.z() : max2.z());
     
-    for (int i = minU.x(); i < maxU.x(); i++)
+    for (int i = minI.x(); i <= maxI.x(); i++)
     {
-        for (int j = minU.y(); j < maxU.x(); j++)
+        for (int j = minI.y(); j <= maxI.y(); j++)
         {
-            for (int k = minU.z(); k < maxU.z(); k++)
+            for (int k = minI.z(); k <= maxI.z(); k++)
             {
                 int idx1 = vox1.getCentroidIndexAt(Eigen::Vector3i(i,j,k));
                 int idx2 = vox2.getCentroidIndexAt(Eigen::Vector3i(i,j,k));

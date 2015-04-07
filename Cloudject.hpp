@@ -69,7 +69,9 @@ public:
             m_DescriptorType = rhs.m_DescriptorType;
             m_pDescriptor = rhs.m_pDescriptor;
             
-            m_T = m_T;
+            m_T = rhs.m_T;
+            
+            m_LeafSize = rhs.m_LeafSize;
         }
         return *this;
     }
@@ -161,6 +163,11 @@ public:
         m_pDescriptor = pDescriptor;
     }
     
+    void setLeafSize(Eigen::Vector3f leafSize)
+    {
+        m_LeafSize = leafSize;
+    }
+    
     int getNumOfDescriptorPoints()
     {
         if (m_DescriptorType.compare("fpfh33") == 0)
@@ -205,26 +212,48 @@ public:
 //        return pcl::PointXYZ(x/c, y/c, z/c);
     }
     
+//    pcl::PointCloud<pcl::PointXYZRGB>::Ptr getRegisteredCloud()
+//    {
+//        pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud (new pcl::PointCloud<pcl::PointXYZRGB>);
+//        pCloud->height = m_pCloud->height;
+//        pCloud->width = m_pCloud->width;
+//        pCloud->resize(m_pCloud->height * m_pCloud->width);
+//        
+//        pcl::transformPointCloud(*m_pCloud, *pCloud, m_T);
+//        
+//        // Solving a issue: after transforming, (0,0,0,1) have changed. Since this
+//        // is undesired - e.g. for a centroid computation - re-set them to 0.
+//        for (int y = 0; y < pCloud->height; ++y) for (int x = 0; x < pCloud->width; ++x)
+//        {
+//            if ( m_Region.getMask().at<unsigned char>(y,x) == 0 )
+//                pCloud->at(x,y).x = pCloud->at(x,y).y = pCloud->at(x,y).z = std::numeric_limits<float>::quiet_NaN();
+//            //                pCloud->at(x,y).x = pCloud->at(x,y).y = pCloud->at(x,y).z = 0;
+//        }
+//        
+//        pCloud->is_dense = false; // last hope
+//        return pCloud;
+//    }
+
     pcl::PointCloud<pcl::PointXYZRGB>::Ptr getRegisteredCloud()
     {
-        pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud (new pcl::PointCloud<pcl::PointXYZRGB>);
-        pCloud->height = m_pCloud->height;
-        pCloud->width = m_pCloud->width;
-        pCloud->resize(m_pCloud->height * m_pCloud->width);
-        pCloud->is_dense = true;
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloudT (new pcl::PointCloud<pcl::PointXYZRGB>);
+        pcl::transformPointCloud(*m_pCloud, *pCloudT, m_T);
         
-        pcl::transformPointCloud(*m_pCloud, *pCloud, m_T);
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud (new pcl::PointCloud<pcl::PointXYZRGB>);
+        pCloud->height = 1;
         
         // Solving a issue: after transforming, (0,0,0,1) have changed. Since this
         // is undesired - e.g. for a centroid computation - re-set them to 0.
-        for (int y = 0; y < m_pCloud->height; ++y) for (int x = 0; x < m_pCloud->width; ++x)
+        for (int y = 0; y < pCloudT->height; ++y) for (int x = 0; x < pCloudT->width; ++x)
         {
-            if ( m_Region.getMask().at<unsigned char>(y,x) == 0 )
-                pCloud->at(x,y).x = pCloud->at(x,y).y = pCloud->at(x,y).z = 0;
+            if ( m_Region.getMask().at<unsigned char>(y,x) > 0 )
+                pCloud->push_back(pCloudT->at(x,y));
         }
+        pCloud->width = pCloud->points.size();
         
         return pCloud;
     }
+
     
     cv::Mat getRegisteredRegionMask()
     {
@@ -250,7 +279,7 @@ public:
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloudTmp (new pcl::PointCloud<pcl::PointXYZRGB>);
         boost::shared_ptr<pcl::VoxelGrid<pcl::PointXYZRGB> > pGrid (new pcl::VoxelGrid<pcl::PointXYZRGB>);
         
-        pclx::voxelize(getRegisteredCloud(), *pCloudTmp, *pGrid, Eigen::Vector3f(.01f,.01f,.01f));
+        pclx::voxelize(getRegisteredCloud(), *pCloudTmp, *pGrid, m_LeafSize);
         
         return pGrid;
     }
@@ -380,6 +409,8 @@ private:
     std::string                                     m_DescriptorType;
     
     Eigen::Matrix4f                                 m_T;
+    
+    Eigen::Vector3f                                 m_LeafSize;
 
     // Private methods
     
