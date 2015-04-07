@@ -80,9 +80,9 @@ void remedi::io::readAnnotationRegions(std::string parent, std::string fid, std:
         if (fs::exists(fs::path(filepath)))
             r.setFilepath(filepath);
         else
-            r.setFilepath(filepathPrefix + ".png." + r.getCategory() + std::to_string(r.getID()) + ".png");
+            r.setFilepath(filepathPrefix + ".png." + r.getCategory() + boost::lexical_cast<std::string>(r.getID()) + ".png");
         
-        annotations[r.getCategory()][std::to_string(r.getID())] = r;
+        annotations[r.getCategory()][boost::lexical_cast<std::string>(r.getID())] = r;
     }
     file.close();
 }
@@ -103,7 +103,7 @@ void remedi::io::readPredictionRegions(std::string parent, std::string fid, std:
     for ( ; std::getline(file, line); )
     {
         ForegroundRegion r = lineToPredictionRegion(line);
-        r.setFilepath(filepath + "-" + std::to_string(i) + ".png");
+        r.setFilepath(filepath + "-" + boost::lexical_cast<std::string>(i) + ".png");
         
         predictions.push_back(r);
         i++;
@@ -137,7 +137,7 @@ void remedi::io::writeCloudjects(std::string parent, std::string fid, std::vecto
     for (int i = 0; i < cloudjects.size(); i++)
     {
         // Write pcd file, with filename composed by fname and region ID
-        std::string filename = fid  + "-" + std::to_string(cloudjects[i]->getRegionID());
+        std::string filename = fid  + "-" + boost::lexical_cast<std::string>(cloudjects[i]->getRegionID());
         
         writePointCloud(parent + "/" + filename + ".pcd", *(cloudjects[i]->getCloud()), bBinary);
         cv::imwrite(parent + "/" + filename + ".png", cloudjects[i]->getRegionMask());
@@ -157,8 +157,8 @@ void remedi::io::readCloudjects(std::string parent, std::string fid, std::vector
     for (int i = 0; i < predictions.size(); i++)
     {
         Cloudject::Ptr pCj (new Cloudject(predictions[i]));
-        pCj->setRegionMask(cv::imread(parent + "/" + fid + "-" + std::to_string(predictions[i].getID()) + ".png", CV_LOAD_IMAGE_GRAYSCALE));
-        reader.read(parent + "/" + fid + "-" + std::to_string(predictions[i].getID()) + ".pcd", *(pCj->getCloud()));
+        pCj->setRegionMask(cv::imread(parent + "/" + fid + "-" + boost::lexical_cast<std::string>(predictions[i].getID()) + ".png", CV_LOAD_IMAGE_GRAYSCALE));
+        reader.read(parent + "/" + fid + "-" + boost::lexical_cast<std::string>(predictions[i].getID()) + ".pcd", *(pCj->getCloud()));
         
         cloudjects.push_back(pCj);
     }
@@ -171,7 +171,7 @@ void remedi::io::mockreadCloudjects(std::string parent, std::string fid, std::ve
     for (int i = 0; i < predictions.size(); i++)
     {
         MockCloudject::Ptr pMCj (new MockCloudject(predictions[i]));
-        pMCj->setCloudPath(parent + "/" + fid + "-" + std::to_string(predictions[i].getID()) + ".pcd");
+        pMCj->setCloudPath(parent + "/" + fid + "-" + boost::lexical_cast<std::string>(predictions[i].getID()) + ".pcd");
         
         cloudjects.push_back(pMCj);
     }
@@ -214,13 +214,13 @@ void remedi::io::readCloudjectsWithDescriptor(std::string parent, std::string fi
         if (descriptorType.compare("fpfh33") == 0)
         {
             pcl::PointCloud<pcl::FPFHSignature33>* pDescriptor = new pcl::PointCloud<pcl::FPFHSignature33>();
-            reader.read(parent + "/" + fid + "-" + std::to_string(predictions[i].getID()) + "_fpfh33.pcd", *pDescriptor);
+            reader.read(parent + "/" + fid + "-" + boost::lexical_cast<std::string>(predictions[i].getID()) + "_fpfh33.pcd", *pDescriptor);
             cloudjects[i]->setDescriptor((void*) pDescriptor);
         }
         else if (descriptorType.compare("pfhrgb250") == 0)
         {
             pcl::PointCloud<pcl::PFHRGBSignature250>* pDescriptor = new pcl::PointCloud<pcl::PFHRGBSignature250>();
-            reader.read(parent + "/" + fid + "-" + std::to_string(predictions[i].getID()) + "_pfhrgb250.pcd", *pDescriptor);
+            reader.read(parent + "/" + fid + "-" + boost::lexical_cast<std::string>(predictions[i].getID()) + "_pfhrgb250.pcd", *pDescriptor);
             cloudjects[i]->setDescriptor((void*) pDescriptor);
         }
     }
@@ -241,16 +241,16 @@ void remedi::io::mockreadCloudjectsWithDescriptor(std::string parent, std::strin
         
         if (descriptorType.compare("fpfh33") == 0)
         {
-            cloudjects[i]->setDescriptorPath(parent + "/" + fid + "-" + std::to_string(predictions[i].getID()) + "_fpfh33.pcd");
+            cloudjects[i]->setDescriptorPath(parent + "/" + fid + "-" + boost::lexical_cast<std::string>(predictions[i].getID()) + "_fpfh33.pcd");
 //            pcl::PointCloud<pcl::FPFHSignature33>* pDescriptor = new pcl::PointCloud<pcl::FPFHSignature33>();
-//            reader.read(parent + "/" + fid + "-" + std::to_string(predictions[i].getID()) + "_fpfh33.pcd", *pDescriptor);
+//            reader.read(parent + "/" + fid + "-" + boost::lexical_cast<std::string>(predictions[i].getID()) + "_fpfh33.pcd", *pDescriptor);
 //            cloudjects[i]->describe("fpfh33", pDescriptor);
         }
         else if (descriptorType.compare("pfhrgb250") == 0)
         {
-            cloudjects[i]->setDescriptorPath(parent + "/" + fid + "-" + std::to_string(predictions[i].getID()) + "_pfhrgb250.pcd");
+            cloudjects[i]->setDescriptorPath(parent + "/" + fid + "-" + boost::lexical_cast<std::string>(predictions[i].getID()) + "_pfhrgb250.pcd");
 //            pcl::PointCloud<pcl::PFHRGBSignature250>* pDescriptor = new pcl::PointCloud<pcl::PFHRGBSignature250>();
-//            reader.read(parent + "/" + fid + "-" + std::to_string(predictions[i].getID()) + "_pfhrgb250.pcd", *pDescriptor);
+//            reader.read(parent + "/" + fid + "-" + boost::lexical_cast<std::string>(predictions[i].getID()) + "_pfhrgb250.pcd", *pDescriptor);
 //            cloudjects[i]->describe("pfhrgb250", pDescriptor);
         }
     }
@@ -267,7 +267,7 @@ void remedi::io::mockreadCloudjectsWithDescriptor(std::string parent, std::strin
 //    for (int i = 0; i < predictions.size(); i++)
 //    {
 //        Cloudject cj (predictions[i]);
-////        cj.setRegionMask(cv::imread(parent + "/" + fid + "-" + std::to_string(predictions[i].getID()) + ".png", CV_LOAD_IMAGE_GRAYSCALE));
+////        cj.setRegionMask(cv::imread(parent + "/" + fid + "-" + boost::lexical_cast<std::string>(predictions[i].getID()) + ".png", CV_LOAD_IMAGE_GRAYSCALE));
 //        // (the mock part is not to read the .pcd)
 //        
 //        cloudjects.push_back(cj);
@@ -281,7 +281,7 @@ void remedi::io::writeCloudjectsDescription(std::string parent, std::string fid,
     {
         // Write pcd file, with filename composed by fname and region ID
         std::string descriptorType = (*it)->getDescriptorType();
-        std::string filename = fid  + "-" + std::to_string((*it)->getRegionID());
+        std::string filename = fid  + "-" + boost::lexical_cast<std::string>((*it)->getRegionID());
         
         if (descriptorType == "pfhrgb250")
         {
@@ -305,7 +305,7 @@ void remedi::io::writeCloudjectsDescription(std::string parent, std::string fid,
 //        fs::path path (parent + "/");
 //        
 //        // Write pcd file
-//        std::string filename = descriptions[i].fname  + "-" + std::to_string(i);
+//        std::string filename = descriptions[i].fname  + "-" + boost::lexical_cast<std::string>(i);
 //        if (bBinary)
 //            writer.writeBinary(path.string() + filename + ".pfhrgb250.pcd", *(descriptions[i].pDescriptor));
 //        else

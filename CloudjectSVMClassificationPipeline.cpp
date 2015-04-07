@@ -1101,9 +1101,9 @@ bool CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::load(std::stri
     
     for (int i = 0; i < m_PCAs.size(); i++)
     {
-        fs["pcas_mean-" + std::to_string(i)] >> m_PCAs[i].mean;
-        fs["pcas_eigenvectors-" + std::to_string(i)] >> m_PCAs[i].eigenvectors;
-        fs["pcas_eigenvalues-" + std::to_string(i)] >> m_PCAs[i].eigenvalues;
+        fs["pcas_mean-" + boost::lexical_cast<string>(i)] >> m_PCAs[i].mean;
+        fs["pcas_eigenvectors-" + boost::lexical_cast<string>(i)] >> m_PCAs[i].eigenvectors;
+        fs["pcas_eigenvalues-" + boost::lexical_cast<string>(i)] >> m_PCAs[i].eigenvalues;
     }
     
     // Save the models' metadata
@@ -1114,7 +1114,7 @@ bool CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::load(std::stri
     // Save the models
     for (int i = 0; i < m_ClassifierModels.size(); i++)
     {
-        std::string modelname = "classifierModels-" + std::to_string(i);
+        std::string modelname = "classifierModels-" + boost::lexical_cast<string>(i);
         if (m_ClassifierType.compare("svmrbf") == 0)
         {
             CvSVM* pModel = new CvSVM;
@@ -1148,7 +1148,7 @@ void CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::save(std::stri
     // Save the normalization-related variables
     fs << "normType" << m_NormType;
     for (int i = 0; i < m_NormParams.size(); i++)
-        fs << "normParams-" + std::to_string(i) << m_NormParams[i];
+        fs << "normParams-" + boost::lexical_cast<string>(i) << m_NormParams[i];
     
     // Save the BOW-related variables
     fs << "q" << m_q;
@@ -1165,9 +1165,9 @@ void CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::save(std::stri
     fs << "pcas-numberOf" << ((int) m_PCAs.size());
     for (int i = 0; i < m_PCAs.size(); i++)
     {
-        fs << "pcas_mean-" + std::to_string(i) << m_PCAs[i].mean;
-        fs << "pcas_eigenvectors-" + std::to_string(i) << m_PCAs[i].eigenvectors;
-        fs << "pcas_eigenvalues-" + std::to_string(i) << m_PCAs[i].eigenvalues;
+        fs << "pcas_mean-" + boost::lexical_cast<string>(i) << m_PCAs[i].mean;
+        fs << "pcas_eigenvectors-" + boost::lexical_cast<string>(i) << m_PCAs[i].eigenvectors;
+        fs << "pcas_eigenvalues-" + boost::lexical_cast<string>(i) << m_PCAs[i].eigenvalues;
     }
 
     // Save the models' metadata
@@ -1177,7 +1177,7 @@ void CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::save(std::stri
     // Save the models
     for (int i = 0; i < m_ClassifierModels.size(); i++)
     {
-        std::string modelname = "classifierModels-" + std::to_string(i);
+        std::string modelname = "classifierModels-" + boost::lexical_cast<string>(i);
         if (m_ClassifierType.compare("svmrbf") == 0)
             ((CvSVM*) m_ClassifierModels[i])->write(fs.operator*(), modelname.c_str());
     }
@@ -1192,7 +1192,7 @@ void CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::save(std::stri
 //    {
 //        if (m_ClassifierType.compare("svmrbf") == 0)
 //        {
-//            ((CvSVM*) m_ClassifierModels[i])->save(filename + "-M" + std::to_string(i) + extension);
+//            ((CvSVM*) m_ClassifierModels[i])->save(filename + "-M" + boost::lexical_cast<string>(i) + extension);
 //        }
 //    }
 //}
@@ -1206,7 +1206,7 @@ void CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::save(std::stri
 //    for (int i = 0; i < m_ClassifierModels.size(); i++)
 //    {
 //        if (m_ClassifierType.compare("svmrbf") == 0)
-//            ((CvSVM*) m_ClassifierModels[i])->save(filename + "-M" + std::to_string(i) + extension);
+//            ((CvSVM*) m_ClassifierModels[i])->save(filename + "-M" + boost::lexical_cast<string>(i) + extension);
 //    }
 //}
 

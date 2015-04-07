@@ -122,12 +122,19 @@ void CloudjectDetectionPipeline::validate()
         
         detect();
 
-        DetectionResult result;
+        float fscore = .0f;
         for (int v = 0; v < m_DetectionResults.size(); v++)
+        {
+            DetectionResult result;
             for (int j = 0; j < m_DetectionResults.size(); j++)
                 result += m_DetectionResults[v][j];
+            
+            float fscoreView = (2.f*result.tp) / (2.f*result.tp + result.fp + result.fn);
+
+            fscore += fscoreView;
+            std::cout << fscoreView << ((v < m_DetectionResults.size() - 1) ? "," : ";\n");
+        }
         
-        float fscore = (2.f*result.tp) / (2.f*result.tp + result.fp + result.fn);
         if (fscore > fscoreMax)
         {
             fscoreMax = fscore;
@@ -210,7 +217,7 @@ void createVisualizationSetup(int V, InteractiveRegisterer::Ptr pRegisterer, pcl
     {
         viz.createViewPort(v*(1.f/(V+1)), 0, (v+1)*(1.f/(V+1)), 1, vp[v]);
         viz.setBackgroundColor (1, 1, 1, vp[v]);
-        viz.addCoordinateSystem(0.1, 0, 0, 0, "cs" + std::to_string(v), vp[v]);
+        viz.addCoordinateSystem(0.1, 0, 0, 0, "cs" + boost::lexical_cast<string>(v), vp[v]);
         pRegisterer->setDefaultCamera(viz, vp[v]);
     }
 }
@@ -226,18 +233,18 @@ void visualizeMonocular(pcl::visualization::PCLVisualizer::Ptr pViz, std::vector
         pViz->removeAllShapes(vp[v]);
         
         for (int i = 0; i < interactors.size(); i++)
-            pViz->addPointCloud(interactors[i], "interactor" + std::to_string(v) + "-" + std::to_string(i), vp[v] );
+            pViz->addPointCloud(interactors[i], "interactor" + boost::lexical_cast<string>(v) + "-" + boost::lexical_cast<string>(i), vp[v] );
         
         for (int i = 0; i < interactions[v].size(); i++)
         {
-            pViz->addPointCloud(interactions[v][i]->getRegisteredCloud(), "nactor" + std::to_string(v) + "-" + std::to_string(i), vp[v] );
-            pViz->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 0, 0, "nactor" + std::to_string(v) + "-" + std::to_string(i), vp[v]);
+            pViz->addPointCloud(interactions[v][i]->getRegisteredCloud(), "nactor" + boost::lexical_cast<string>(v) + "-" + boost::lexical_cast<string>(i), vp[v] );
+            pViz->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 0, 0, "nactor" + boost::lexical_cast<string>(v) + "-" + boost::lexical_cast<string>(i), vp[v]);
         }
         
         for (int i = 0; i < actors[v].size(); i++)
         {
-            pViz->addPointCloud(actors[v][i]->getRegisteredCloud(), "actor" + std::to_string(v) + "-" + std::to_string(i), vp[v] );
-            pViz->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, g_Colors[i%14][0], g_Colors[i%14][1], g_Colors[i%14][2], "actor" + std::to_string(v) + "-" + std::to_string(i), vp[v]);
+            pViz->addPointCloud(actors[v][i]->getRegisteredCloud(), "actor" + boost::lexical_cast<string>(v) + "-" + boost::lexical_cast<string>(i), vp[v] );
+            pViz->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, g_Colors[i%14][0], g_Colors[i%14][1], g_Colors[i%14][2], "actor" + boost::lexical_cast<string>(v) + "-" + boost::lexical_cast<string>(i), vp[v]);
         }
     }
     
@@ -260,8 +267,8 @@ void CloudjectDetectionPipeline::detectMonocular()
         std::vector<int> vp;
         
         createVisualizationSetup(V, m_pRegisterer, *pViz, vp);
-#endif
         std::cout << "[" << std::endl;
+#endif
         m_Sequences[s]->restart();
         while (m_Sequences[s]->hasNextFrames())
         {
@@ -342,7 +349,7 @@ void CloudjectDetectionPipeline::detectMonocular()
                 for (int i = 0; i < objectsResults.size(); i++)
                     result += objectsResult[i];
                 
-                std::cout << std::to_string(result.tp) << "\t" << std::to_string(result.fp) << "\t" << std::to_string(result.fn);
+                std::cout << result.tp << "\t" << result.fp << "\t" << result.fn;
                 std::cout << ((v < m_Sequences[s]->getNumOfViews() - 1) ?  "\t" : ";\n");
 #endif //DEBUG_VISUALIZE_DETECTIONS
             }
@@ -351,7 +358,9 @@ void CloudjectDetectionPipeline::detectMonocular()
             visualizeMonocular(pViz, vp, interactors, interactedActors, nonInteractedActors);
 #endif //DEBUG_VISUALIZE_DETECTIONS
         }
+#ifdef DEBUG_VISUALIZE_DETECTIONS
         std::cout << "];" << std::endl;
+#endif //DEBUG_VISUALIZE_DETECTIONS
     }
 }
 
@@ -369,12 +378,12 @@ void visualizeMultiview(pcl::visualization::PCLVisualizer::Ptr pViz, std::vector
     for (int v = 0; v < V; v++)
     {
         for (int i = 0; i < interactors.size(); i++)
-            pViz->addPointCloud(interactors[i], "interactor" + std::to_string(v) + "-" + std::to_string(i), vp[v] );
+            pViz->addPointCloud(interactors[i], "interactor" + boost::lexical_cast<string>(v) + "-" + boost::lexical_cast<string>(i), vp[v] );
         
         for (int i = 0; i < interactions[v].size(); i++)
         {
-            pViz->addPointCloud(interactions[v][i]->getRegisteredCloud(), "nactor" + std::to_string(v) + "-" + std::to_string(i), vp[v] );
-            pViz->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 0, 0, "nactor" + std::to_string(v) + "-" + std::to_string(i), vp[v]);
+            pViz->addPointCloud(interactions[v][i]->getRegisteredCloud(), "nactor" + boost::lexical_cast<string>(v) + "-" + boost::lexical_cast<string>(i), vp[v] );
+            pViz->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 0, 0, "nactor" + boost::lexical_cast<string>(v) + "-" + boost::lexical_cast<string>(i), vp[v]);
         }
     }
     
@@ -387,20 +396,20 @@ void visualizeMultiview(pcl::visualization::PCLVisualizer::Ptr pViz, std::vector
 
             // Visualize in color and boxed in the viewpoirt
             
-            pViz->addPointCloud(correspondences[i][j].second->getRegisteredCloud(), "actor" + std::to_string(i) + "-" + std::to_string(j), vp[v] );
+            pViz->addPointCloud(correspondences[i][j].second->getRegisteredCloud(), "actor" + boost::lexical_cast<string>(i) + "-" + boost::lexical_cast<string>(j), vp[v] );
             
             grids[j] = correspondences[i][j].second->getRegisteredGrid();
             Eigen::Vector3f leafSize = grids[j]->getLeafSize();
             Eigen::Vector3i min = grids[j]->getMinBoxCoordinates();
             Eigen::Vector3i max = grids[j]->getMaxBoxCoordinates();
             
-            pViz->addCube(min.x() * leafSize.x(), max.x() * leafSize.x(), min.y() * leafSize.y(), max.y() * leafSize.y(), min.z() * leafSize.z(), max.z() * leafSize.z(), g_Colors[i%14][0], g_Colors[i%14][1], g_Colors[i%14][2], "cube" + std::to_string(i) + "-" + std::to_string(j), vp[v]);
+            pViz->addCube(min.x() * leafSize.x(), max.x() * leafSize.x(), min.y() * leafSize.y(), max.y() * leafSize.y(), min.z() * leafSize.z(), max.z() * leafSize.z(), g_Colors[i%14][0], g_Colors[i%14][1], g_Colors[i%14][2], "cube" + boost::lexical_cast<string>(i) + "-" + boost::lexical_cast<string>(j), vp[v]);
         
             // Visualize shaded and with the grid boxes in the fusion viewport (to notice the overlap)
             for (int x = min.x(); x < max.x(); x++) for (int y = min.y(); y < max.y(); y++) for (int z = min.z(); z < max.z(); z++)
             {
                 if (grids[j]->getCentroidIndexAt(Eigen::Vector3i(x,y,z)) > 0)
-                    pViz->addCube(x * leafSize.x(), (x+1) * leafSize.x(), y * leafSize.y(), (y+1) * leafSize.y(), z * leafSize.z(), (z+1) * leafSize.z(), g_Colors[v%14][0], g_Colors[v%14][1], g_Colors[v%14][2], "cube" + std::to_string(i) + "-" + std::to_string(j) + "-" + std::to_string(x) + "-" + std::to_string(y) + "-" + std::to_string(z), vp[V]);
+                    pViz->addCube(x * leafSize.x(), (x+1) * leafSize.x(), y * leafSize.y(), (y+1) * leafSize.y(), z * leafSize.z(), (z+1) * leafSize.z(), g_Colors[v%14][0], g_Colors[v%14][1], g_Colors[v%14][2], "cube" + boost::lexical_cast<string>(i) + "-" + boost::lexical_cast<string>(j) + "-" + boost::lexical_cast<string>(x) + "-" + boost::lexical_cast<string>(y) + "-" + boost::lexical_cast<string>(z), vp[V]);
             }
         }
         
@@ -432,7 +441,7 @@ void visualizeMultiview(pcl::visualization::PCLVisualizer::Ptr pViz, std::vector
                     int idx2 = grids[j2]->getCentroidIndexAt(Eigen::Vector3i(x,y,z));
                     if (idx1 != 1 && idx2 != -1)
                     {
-                        std::string name = "ovl_sphere_" + std::to_string(i) + "-" + std::to_string(x) + "-" + std::to_string(y) + "-" + std::to_string(z);
+                        std::string name = "ovl_sphere_" + boost::lexical_cast<string>(i) + "-" + boost::lexical_cast<string>(x) + "-" + boost::lexical_cast<string>(y) + "-" + boost::lexical_cast<string>(z);
                         pViz->addSphere(pcl::PointXYZ(x*leafSize.x()+(leafSize.x()/2.f),y*leafSize.y()+(leafSize.y()/2.f),z*leafSize.z()+(leafSize.z()/2.f)), leafSize.x()/2.f, 0, 0, 1, name, vp[V]);
                     }
                 }
@@ -458,8 +467,8 @@ void CloudjectDetectionPipeline::detectMultiview()
         std::vector<int> vp;
         
         createVisualizationSetup(V, m_pRegisterer, *pViz, vp);
-#endif
         std::cout << "[" << std::endl;
+#endif
         m_Sequences[s]->restart();
         while (m_Sequences[s]->hasNextFrames())
         {
@@ -567,12 +576,14 @@ void CloudjectDetectionPipeline::detectMultiview()
             DetectionResult result; // for printing purposes
             for (int i = 0; i < objectsResult.size(); i++)
                 result += objectsResult[i];
-            std::cout << std::to_string(result.tp) << "\t" << std::to_string(result.fp) << "\t" << std::to_string(result.fn) << ";" << std::endl;
+            std::cout << result.tp << "\t" << result.fp << "\t" << result.fn << ";" << std::endl;
 
             visualizeMultiview(pViz, vp, interactors, interactedActors, correspondences);
-#endif
+#endif //DEBUG_VISUALIZE_DETECTIONS
         }
+#ifdef DEBUG_VISUALIZE_DETECTIONS
         std::cout << "];" << std::endl;
+#endif //DEBUG_VISUALIZE_DETECTIONS
     }
 }
 
@@ -822,7 +833,7 @@ void CloudjectDetectionPipeline::evaluateFrame(const vector<std::map<std::string
                         // is the detected in the correct spot?
                         if (d <= 0.15)
                         {
-                            //                            std::cout << *it << " found in " << std::to_string(v) << std::endl;
+                            //                            std::cout << *it << " found in " << boost::lexical_cast<string>(v) << std::endl;
                             tpAux++;
                             matches[*it] ++;
                         }

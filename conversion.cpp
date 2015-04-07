@@ -675,7 +675,7 @@ std::string to_string_with_precision(cv::Mat values, std::string separator, cons
 
 std::string to_str(int i)
 {
-	return std::to_string(static_cast<long long>(i));
+    return boost::lexical_cast<std::string>(static_cast<long long>(i));
 }
 
 

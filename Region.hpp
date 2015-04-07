@@ -79,13 +79,14 @@ public:
     
     std::string toString(std::string delimiter)
     {
-        std::string s = std::to_string(m_ID) + delimiter
-        + std::to_string(m_Rect.x) + delimiter
-        + std::to_string(m_Rect.y) + delimiter
-        + std::to_string(m_Rect.x + m_Rect.width - 1) + delimiter
-        + std::to_string(m_Rect.y + m_Rect.height - 1);
+        std::ostringstream oss;
+        oss << m_ID << delimiter
+            << m_Rect.x << delimiter
+            << m_Rect.y << delimiter
+            << (m_Rect.x + m_Rect.width - 1) << delimiter
+            << (m_Rect.y + m_Rect.height - 1);
         
-        return s;
+        return oss.str();
     }
     
 private:

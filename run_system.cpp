@@ -242,7 +242,7 @@ int runTrain(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> seque
         for (int r = 0; r < NUM_REPETITIONS; r++)
         {
             pipelines[r] = CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr(new CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>);
-            bSuccess &= pipelines[r]->load("training_" + std::to_string(t) + "-" + std::to_string(r));
+            bSuccess &= pipelines[r]->load("training_" + boost::lexical_cast<string>(t) + "-" + boost::lexical_cast<string>(r));
         }
         
         if (bSuccess)
@@ -292,7 +292,7 @@ int runTrain(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> seque
             for (int r = 0; r < NUM_REPETITIONS; r++)
             {
                 pPipeline->train(); // use the best parameters found in the model selection
-                pPipeline->save("training_" + std::to_string(t) + "-" + std::to_string(r));
+                pPipeline->save("training_" + boost::lexical_cast<string>(t) + "-" + boost::lexical_cast<string>(r));
             }
             float trTime = trTimer.elapsed();
             
@@ -315,7 +315,7 @@ int runPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> 
         for (int r = 0; r < NUM_REPETITIONS; r++)
         {
             pipelines[r] = CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr(new CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>);
-            bSuccess &= pipelines[r]->load("training_" + std::to_string(t) + "-" + std::to_string(r));
+            bSuccess &= pipelines[r]->load("training_" + boost::lexical_cast<string>(t) + "-" + boost::lexical_cast<string>(r));
         }
         
         if (bSuccess)
@@ -405,6 +405,8 @@ int runDetection(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> s
             {
                 pCjDetectionPipeline->setClassificationPipeline(classificationPipelines[r]);
                 pCjDetectionPipeline->validate();
+                
+                pCjDetectionPipeline->save("detection_training_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
             }
         }
     }

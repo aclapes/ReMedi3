@@ -405,7 +405,7 @@ void remedi::getGroundtruthForTraining(const std::vector<Sequence<ColorDepthFram
                                     GroundtruthRegion preva = jt->second;
                                     float ovl = cvx::rectangleOverlap(a.getRect(), preva.getRect());
                                     if (ovl < 0.9)
-                                        annotationsTrF[lbl][std::to_string(a.getID())] = a;
+                                        annotationsTrF[lbl][boost::lexical_cast<string>(a.getID())] = a;
                                 }
                             }
                         }
@@ -612,7 +612,7 @@ void remedi::getTrainingCloudjectsWithDescriptor(std::vector<Sequence<ColorDepth
                                 a.releaseMask();
                                 if (wovl > .01f) regionsF[i].addLabel(jt->second.getCategory());
                                 
-                                if (annotationsTrF.count(a.getCategory()) > 0 && annotationsTrF.at(a.getCategory()).count(std::to_string(a.getID())) > 0)
+                                if (annotationsTrF.count(a.getCategory()) > 0 && annotationsTrF.at(a.getCategory()).count(boost::lexical_cast<string>(a.getID())) > 0)
                                     bIsTrainingRegionCandidate = true;
                             }
                         }
@@ -705,7 +705,7 @@ void remedi::getTrainingCloudjectsWithDescriptor(std::vector<Sequence<ColorDepth
         {
             cv::imshow(className, classExamples[i].getMask());
             
-            std::cout << std::to_string(i) + "/" + std::to_string(classExamples.size()) << ", ";
+            std::cout << boost::lexical_cast<string>(i) + "/" + boost::lexical_cast<string>(classExamples.size()) << ", ";
             std::cout << classExamples[i].getFilepath() << ", ";
             
             std::set<std::string> labels = classExamples[i].getLabels();
