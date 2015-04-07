@@ -646,7 +646,7 @@ void narrow(cv::Mat coarse, cv::Mat goodnesses, int steps, int* discretes, cv::M
     float divisor = 1;
     for (int p = coarse.cols - 1; p >= 0; p--)
     {
-        point.at<int>(0,p) = int(floorf(linIdxBest/divisor)) % parameters[p].size();
+        point.at<int>(0,p) = int(std::floor(linIdxBest/divisor)) % parameters[p].size();
         divisor *= parameters[p].size();
     }
     

@@ -805,7 +805,7 @@ float CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::validate()
                 // of categories)
                 std::map<std::string,cv::Mat> XMap;
                 stratify(m_X, m_Countings, m_Y, XMap);
-                int sq = floor(m_qValParam[i] / m_Categories.size());
+                int sq = std::floor(m_qValParam[i] / m_Categories.size());
                 bow(XMap, (sq == 0) ? 1 : sq, gQ[i]);
             }
         }
@@ -840,7 +840,7 @@ float CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::validate()
                     bow(XTr, m_qValParam[i], Q);
                 else
                 {
-                    int sq = floor(m_qValParam[i] / m_Categories.size());
+                    int sq = std::floor(m_qValParam[i] / m_Categories.size());
                     bow(XTrMap, (sq == 0) ? 1 : sq, Q);
                 }
             }
