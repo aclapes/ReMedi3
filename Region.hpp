@@ -60,7 +60,7 @@ public:
         return m_Rect;
     }
     
-    virtual void allocateMask() = 0;
+//    virtual void allocateMask() = 0;
     
     cv::Mat getMask() const
     {
