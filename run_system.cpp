@@ -401,8 +401,9 @@ int runDetectionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
                 pCjDetectionPipeline->setMultiviewDetectionStrategy(DETECT_MONOCULAR);
                 
                 pCjDetectionPipeline->validate();
+                std::cout << pCjDetectionPipeline->getValidationPerformance() << std::endl;
                 
-                pCjDetectionPipeline->save("detection_monocular_training_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
+                pCjDetectionPipeline->save("detection_monocular_validation_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
                 
                 // MULTIVIEW
                 std::cout << "Validating MULTIVIEW .. " << std::endl;
@@ -436,8 +437,9 @@ int runDetectionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
                 pCjDetectionPipeline->setMultiviewLateFusionNormalization(cvx::convert<float>(scalingsMat)); // floats' Mat to vv<float>
             
                 pCjDetectionPipeline->validate();
+                std::cout << pCjDetectionPipeline->getValidationPerformance() << std::endl;
                 
-                pCjDetectionPipeline->save("detection_multiview_training_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
+                pCjDetectionPipeline->save("detection_multiview_validation_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
             }
         }
     }

@@ -13,7 +13,8 @@
 
 CloudjectDetectionPipeline::CloudjectDetectionPipeline() :
     m_MultiviewDetectionStrategy(DETECT_MONOCULAR),
-    m_InteractionThresh(3)
+    m_InteractionThresh(3),
+    m_ValPerf(0)
 {
     
 }
@@ -32,7 +33,8 @@ CloudjectDetectionPipeline& CloudjectDetectionPipeline::operator=(const Cloudjec
         
         m_pRegisterer = rhs.m_pRegisterer;
         m_pTableModeler = rhs.m_pTableModeler;
-        
+        m_ClassificationPipeline = rhs.m_ClassificationPipeline;
+
         m_Gt = rhs.m_Gt;
         
         m_MultiviewDetectionStrategy = rhs.m_MultiviewDetectionStrategy;
@@ -41,7 +43,8 @@ CloudjectDetectionPipeline& CloudjectDetectionPipeline::operator=(const Cloudjec
         
         m_LateFusionScalings = rhs.m_LateFusionScalings;
         
-        m_ClassificationPipeline = rhs.m_ClassificationPipeline;
+        m_ValParams = rhs.m_ValParams;
+        m_ValPerf = rhs.m_ValPerf;
         
         m_DetectionResults = rhs.m_DetectionResults;
     }
@@ -108,8 +111,8 @@ void CloudjectDetectionPipeline::validate()
     std::vector<std::vector<float> > combinations;
     expandParameters<float>(m_ValParams, combinations);
     
-    float fscoreMax = 0.f;
-    int idxMax = 0;
+    float valPerf = 0.f;
+    int valIdx = 0;
     for (int i = 0; i < combinations.size(); i++)
     {
         setInteractionThresh(combinations[i][0]);
@@ -129,17 +132,21 @@ void CloudjectDetectionPipeline::validate()
             std::cout << fscoreView << ((v < m_DetectionResults.size() - 1) ? "," : ";\n");
         }
         
-        if (fscore > fscoreMax)
+        if (fscore > valPerf)
         {
-            fscoreMax = fscore;
-            idxMax = i;
+            valPerf = fscore;
+            valIdx = i;
         }
     }
     
     // Set the parameters finally
-    setInteractionThresh(combinations[idxMax][0]);
-    
-    std::cout << fscoreMax << std::endl;
+    setInteractionThresh(combinations[valIdx][0]);
+    m_ValPerf = valPerf;
+}
+
+float CloudjectDetectionPipeline::getValidationPerformance()
+{
+    return m_ValPerf;
 }
 
 void CloudjectDetectionPipeline::detect()
@@ -169,6 +176,8 @@ void CloudjectDetectionPipeline::save(std::string filename, std::string extensio
     fs << "numViews" << ((int) m_LateFusionScalings.size());
     for (int v = 0; v < m_LateFusionScalings.size(); v++)
         fs << ("lateFusionScalings-" + boost::lexical_cast<std::string>(v)) << m_LateFusionScalings[v];
+    
+    fs << "valPerf" << m_ValPerf;
     
     fs.release();
 }
@@ -200,6 +209,8 @@ bool CloudjectDetectionPipeline::load(std::string filename, std::string extensio
     for (int v = 0; v < V; v++)
         fs["lateFusionScalings-" + boost::lexical_cast<std::string>(v)] >> m_LateFusionScalings[v];
     
+    fs["]valPerf"] >> m_ValPerf;
+
     fs.release();
     
     return true;

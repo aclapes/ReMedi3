@@ -130,6 +130,7 @@ public:
     
     void setValidationParameters(std::vector<std::vector<float> > parameters);
     void validate();
+    float getValidationPerformance();
     
     void save(std::string filename, std::string extension = ".yml");
     bool load(std::string filename, std::string extension = ".yml");
@@ -159,7 +160,9 @@ private:
     Eigen::Vector3f m_LeafSize;
     
     std::vector<std::vector<float> > m_LateFusionScalings; // in case of multiview
+    
     std::vector<std::vector<float> > m_ValParams;
+    float m_ValPerf;
     
     std::vector<std::vector<DetectionResult> > m_DetectionResults;
     
