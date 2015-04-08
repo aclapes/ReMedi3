@@ -129,7 +129,7 @@ void CloudjectDetectionPipeline::validate()
             float fscoreView = (2.f*result.tp) / (2.f*result.tp + result.fp + result.fn);
             std::cout << fscoreView << ((v < m_DetectionResults.size() - 1) ? "," : ";\n");
             
-            fscore += (fscoreView / 2.f);
+            fscore += (fscoreView / m_DetectionResults.size());
         }
         
         if (fscore > valPerf)
@@ -352,7 +352,6 @@ void CloudjectDetectionPipeline::detectMonocular()
                 evaluateFrame2(frames[v],
                                m_Gt.at(m_Sequences[s]->getName()).at(m_Sequences[s]->getViewName(v)).at(fids[v]),
                                nonInteractedActors[v],
-                               margins,
                                m_LeafSize,
                                objectsResult);
                 
@@ -469,7 +468,8 @@ void visualizeMultiview(pcl::visualization::PCLVisualizer::Ptr pViz, std::vector
 
 void CloudjectDetectionPipeline::detectMultiview()
 {
-    m_DetectionResults.resize(1, std::vector<DetectionResult>(m_Categories.size()));
+//    m_DetectionResults.resize(1, std::vector<DetectionResult>(m_Categories.size()));
+    m_DetectionResults.resize(m_Sequences[0]->getNumOfViews(), std::vector<DetectionResult>(m_Categories.size()));
     
     for (int s = 0; s < m_Sequences.size(); s++)
     {
@@ -534,8 +534,7 @@ void CloudjectDetectionPipeline::detectMultiview()
             
             // Find the correspondences among actor clouds
             std::vector<std::vector<std::pair<int, Cloudject::Ptr> > > correspondences;
-//            std::vector<std::vector<PointT> > positions;
-//            findCorrespondences(frames, nonInteractedActors, OR_CORRESPONDENCE_TOLERANCE, correspondences, positions); // false (not to registrate)
+            // Using grids
             std::vector<std::vector<VoxelGridPtr> > grids;
             findCorrespondences(frames, nonInteractedActors, 0.05, correspondences, grids); // false (not to registrate)
             
@@ -545,47 +544,74 @@ void CloudjectDetectionPipeline::detectMultiview()
                 std::vector<std::vector<float> > distsToMargin (correspondences[i].size());
                 std::vector<std::vector<int> > predictions (correspondences[i].size());
                 
-                for (int v = 0; v < correspondences[i].size(); v++)
-                    predictions[v] = m_ClassificationPipeline->predict(correspondences[i][v].second, distsToMargin[v]);
+                for (int j = 0; j < correspondences[i].size(); j++)
+                {
+                    predictions[j] = m_ClassificationPipeline->predict(correspondences[i][j].second, distsToMargin[j]);
+                    
+                     // some values set now, but verwritten by the fused margins if fusion
+                    correspondences[i][j].second->setPredictions(distsToMargin[j]);
+                    for (int k = 0; k < m_Categories.size(); k++)
+                        if (distsToMargin[j][k] < 0) correspondences[i][j].second->addRegionLabel(m_Categories[k]);
+                }
                 
                 std::vector<int> predictionsFused (m_Categories.size());
                 std::vector<float> marginsFused (m_Categories.size());
-                for (int j = 0; j < m_Categories.size(); j++)
+                for (int k = 0; k < m_Categories.size(); k++)
                 {
                     float distToMarginFused = .0f;
                     float W = .0f;
-                    for (int v = 0; v < correspondences[i].size(); v++)
+                    for (int j = 0; j < correspondences[i].size(); j++)
                     {
-                        pcl::PointXYZ c = correspondences[i][v].second->getCloudCentroid();
+                        pcl::PointXYZ c = correspondences[i][j].second->getCloudCentroid();
                         // Inverse distance weighting
-                        float wsq = 1.f / pow(sqrt(pow(c.x,2) + pow(c.y,2) + pow(c.z,2)), 2);
-                        float s = (predictions[v][j] < 0) ? m_LateFusionScalings[j][0] : m_LateFusionScalings[j][1];
-                        distToMarginFused += ((wsq * distsToMargin[v][j]) / s);
+                        float wsq = 1.f / sqrt(pow(c.x,2) + pow(c.y,2) + pow(c.z,2));
+                        float s = (predictions[j][k] < 0) ? m_LateFusionScalings[k][0] : m_LateFusionScalings[k][1];
+                        distToMarginFused += (wsq * (distsToMargin[j][k] / s));
                         W += wsq;
                     }
-                    predictionsFused[j] = ((distToMarginFused/W) < 0 ? 1 : -1);
-                    marginsFused[j] = distToMarginFused/W;
+                    predictionsFused[k] = ((distToMarginFused/W) < 0 ? 1 : -1);
+                    marginsFused[k] = distToMarginFused/W;
                 }
                 
-                margins[i] = marginsFused;
-                
-                for (int v = 0; v < correspondences[i].size(); v++)
+                for (int j = 0; j < correspondences[i].size(); j++)
                 {
-                    for (int j = 0; j < m_Categories.size(); j++)
-                        if (predictionsFused[j] > 0) correspondences[i][v].second->addRegionLabel(m_Categories[j]);
-//                        if (predictions[v][j] > 0) correspondences[i][v].second->addRegionLabel(objectsLabels[j]);
+                    correspondences[i][j].second->setPredictions(marginsFused);
+                    
+                    correspondences[i][j].second->removeAllRegionLabels();
+                    for (int k = 0; k < m_Categories.size(); k++)
+                        if (marginsFused[k] < 0) correspondences[i][j].second->addRegionLabel(m_Categories[k]);
                 }
             }
             
+            // DEBUG: Structure changes to use the monocular evaluation function
+            //            std::vector<DetectionResult> objectsResult;
+            //            evaluateFrame2(frames, annotationsF, correspondences, m_LeafSize, objectsResult);
+            // -----------------------------------------------------------------
             std::vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > > annotationsF (V);
             for (int v = 0; v < m_Sequences[s]->getNumOfViews(); v++)
                 annotationsF[v] = m_Gt.at(m_Sequences[s]->getName()).at(m_Sequences[s]->getViewName(v)).at(fids[v]);
             
-            std::vector<DetectionResult> objectsResult;
-            evaluateFrame2(frames, annotationsF, correspondences, margins, m_LeafSize, objectsResult);
+            std::vector<std::vector<Cloudject::Ptr> > detections (m_Sequences[s]->getNumOfViews());
+            for (int i = 0; i < correspondences.size(); i++) for (int j = 0; j < correspondences[i].size(); j++)
+            {
+                int v = correspondences[i][j].first;
+                detections[v].push_back(correspondences[i][j].second);
+            }
+            // -----------------------------------------------------------------
             
-            for (int i = 0; i < objectsResult.size(); i++)
-                m_DetectionResults[0][i] += objectsResult[i];
+            
+            // DEBUG: Structure changes to use the monocular evaluation function
+            //            for (int i = 0; i < objectsResult.size(); i++)
+            //                m_DetectionResults[0][i] += objectsResult[i];
+            // -----------------------------------------------------------------
+            for (int v = 0; v < m_Sequences[s]->getNumOfViews(); v++)
+            {
+                std::vector<DetectionResult> objectsResult;
+                evaluateFrame2(frames[v], annotationsF[v], detections[v], m_LeafSize, objectsResult);
+                for (int i = 0; i < objectsResult.size(); i++)
+                    m_DetectionResults[v][i] += objectsResult[i];
+            }
+            // -----------------------------------------------------------------
             
 #ifdef DEBUG_VISUALIZE_DETECTIONS
             DetectionResult result; // for printing purposes
@@ -928,7 +954,7 @@ void CloudjectDetectionPipeline::evaluateFrame(const std::map<std::string,std::m
 }
 
 // Evaluate detection performance in a frame per object (multiple views)
-void CloudjectDetectionPipeline::evaluateFrame2(const std::vector<ColorDepthFrame::Ptr>& frames, const std::vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > >& gt, std::vector<std::vector<std::pair<int, Cloudject::Ptr> > >& correspondences, std::vector<std::vector<float> > margins, Eigen::Vector3f leafSize, std::vector<DetectionResult>& result)
+void CloudjectDetectionPipeline::evaluateFrame2(const std::vector<ColorDepthFrame::Ptr>& frames, const std::vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > >& gt, std::vector<std::vector<std::pair<int, Cloudject::Ptr> > >& correspondences, Eigen::Vector3f leafSize, std::vector<DetectionResult>& result)
 {
     assert(correspondences.size() == margins.size());
     
@@ -942,12 +968,14 @@ void CloudjectDetectionPipeline::evaluateFrame2(const std::vector<ColorDepthFram
     for (int v = 0; v < gt.size(); v++)
         precomputeGrids(frames[v], gt[v], leafSize, gtgrids[v], true);
     
-    for (int i = 0; i < margins.size(); i++)
+    for (int i = 0; i < correspondences.size(); i++)
     {
-        for (int k = 0; k < margins[i].size(); k++)
+        for (int k = 0; k < m_Categories.size(); k++)
         {
+            std::vector<float> margins = correspondences[i][0].second->getPredictions(); // 0-th indexed, since they are all the same
+            
             // A detectoin gives a positive for m_Categories[k] category
-            if (margins[i][k] < maxmargins[k]) // worth checking?
+            if (margins[k] < maxmargins[k]) // worth checking?
             {
                 bool bMatched = false;
                 // #checks = detection views x subannotations
@@ -975,7 +1003,7 @@ void CloudjectDetectionPipeline::evaluateFrame2(const std::vector<ColorDepthFram
                 if (bMatched)
                 {
                     result[k].tp++;
-                    maxmargins[k] = margins[i][k];
+                    maxmargins[k] = margins[k];
                     
                     if (indices[k] >= 0)
                     {
@@ -985,7 +1013,7 @@ void CloudjectDetectionPipeline::evaluateFrame2(const std::vector<ColorDepthFram
                     indices[k] = i;
                 }
             }
-            else if (margins[i][k] < 0)
+            else if (margins[k] < 0)
             {
                 result[k].fp++;
             }
@@ -1008,7 +1036,7 @@ void CloudjectDetectionPipeline::evaluateFrame2(const std::vector<ColorDepthFram
 }
 
 // Evaluate detection performance in a frame per object
-void CloudjectDetectionPipeline::evaluateFrame2(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& gt, std::vector<Cloudject::Ptr>& detections, std::vector<std::vector<float> > margins, Eigen::Vector3f leafSize, std::vector<DetectionResult>& result)
+void CloudjectDetectionPipeline::evaluateFrame2(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& gt, std::vector<Cloudject::Ptr>& detections, Eigen::Vector3f leafSize, std::vector<DetectionResult>& result)
 {
     assert(detections.size() == margins.size());
 
@@ -1020,12 +1048,14 @@ void CloudjectDetectionPipeline::evaluateFrame2(ColorDepthFrame::Ptr frame, cons
     std::map<std::string,std::map<std::string,VoxelGridPtr> > gtgrids;
     precomputeGrids(frame, gt, leafSize, gtgrids, true);
     
-    for (int i = 0; i < margins.size(); i++)
+    for (int i = 0; i < detections.size(); i++)
     {
-        for (int k = 0; k < margins[i].size(); k++)
+        for (int k = 0; k < m_Categories.size(); k++)
         {
+            std::vector<float> margins = detections[i]->getPredictions();
+            
             // A detectoin gives a positive for m_Categories[k] category
-            if (margins[i][k] < maxmargins[k]) // worth checking?
+            if (margins[k] < maxmargins[k]) // worth checking?
             {
                 bool bMatched = false;
                 // #checks = subannotations
@@ -1048,7 +1078,7 @@ void CloudjectDetectionPipeline::evaluateFrame2(ColorDepthFrame::Ptr frame, cons
                 if (bMatched)
                 {
                     result[k].tp++;
-                    maxmargins[k] = margins[i][k];
+                    maxmargins[k] = margins[k];
                     
                     if (indices[k] >= 0)
                     {
@@ -1058,7 +1088,7 @@ void CloudjectDetectionPipeline::evaluateFrame2(ColorDepthFrame::Ptr frame, cons
                     indices[k] = i;
                 }
             }
-            else if (margins[i][k] < 0)
+            else if (margins[k] < 0)
             {
                 result[k].fp++;
             }

@@ -401,7 +401,7 @@ int runDetectionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
                 pCjDetectionPipeline->setMultiviewDetectionStrategy(DETECT_MONOCULAR);
                 
                 boost::timer timer;
-                pCjDetectionPipeline->validate();
+//                pCjDetectionPip[eline->validate();
                 std::cout << pCjDetectionPipeline->getValidationPerformance() << std::endl;
                 std::cout << "It took " << timer.elapsed() << " secs." << std::endl;
                 

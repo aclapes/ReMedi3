@@ -74,6 +74,11 @@ public:
         m_Labels = labels;
     }
     
+    void removeAllLabels()
+    {
+        m_Labels.clear();
+    }
+    
     bool hasLabels()
     {
         return m_Labels.size() > 0;
