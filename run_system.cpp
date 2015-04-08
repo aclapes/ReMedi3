@@ -355,7 +355,7 @@ int runDetectionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
     
     std::vector<std::vector<float> > detectionValParams;
     std::vector<float> interactionThresh;
-    interactionThresh += 1, 2, 3, 6, 8;
+    interactionThresh += 0.03, 0.05, 0.07, 0.09, 0.11, 0.13, 0.15;
     detectionValParams += interactionThresh;
     
     for (int t = beginFold; t < endFold; t++)
@@ -384,7 +384,7 @@ int runDetectionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
             pCjDetectionPipeline->setInputSequences(sequencesTe);
             pCjDetectionPipeline->setCategories(objectsLabels);
             
-            pCjDetectionPipeline->setLeafSize(Eigen::Vector3f(.02f,.02f,.02f));
+            pCjDetectionPipeline->setLeafSize(Eigen::Vector3f(.015f,.015f,.015f));
             pCjDetectionPipeline->setDetectionGroundtruth(gt);
             
             pCjDetectionPipeline->setInteractiveRegisterer(pSys->getRegisterer());
@@ -400,8 +400,10 @@ int runDetectionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
                 std::cout << "Validating MONOCULAR .. " << std::endl;
                 pCjDetectionPipeline->setMultiviewDetectionStrategy(DETECT_MONOCULAR);
                 
+                boost::timer timer;
                 pCjDetectionPipeline->validate();
                 std::cout << pCjDetectionPipeline->getValidationPerformance() << std::endl;
+                std::cout << "It took " << timer.elapsed() << " secs." << std::endl;
                 
                 pCjDetectionPipeline->save("detection_monocular_validation_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
                 
@@ -436,8 +438,10 @@ int runDetectionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
                 remedi::computeScalingFactorsOfCategories(predictions, distsToMargin, scalingsMat);
                 pCjDetectionPipeline->setMultiviewLateFusionNormalization(cvx::convert<float>(scalingsMat)); // floats' Mat to vv<float>
             
+                timer.restart();
                 pCjDetectionPipeline->validate();
                 std::cout << pCjDetectionPipeline->getValidationPerformance() << std::endl;
+                std::cout << "It took " << timer.elapsed() << " secs." << std::endl;
                 
                 pCjDetectionPipeline->save("detection_multiview_validation_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
             }
