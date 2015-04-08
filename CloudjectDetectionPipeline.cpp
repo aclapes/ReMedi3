@@ -127,9 +127,9 @@ void CloudjectDetectionPipeline::validate()
                 result += m_DetectionResults[v][j];
             
             float fscoreView = (2.f*result.tp) / (2.f*result.tp + result.fp + result.fn);
-
-            fscore += fscoreView;
             std::cout << fscoreView << ((v < m_DetectionResults.size() - 1) ? "," : ";\n");
+            
+            fscore += (fscoreView / 2.f);
         }
         
         if (fscore > valPerf)
@@ -232,7 +232,7 @@ void createVisualizationSetup(int V, InteractiveRegisterer::Ptr pRegisterer, pcl
     {
         viz.createViewPort(v*(1.f/(V+1)), 0, (v+1)*(1.f/(V+1)), 1, vp[v]);
         viz.setBackgroundColor (1, 1, 1, vp[v]);
-//        viz.addCoordinateSystem(0.1, 0, 0, 0, "cs" + boost::lexical_cast<string>(v), vp[v]);
+        viz.addCoordinateSystem(0.1, 0, 0, 0, "cs" + boost::lexical_cast<string>(v), vp[v]);
         pRegisterer->setDefaultCamera(viz, vp[v]);
     }
 }
@@ -654,8 +654,7 @@ void CloudjectDetectionPipeline::findInteractions(std::vector<ColorPointCloudPtr
     for (int i = 0; i < interactors.size(); i++)
     {
         ColorPointCloudPtr pInteractorFilt (new ColorPointCloud);
-        VoxelGridPtr pGrid (new VoxelGrid);
-        pclx::voxelize(candidates[i], *pInteractorFilt, *pGrid, leafSize);
+        downsample(interactors[i], leafSize.x(), *pInteractorFilt);
         
         ColorPointCloudPtr pMainInteractorFilt (new ColorPointCloud);
         biggestEuclideanCluster(pInteractorFilt, 250, 25000, leafSize.x(), *pMainInteractorFilt);
@@ -670,15 +669,14 @@ void CloudjectDetectionPipeline::findInteractions(std::vector<ColorPointCloudPtr
         for (int i = 0; i < candidates.size(); i++)
         {
             ColorPointCloudPtr pCandidateCloudFilt (new ColorPointCloud);
-            VoxelGridPtr pGrid (new VoxelGrid);
-            pclx::voxelize(candidates[i], *pCandidateCloudFilt, *pGrid, leafSize);
+            downsample(candidates[i], leafSize.x(), *pCandidateCloudFilt);
             
             candidatesCloudsFilt[i] = pCandidateCloudFilt;
         }
         
         // Check for each cluster that lies on the table
         for (int j = 0; j < interactorsFilt.size(); j++) for (int i = 0; i < candidatesCloudsFilt.size(); i++)
-            if (isInteractive(candidatesCloudsFilt[i], interactorsFilt[j], m_InteractionThresh))
+            if (isInteractive(candidatesCloudsFilt[i], interactorsFilt[j], m_InteractionThresh/*4.*leafSize.x()*/))
                 mask[i] = true;
     }
 }

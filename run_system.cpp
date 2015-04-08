@@ -355,7 +355,7 @@ int runDetectionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
     
     std::vector<std::vector<float> > detectionValParams;
     std::vector<float> interactionThresh;
-    interactionThresh += 0.03, 0.05, 0.07, 0.09, 0.11, 0.13, 0.15;
+    interactionThresh += 0.09, 0.15;
     detectionValParams += interactionThresh;
     
     for (int t = beginFold; t < endFold; t++)
@@ -384,7 +384,7 @@ int runDetectionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
             pCjDetectionPipeline->setInputSequences(sequencesTe);
             pCjDetectionPipeline->setCategories(objectsLabels);
             
-            pCjDetectionPipeline->setLeafSize(Eigen::Vector3f(.015f,.015f,.015f));
+            pCjDetectionPipeline->setLeafSize(Eigen::Vector3f(.02f,.02f,.02f));
             pCjDetectionPipeline->setDetectionGroundtruth(gt);
             
             pCjDetectionPipeline->setInteractiveRegisterer(pSys->getRegisterer());
