@@ -329,7 +329,7 @@ void CloudjectDetectionPipeline::detectMonocular()
                     cloudjectsF[i]->setRegistrationTransformation(frames[v]->getRegistrationTransformation());
                 }
                 
-                findActors(cloudjectsF, interactors, nonInteractedActors[v], 0.02, interactedActors[v]);
+                findActors(cloudjectsF, interactors, nonInteractedActors[v], m_LeafSize, interactedActors[v]);
             }
             
             for (int v = 0; v < V; v++)
@@ -529,7 +529,7 @@ void CloudjectDetectionPipeline::detectMultiview()
                     cloudjectsF[i]->setRegistrationTransformation(frames[v]->getRegistrationTransformation());
                 }
                 
-                findActors(cloudjectsF, interactors, nonInteractedActors[v], 0.02, interactedActors[v]);
+                findActors(cloudjectsF, interactors, nonInteractedActors[v], m_LeafSize, interactedActors[v]);
             }
             
             // Find the correspondences among actor clouds
@@ -617,7 +617,7 @@ void downsample(ColorPointCloudPtr pCloud, float leafSize, ColorPointCloud& clou
     }
 }
 
-void CloudjectDetectionPipeline::findActors(std::vector<Cloudject::Ptr> candidates, std::vector<ColorPointCloudPtr> interactors, std::vector<Cloudject::Ptr>& actors, float leafSize, std::vector<Cloudject::Ptr>& interactedActors)
+void CloudjectDetectionPipeline::findActors(std::vector<Cloudject::Ptr> candidates, std::vector<ColorPointCloudPtr> interactors, std::vector<Cloudject::Ptr>& actors, Eigen::Vector3f leafSize, std::vector<Cloudject::Ptr>& interactedActors)
 {
     actors.clear();
     interactedActors.clear();
@@ -643,7 +643,7 @@ void CloudjectDetectionPipeline::findActors(std::vector<Cloudject::Ptr> candidat
     }
 }
 
-void CloudjectDetectionPipeline::findInteractions(std::vector<ColorPointCloudPtr> candidates, std::vector<ColorPointCloudPtr> interactors, std::vector<bool>& mask, float leafSize)
+void CloudjectDetectionPipeline::findInteractions(std::vector<ColorPointCloudPtr> candidates, std::vector<ColorPointCloudPtr> interactors, std::vector<bool>& mask, Eigen::Vector3f leafSize)
 {
     mask.clear();
     mask.resize(candidates.size(), false);
@@ -654,10 +654,11 @@ void CloudjectDetectionPipeline::findInteractions(std::vector<ColorPointCloudPtr
     for (int i = 0; i < interactors.size(); i++)
     {
         ColorPointCloudPtr pInteractorFilt (new ColorPointCloud);
-        downsample(interactors[i], leafSize, *pInteractorFilt);
+        VoxelGridPtr pGrid (new VoxelGrid);
+        pclx::voxelize(candidates[i], *pInteractorFilt, *pGrid, leafSize);
         
         ColorPointCloudPtr pMainInteractorFilt (new ColorPointCloud);
-        biggestEuclideanCluster(pInteractorFilt, 250, 25000, leafSize, *pMainInteractorFilt);
+        biggestEuclideanCluster(pInteractorFilt, 250, 25000, leafSize.x(), *pMainInteractorFilt);
         
         if (pMainInteractorFilt->size() > 0)
             interactorsFilt.push_back(pMainInteractorFilt);
@@ -669,14 +670,15 @@ void CloudjectDetectionPipeline::findInteractions(std::vector<ColorPointCloudPtr
         for (int i = 0; i < candidates.size(); i++)
         {
             ColorPointCloudPtr pCandidateCloudFilt (new ColorPointCloud);
-            downsample(candidates[i], leafSize, *pCandidateCloudFilt);
+            VoxelGridPtr pGrid (new VoxelGrid);
+            pclx::voxelize(candidates[i], *pCandidateCloudFilt, *pGrid, leafSize);
             
             candidatesCloudsFilt[i] = pCandidateCloudFilt;
         }
         
         // Check for each cluster that lies on the table
         for (int j = 0; j < interactorsFilt.size(); j++) for (int i = 0; i < candidatesCloudsFilt.size(); i++)
-            if (isInteractive(candidatesCloudsFilt[i], interactorsFilt[j], 4.*leafSize))
+            if (isInteractive(candidatesCloudsFilt[i], interactorsFilt[j], m_InteractionThresh))
                 mask[i] = true;
     }
 }
