@@ -232,7 +232,7 @@ void createVisualizationSetup(int V, InteractiveRegisterer::Ptr pRegisterer, pcl
     {
         viz.createViewPort(v*(1.f/(V+1)), 0, (v+1)*(1.f/(V+1)), 1, vp[v]);
         viz.setBackgroundColor (1, 1, 1, vp[v]);
-        viz.addCoordinateSystem(0.1, 0, 0, 0, "cs" + boost::lexical_cast<string>(v), vp[v]);
+//        viz.addCoordinateSystem(0.1, 0, 0, 0, "cs" + boost::lexical_cast<string>(v), vp[v]);
         pRegisterer->setDefaultCamera(viz, vp[v]);
     }
 }
