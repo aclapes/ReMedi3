@@ -200,7 +200,7 @@ public:
         m_Predictions = predictions;
     }
     
-    std::vector<float> getPredictions()
+    std::vector<float>& getPredictions()
     {
         return m_Predictions;
     }

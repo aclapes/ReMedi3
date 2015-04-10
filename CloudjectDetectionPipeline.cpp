@@ -12,7 +12,7 @@
 #include <pcl/point_types.h>
 
 CloudjectDetectionPipeline::CloudjectDetectionPipeline() :
-    m_MultiviewDetectionStrategy(DETECT_MONOCULAR),
+    m_MultiviewStrategy(DETECT_MONOCULAR),
     m_InteractionThresh(3),
     m_ValPerf(0)
 {
@@ -36,9 +36,14 @@ CloudjectDetectionPipeline& CloudjectDetectionPipeline::operator=(const Cloudjec
         m_ClassificationPipeline = rhs.m_ClassificationPipeline;
 
         m_Gt = rhs.m_Gt;
-        
-        m_MultiviewDetectionStrategy = rhs.m_MultiviewDetectionStrategy;
+        m_CorrespCriterion = rhs.m_CorrespCriterion;
+        m_DetectionCorrespThresh = rhs.m_DetectionCorrespThresh;
         m_InteractionThresh = rhs.m_InteractionThresh;
+
+        m_MultiviewStrategy = rhs.m_MultiviewStrategy;
+        m_MultiviewLateFusionStrategy = rhs.m_MultiviewLateFusionStrategy;
+        m_MultiviewCorrespThresh = rhs.m_MultiviewCorrespThresh;
+        
         m_LeafSize = rhs.m_LeafSize;
         
         m_LateFusionScalings = rhs.m_LateFusionScalings;
@@ -76,14 +81,14 @@ void CloudjectDetectionPipeline::setDetectionGroundtruth(const Groundtruth& gt)
     m_Gt = gt;
 }
 
-void CloudjectDetectionPipeline::setMultiviewDetectionStrategy(int strategy)
+void CloudjectDetectionPipeline::setCorrespondenceCriterion(int criterion)
 {
-    m_MultiviewDetectionStrategy = strategy;
+    m_CorrespCriterion = criterion;
 }
 
-void CloudjectDetectionPipeline::setMultiviewLateFusionNormalization(std::vector<std::vector<float> > scalings)
+void CloudjectDetectionPipeline::setDetectionCorrespondenceThresh(float thresh)
 {
-    m_LateFusionScalings = scalings;
+    m_DetectionCorrespThresh = thresh;
 }
 
 void CloudjectDetectionPipeline::setInteractionThresh(float thresh)
@@ -91,9 +96,29 @@ void CloudjectDetectionPipeline::setInteractionThresh(float thresh)
     m_InteractionThresh = thresh;
 }
 
+void CloudjectDetectionPipeline::setMultiviewStrategy(int strategy)
+{
+    m_MultiviewStrategy = strategy;
+}
+
+void CloudjectDetectionPipeline::setMultiviewLateFusionStrategy(int strategy)
+{
+    m_MultiviewLateFusionStrategy = strategy;
+}
+
+void CloudjectDetectionPipeline::setMultiviewCorrespondenceThresh(float thresh)
+{
+    m_MultiviewCorrespThresh = thresh;
+}
+
 void CloudjectDetectionPipeline::setLeafSize(Eigen::Vector3f leafSize)
 {
     m_LeafSize = leafSize;
+}
+
+void CloudjectDetectionPipeline::setMultiviewLateFusionNormalization(std::vector<std::vector<float> > scalings)
+{
+    m_LateFusionScalings = scalings;
 }
 
 void CloudjectDetectionPipeline::setClassificationPipeline(CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pipeline)
@@ -101,9 +126,25 @@ void CloudjectDetectionPipeline::setClassificationPipeline(CloudjectSVMClassific
     m_ClassificationPipeline = pipeline;
 }
 
-void CloudjectDetectionPipeline::setValidationParameters(std::vector<std::vector<float> > parameters)
+void CloudjectDetectionPipeline::setValidationParameters(std::vector<float> correspCriteria,
+                                                         std::vector<float> detectionThreshs,
+                                                         std::vector<float> interactionThreshs,
+                                                         std::vector<float> multiviewLateFusionStrategies,
+                                                         std::vector<float> multiviewCorrespThreshs)
 {
-    m_ValParams = parameters;
+    m_ValParams.clear();
+    
+    if (!correspCriteria.empty())
+        m_ValParams.push_back(correspCriteria);
+    if (!detectionThreshs.empty())
+        m_ValParams.push_back(detectionThreshs);
+    if (!interactionThreshs.empty())
+        m_ValParams.push_back(interactionThreshs);
+    
+    if (!multiviewLateFusionStrategies.empty())
+        m_ValParams.push_back(multiviewLateFusionStrategies);
+    if (!multiviewCorrespThreshs.empty())
+        m_ValParams.push_back(multiviewCorrespThreshs);
 }
 
 void CloudjectDetectionPipeline::validate()
@@ -115,7 +156,8 @@ void CloudjectDetectionPipeline::validate()
     int valIdx = 0;
     for (int i = 0; i < combinations.size(); i++)
     {
-        setInteractionThresh(combinations[i][0]);
+        std::cout << cv::Mat(combinations[i]) << std::endl;
+        setValidationParametersCombination(combinations[i]);
         
         detect();
 
@@ -123,11 +165,11 @@ void CloudjectDetectionPipeline::validate()
         for (int v = 0; v < m_DetectionResults.size(); v++)
         {
             DetectionResult result;
-            for (int j = 0; j < m_DetectionResults.size(); j++)
+            for (int j = 0; j < m_DetectionResults[v].size(); j++)
                 result += m_DetectionResults[v][j];
             
             float fscoreView = (2.f*result.tp) / (2.f*result.tp + result.fp + result.fn);
-            std::cout << fscoreView << ((v < m_DetectionResults.size() - 1) ? "," : ";\n");
+            std::cout << result.toVector() << ", (" << fscoreView << ")" << ((v < m_DetectionResults.size() - 1) ? "," : ";\n");
             
             fscore += (fscoreView / m_DetectionResults.size());
         }
@@ -140,7 +182,7 @@ void CloudjectDetectionPipeline::validate()
     }
     
     // Set the parameters finally
-    setInteractionThresh(combinations[valIdx][0]);
+    setValidationParametersCombination(combinations[valIdx]);
     m_ValPerf = valPerf;
 }
 
@@ -151,9 +193,9 @@ float CloudjectDetectionPipeline::getValidationPerformance()
 
 void CloudjectDetectionPipeline::detect()
 {
-    if (m_MultiviewDetectionStrategy == DETECT_MONOCULAR)
+    if (m_MultiviewStrategy == DETECT_MONOCULAR)
         detectMonocular();
-    else if (m_MultiviewDetectionStrategy == DETECT_MULTIVIEW)
+    else if (m_MultiviewStrategy == DETECT_MULTIVIEW)
         detectMultiview();
 }
 
@@ -167,8 +209,12 @@ void CloudjectDetectionPipeline::save(std::string filename, std::string extensio
     else // yml
         fs.open(filenameWithSuffix, cv::FileStorage::WRITE | cv::FileStorage::FORMAT_YAML);
     
-    fs << "multiviewDetectionStrategy" << m_MultiviewDetectionStrategy;
+    fs << "correspCriterion" << m_CorrespCriterion;
+    fs << "detectionThresh" << m_DetectionCorrespThresh;
     fs << "interactionThresh" << m_InteractionThresh;
+
+    fs << "MultiviewStrategy" << m_MultiviewStrategy;
+    fs << "multiviewLateFusionStrategy" << m_MultiviewLateFusionStrategy;
     fs << "leafSizeX" << m_LeafSize.x();
     fs << "leafSizeY" << m_LeafSize.y();
     fs << "leafSizeZ" << m_LeafSize.z();
@@ -194,8 +240,12 @@ bool CloudjectDetectionPipeline::load(std::string filename, std::string extensio
     if (!fs.isOpened())
         return false;
     
-    fs["multiviewDetectionStrategy"] >> m_MultiviewDetectionStrategy;
+    fs["correspCriterion"] >> m_CorrespCriterion;
+    fs["detectionThresh"] >> m_DetectionCorrespThresh;
     fs["interactionThresh"] >> m_InteractionThresh;
+    
+    fs << "MultiviewStrategy" << m_MultiviewStrategy;
+    fs << "multiviewLateFusionStrategy" << m_MultiviewLateFusionStrategy;
     
     float leafSizeX, leafSizeY, leafSizeZ;
     fs["leafSizeX"] >> leafSizeX;
@@ -209,7 +259,7 @@ bool CloudjectDetectionPipeline::load(std::string filename, std::string extensio
     for (int v = 0; v < V; v++)
         fs["lateFusionScalings-" + boost::lexical_cast<std::string>(v)] >> m_LateFusionScalings[v];
     
-    fs["]valPerf"] >> m_ValPerf;
+    fs["valPerf"] >> m_ValPerf;
 
     fs.release();
     
@@ -224,6 +274,23 @@ std::vector<std::vector<DetectionResult> > CloudjectDetectionPipeline::getDetect
 //
 // Private methods
 //
+
+void CloudjectDetectionPipeline::setValidationParametersCombination(std::vector<float> combination)
+{
+    setCorrespondenceCriterion(combination[0]);
+    setDetectionCorrespondenceThresh(combination[1]);
+    setInteractionThresh(combination[2]);
+    
+    if (m_MultiviewStrategy == DETECT_MONOCULAR)
+    {
+        // nothing particular here
+    }
+    else if (m_MultiviewStrategy == DETECT_MULTIVIEW)
+    {
+        setMultiviewLateFusionStrategy(combination[3]);
+        setMultiviewCorrespondenceThresh(combination[4]);
+    }
+}
 
 void createVisualizationSetup(int V, InteractiveRegisterer::Ptr pRegisterer, pcl::visualization::PCLVisualizer& viz, std::vector<int>& vp)
 {
@@ -268,6 +335,7 @@ void visualizeMonocular(pcl::visualization::PCLVisualizer::Ptr pViz, std::vector
 
 void CloudjectDetectionPipeline::detectMonocular()
 {
+    m_DetectionResults.clear();
     m_DetectionResults.resize(m_Sequences[0]->getNumOfViews(), std::vector<DetectionResult>(m_Categories.size()));
     
     for (int s = 0; s < m_Sequences.size(); s++)
@@ -340,6 +408,7 @@ void CloudjectDetectionPipeline::detectMonocular()
                     std::vector<int> predictions;
                     std::vector<float> distsToMargin;
                     predictions = m_ClassificationPipeline->predict(nonInteractedActors[v][i], distsToMargin);
+                    nonInteractedActors[v][i]->setPredictions(distsToMargin);
                     
                     for (int j = 0; j < predictions.size(); j++)
                         if (predictions[j] > 0)
@@ -466,8 +535,104 @@ void visualizeMultiview(pcl::visualization::PCLVisualizer::Ptr pViz, std::vector
     pViz->spinOnce(50);
 }
 
+void CloudjectDetectionPipeline::fuseCorrespondences(const std::vector<std::vector<std::pair<int, Cloudject::Ptr> > >& correspondences)
+{
+    for (int i = 0; i < correspondences.size(); i++)
+    {
+        // Calculate the fused margins (depending on the normalization criterion)
+        std::vector<float>  marginsFused (m_Categories.size());
+        if (m_MultiviewLateFusionStrategy == MULTIVIEW_LF_OR)
+        {
+            for (int k = 0; k < m_Categories.size(); k++)
+            {
+                marginsFused[k] = 1;
+                for (int j = 0; j < correspondences[i].size() && (marginsFused[k] > 0); j++)
+                {
+                    std::vector<float> distsToMargin = correspondences[i][j].second->getPredictions();
+                    if (distsToMargin[k] < 0)
+                        marginsFused[k] = -1;
+                }
+            }
+        }
+        else if (m_MultiviewLateFusionStrategy == MULTIVIEW_LFSCALE_DEV)
+        {
+            for (int k = 0; k < m_Categories.size(); k++)
+            {
+                float distToMarginFused = .0f;
+                float W = .0f;
+                for (int j = 0; j < correspondences[i].size(); j++)
+                {
+                    std::vector<float> distsToMargin = correspondences[i][j].second->getPredictions();
+                    pcl::PointXYZ c = correspondences[i][j].second->getCloudCentroid();
+                    // Inverse distance weighting
+                    float wsq = 1.f / sqrt(pow(c.x,2) + pow(c.y,2) + pow(c.z,2));
+                    // Scale by the dispersion of either positive or negative margins
+                    float s = (distsToMargin[k] < 0) ? m_LateFusionScalings[k][1] : m_LateFusionScalings[k][0];
+                    distToMarginFused += (wsq * (distsToMargin[k] / abs(s)));
+                    W += wsq;
+                }
+                marginsFused[k] = distToMarginFused/W;
+            }
+        }
+        else if (m_MultiviewLateFusionStrategy == MULTIVIEW_LFSCALE_SUMDIV)
+        {
+            for (int j = 0; j < correspondences[i].size(); j++)
+            {
+                std::vector<float> distsToMargin = correspondences[i][j].second->getPredictions();
+                
+                float sum = 0.f;
+                for (int k = 0; k < m_Categories.size(); k++)
+                    sum += pow(distsToMargin[k],2);
+                
+                for (int k = 0; k < distsToMargin.size(); k++)
+                    distsToMargin[k] /= sum;
+                
+                correspondences[i][j].second->setPredictions(distsToMargin);
+            }
+            
+            for (int k = 0; k < m_Categories.size(); k++)
+            {
+                float distToMarginFused = .0f;
+                float W = .0f;
+                for (int j = 0; j < correspondences[i].size(); j++)
+                {
+                    std::vector<float> distsToMargin = correspondences[i][j].second->getPredictions();
+                    pcl::PointXYZ c = correspondences[i][j].second->getCloudCentroid();
+                    // Inverse distance weighting
+                    float wsq = 1.f / sqrt(pow(c.x,2) + pow(c.y,2) + pow(c.z,2));
+                    // Scale by the dispersion of either positive or negative margins
+                    distToMarginFused += (wsq * (distsToMargin[k]));
+                    W += wsq;
+                }
+                marginsFused[k] = distToMarginFused/W;
+            }
+        }
+        
+        // Set the fused margins
+        for (int j = 0; j < correspondences[i].size(); j++)
+        {
+            correspondences[i][j].second->setPredictions(marginsFused);
+            
+            correspondences[i][j].second->removeAllRegionLabels();
+            for (int k = 0; k < m_Categories.size(); k++)
+                if (marginsFused[k] < 0) correspondences[i][j].second->addRegionLabel(m_Categories[k]);
+        }
+    }
+}
+
+void printCorrespondences(const std::vector<std::vector<std::pair<int,Cloudject::Ptr> > >& correspondences)
+{
+    for (int i = 0; i < correspondences.size(); i++)
+    {
+        for (int j = 0; j < correspondences[i].size(); j++)
+            std::cout << cv::Mat(correspondences[i][j].second->getPredictions()) << std::endl;
+        std::cout << std::endl;
+    }
+}
+
 void CloudjectDetectionPipeline::detectMultiview()
 {
+    m_DetectionResults.clear();
 //    m_DetectionResults.resize(1, std::vector<DetectionResult>(m_Categories.size()));
     m_DetectionResults.resize(m_Sequences[0]->getNumOfViews(), std::vector<DetectionResult>(m_Categories.size()));
     
@@ -536,9 +701,8 @@ void CloudjectDetectionPipeline::detectMultiview()
             std::vector<std::vector<std::pair<int, Cloudject::Ptr> > > correspondences;
             // Using grids
             std::vector<std::vector<VoxelGridPtr> > grids;
-            findCorrespondences(frames, nonInteractedActors, 0.05, correspondences, grids); // false (not to registrate)
+            findCorrespondences(frames, nonInteractedActors, m_MultiviewCorrespThresh, correspondences, grids); // false (not to registrate)
             
-            std::vector<std::vector<float> > margins (correspondences.size());
             for (int i = 0; i < correspondences.size(); i++)
             {
                 std::vector<std::vector<float> > distsToMargin (correspondences[i].size());
@@ -553,35 +717,13 @@ void CloudjectDetectionPipeline::detectMultiview()
                     for (int k = 0; k < m_Categories.size(); k++)
                         if (distsToMargin[j][k] < 0) correspondences[i][j].second->addRegionLabel(m_Categories[k]);
                 }
-                
-                std::vector<int> predictionsFused (m_Categories.size());
-                std::vector<float> marginsFused (m_Categories.size());
-                for (int k = 0; k < m_Categories.size(); k++)
-                {
-                    float distToMarginFused = .0f;
-                    float W = .0f;
-                    for (int j = 0; j < correspondences[i].size(); j++)
-                    {
-                        pcl::PointXYZ c = correspondences[i][j].second->getCloudCentroid();
-                        // Inverse distance weighting
-                        float wsq = 1.f / sqrt(pow(c.x,2) + pow(c.y,2) + pow(c.z,2));
-                        float s = (predictions[j][k] < 0) ? m_LateFusionScalings[k][0] : m_LateFusionScalings[k][1];
-                        distToMarginFused += (wsq * (distsToMargin[j][k] / s));
-                        W += wsq;
-                    }
-                    predictionsFused[k] = ((distToMarginFused/W) < 0 ? 1 : -1);
-                    marginsFused[k] = distToMarginFused/W;
-                }
-                
-                for (int j = 0; j < correspondences[i].size(); j++)
-                {
-                    correspondences[i][j].second->setPredictions(marginsFused);
-                    
-                    correspondences[i][j].second->removeAllRegionLabels();
-                    for (int k = 0; k < m_Categories.size(); k++)
-                        if (marginsFused[k] < 0) correspondences[i][j].second->addRegionLabel(m_Categories[k]);
-                }
             }
+            
+//            std::cout << "Unfused correspondences: " << std::endl;
+//            printCorrespondences(correspondences);
+            fuseCorrespondences(correspondences);
+//            std::cout << "Fused correspondences: " << std::endl;
+//            printCorrespondences(correspondences);
             
             // DEBUG: Structure changes to use the monocular evaluation function
             //            std::vector<DetectionResult> objectsResult;
@@ -604,22 +746,27 @@ void CloudjectDetectionPipeline::detectMultiview()
             //            for (int i = 0; i < objectsResult.size(); i++)
             //                m_DetectionResults[0][i] += objectsResult[i];
             // -----------------------------------------------------------------
+#ifdef DEBUG_VISUALIZE_DETECTIONS
+            std::vector<DetectionResult> results (m_Sequences[s]->getNumOfViews()); // for printing purpose
+#endif //DEBUG_VISUALIZE_DETECTIONS
             for (int v = 0; v < m_Sequences[s]->getNumOfViews(); v++)
             {
                 std::vector<DetectionResult> objectsResult;
                 evaluateFrame2(frames[v], annotationsF[v], detections[v], m_LeafSize, objectsResult);
                 for (int i = 0; i < objectsResult.size(); i++)
+                {
                     m_DetectionResults[v][i] += objectsResult[i];
+#ifdef DEBUG_VISUALIZE_DETECTIONS
+                    results[v] += objectsResult[i];
+#endif //DEBUG_VISUALIZE_DETECTIONS
+                }
             }
             // -----------------------------------------------------------------
             
 #ifdef DEBUG_VISUALIZE_DETECTIONS
-            DetectionResult result; // for printing purposes
-            for (int i = 0; i < objectsResult.size(); i++)
-                result += objectsResult[i];
-            std::cout << result.tp << "\t" << result.fp << "\t" << result.fn << ";" << std::endl;
-
-            visualizeMultiview(pViz, vp, interactors, interactedActors, correspondences);
+            for (int v = 0; v < m_Sequences[s]->getNumOfViews(); v++)
+                std::cout << results[v].tp << "\t" << results[v].fp << "\t" << results[v].fn << (v < m_DetectionResults.size() - 1 ? ",\t" : ";\n");
+//            visualizeMultiview(pViz, vp, interactors, interactedActors, correspondences);
 #endif //DEBUG_VISUALIZE_DETECTIONS
         }
 #ifdef DEBUG_VISUALIZE_DETECTIONS
@@ -790,7 +937,7 @@ void CloudjectDetectionPipeline::findCorrespondences(std::vector<ColorDepthFrame
     
     std::vector<std::vector<std::pair<std::pair<int,int>,PointT> > > _correspondences;
     pclx::findCorrespondences(positions, tol, _correspondences);
-    
+
     // Bc we want to have chains of clouds (not points) and the views to which they correspond, transform _correspondences -> correspondences
     correspondences.clear();
     for (int i = 0; i < _correspondences.size(); i++)
@@ -816,7 +963,11 @@ void CloudjectDetectionPipeline::findCorrespondences(std::vector<ColorDepthFrame
     getDetectionGrids(frames, detections, true, grids); // registrate is "true"
     
     std::vector<std::vector<std::pair<std::pair<int,int>,VoxelGridPtr> > > _correspondences;
-    pclx::findCorrespondences(grids, tol, _correspondences);
+    
+    if (m_CorrespCriterion == CloudjectDetectionPipeline::CORRESP_INC)
+        pclx::findCorrespondencesBasedOnInclusion(grids, tol, _correspondences);
+    else if (m_CorrespCriterion == CloudjectDetectionPipeline::CORRESP_OVL)
+        pclx::findCorrespondencesBasedOnOverlap(grids, tol, _correspondences);
     
     // Bc we want to have chains of clouds (not points) and the views to which they correspond, transform _correspondences -> correspondences
     correspondences.clear();
@@ -956,8 +1107,6 @@ void CloudjectDetectionPipeline::evaluateFrame(const std::map<std::string,std::m
 // Evaluate detection performance in a frame per object (multiple views)
 void CloudjectDetectionPipeline::evaluateFrame2(const std::vector<ColorDepthFrame::Ptr>& frames, const std::vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > >& gt, std::vector<std::vector<std::pair<int, Cloudject::Ptr> > >& correspondences, Eigen::Vector3f leafSize, std::vector<DetectionResult>& result)
 {
-    assert(correspondences.size() == margins.size());
-    
     result.clear();
     result.resize(m_Categories.size());
 
@@ -992,8 +1141,13 @@ void CloudjectDetectionPipeline::evaluateFrame2(const std::vector<ColorDepthFram
                             for ( ; (it != categoryGrids.end()) && !bMatched; ++it)
                             {
                                 VoxelGridPtr pAnnotGrid = it->second;
-                                float inc = pclx::computeInclusion3d(*pDetectionGrid, *pAnnotGrid);
-                                if (inc > 0)
+                                float thresh;
+                                if (m_CorrespCriterion == CORRESP_INC)
+                                    thresh = pclx::computeInclusion3d(*pDetectionGrid, *pAnnotGrid);
+                                else if (m_CorrespCriterion == CORRESP_OVL)
+                                    thresh = pclx::computeOverlap3d(*pDetectionGrid, *pAnnotGrid);
+                                
+                                if (thresh > m_DetectionCorrespThresh)
                                     bMatched = true;
                             }
                         }
@@ -1038,8 +1192,6 @@ void CloudjectDetectionPipeline::evaluateFrame2(const std::vector<ColorDepthFram
 // Evaluate detection performance in a frame per object
 void CloudjectDetectionPipeline::evaluateFrame2(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& gt, std::vector<Cloudject::Ptr>& detections, Eigen::Vector3f leafSize, std::vector<DetectionResult>& result)
 {
-    assert(detections.size() == margins.size());
-
     result.resize(m_Categories.size());
     
     std::vector<float> maxmargins (m_Categories.size(), 0);
@@ -1068,8 +1220,13 @@ void CloudjectDetectionPipeline::evaluateFrame2(ColorDepthFrame::Ptr frame, cons
                     for ( ; (it != categoryGrids.end()) && !bMatched; ++it)
                     {
                         VoxelGridPtr pAnnotGrid = it->second;
-                        float inc = pclx::computeInclusion3d(*pDetectionGrid, *pAnnotGrid);
-                        if (inc > 0)
+                        float thresh;
+                        if (m_CorrespCriterion == CORRESP_INC)
+                            thresh = pclx::computeInclusion3d(*pDetectionGrid, *pAnnotGrid);
+                        else if (m_CorrespCriterion == CORRESP_OVL)
+                            thresh = pclx::computeOverlap3d(*pDetectionGrid, *pAnnotGrid);
+                        
+                        if (thresh > m_DetectionCorrespThresh)
                             bMatched = true;
                     }
                 }

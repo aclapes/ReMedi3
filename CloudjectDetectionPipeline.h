@@ -96,6 +96,11 @@ public:
     {
         return cv::Vec3f(tp,fp,fn);
     }
+    
+//    friend std::ostream& operator<<(std::ostream& os, const DetectionResult& r)
+//    {
+//        return os << "[" << tp << "," << fp << "," << tp << "]";
+//    }
 };
 
 
@@ -121,14 +126,24 @@ public:
     
     void setClassificationPipeline(CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pipeline);
     
-    void setMultiviewDetectionStrategy(int strategy);
-    void setMultiviewActorCorrespondenceThresh(float thresh);
-    void setInteractionThresh(float thresh);
+    void setDetectionCorrespondenceThresh(float thresh); // tolerance when matching to groundtruth
+    void setCorrespondenceCriterion(int criterion); // but how we match against groundtruth?
+    void setInteractionThresh(float thresh); // distance subject-object to declare interaction
+    
+    void setMultiviewStrategy(int strategy); // monocular or multiview
+    void setMultiviewLateFusionStrategy(int strategy);
+    void setMultiviewCorrespondenceThresh(float thresh);
+    
     void setLeafSize(Eigen::Vector3f leafSize);
+    
     
     void setMultiviewLateFusionNormalization(std::vector<std::vector<float> > scalings);
     
-    void setValidationParameters(std::vector<std::vector<float> > parameters);
+    void setValidationParameters(std::vector<float> detectionCorrespThreshs,
+                                 std::vector<float> correspCriteria,
+                                 std::vector<float> interactionThreshs,
+                                 std::vector<float> multiviewLateFusionStrategies,
+                                 std::vector<float> multiviewCorrespThreshs);
     void validate();
     float getValidationPerformance();
     
@@ -140,6 +155,10 @@ public:
     
     
     typedef boost::shared_ptr<CloudjectDetectionPipeline> Ptr;
+    
+    enum { DETECT_MONOCULAR, DETECT_MULTIVIEW };
+    enum { MULTIVIEW_LFSCALE_DEV, MULTIVIEW_LFSCALE_SUMDIV, MULTIVIEW_LF_OR };
+    enum { CORRESP_INC, CORRESP_OVL };
     
 private:
     //
@@ -154,9 +173,13 @@ private:
     CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr m_ClassificationPipeline;
 
     Groundtruth m_Gt;
-    
-    int m_MultiviewDetectionStrategy;
+    int m_CorrespCriterion;
+    float m_DetectionCorrespThresh;
     float m_InteractionThresh;
+    
+    int m_MultiviewStrategy;
+    int m_MultiviewLateFusionStrategy;
+    float m_MultiviewCorrespThresh;
     Eigen::Vector3f m_LeafSize;
     
     std::vector<std::vector<float> > m_LateFusionScalings; // in case of multiview
@@ -170,6 +193,7 @@ private:
     // Private methods
     //
     
+    void setValidationParametersCombination(std::vector<float> combination); // of parameters
     void detectMonocular();
     void detectMultiview();
     
@@ -203,6 +227,8 @@ private:
     
     void precomputeCentroids(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& annotations, std::map<std::string,std::map<std::string,pcl::PointXYZ> >& centroids);
     void precomputeCentroids(ColorDepthFrame::Ptr frame, const std::vector<ForegroundRegion>& detections, std::vector<pcl::PointXYZ>& centroids);
+    
+    void fuseCorrespondences(const std::vector<std::vector<std::pair<int, Cloudject::Ptr> > >& correspondences);
 };
 
 #endif /* defined(__remedi3__CloudjectDetectionPipeline__) */

@@ -353,10 +353,15 @@ int runDetectionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
     int numOfObjects = sizeof(g_ObjectsLabels)/sizeof(g_ObjectsLabels[0]);
     std::vector<const char*> objectsLabels (g_ObjectsLabels, g_ObjectsLabels + numOfObjects);
     
-    std::vector<std::vector<float> > detectionValParams;
-    std::vector<float> interactionThresh;
-    interactionThresh += 0.09, 0.15;
-    detectionValParams += interactionThresh;
+    // Monocular and multiview parameters
+    std::vector<float> detectionThreshs, correspCriteria, interactionThreshs;
+    correspCriteria += CloudjectDetectionPipeline::CORRESP_INC, CloudjectDetectionPipeline::CORRESP_OVL;
+    detectionThreshs += 1.f/objectsLabels.size(); //0, 1.f/objectsLabels.size(), 2.f/objectsLabels.size();
+    interactionThreshs += 0.02, 0.04, 0.06, 0.12;
+    // Multiview parameters
+    std::vector<float> mvLateFusionStrategies, mvCorrespThreshs;
+    mvLateFusionStrategies += CloudjectDetectionPipeline::MULTIVIEW_LF_OR, CloudjectDetectionPipeline::MULTIVIEW_LFSCALE_DEV, CloudjectDetectionPipeline::MULTIVIEW_LFSCALE_SUMDIV;
+    mvCorrespThreshs += 1.f/objectsLabels.size(); //0.05, 1.f/objectsLabels.size(), 2.f/objectsLabels.size();
     
     for (int t = beginFold; t < endFold; t++)
     {
@@ -389,8 +394,6 @@ int runDetectionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
             
             pCjDetectionPipeline->setInteractiveRegisterer(pSys->getRegisterer());
             pCjDetectionPipeline->setTableModeler(pSys->getTableModeler());
-
-            pCjDetectionPipeline->setValidationParameters(detectionValParams);
             
             for (int r = 0; r < NUM_REPETITIONS; r++)
             {
@@ -398,10 +401,11 @@ int runDetectionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
 
                 // MONOCULAR
                 std::cout << "Validating MONOCULAR .. " << std::endl;
-                pCjDetectionPipeline->setMultiviewDetectionStrategy(DETECT_MONOCULAR);
+                pCjDetectionPipeline->setMultiviewStrategy(CloudjectDetectionPipeline::DETECT_MONOCULAR);
+                pCjDetectionPipeline->setValidationParameters(correspCriteria, detectionThreshs, interactionThreshs, std::vector<float>(), std::vector<float>());
                 
                 boost::timer timer;
-//                pCjDetectionPip[eline->validate();
+//                pCjDetectionPipeline->validate();
                 std::cout << pCjDetectionPipeline->getValidationPerformance() << std::endl;
                 std::cout << "It took " << timer.elapsed() << " secs." << std::endl;
                 
@@ -409,8 +413,9 @@ int runDetectionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
                 
                 // MULTIVIEW
                 std::cout << "Validating MULTIVIEW .. " << std::endl;
-                pCjDetectionPipeline->setMultiviewDetectionStrategy(DETECT_MULTIVIEW);
-                
+                pCjDetectionPipeline->setMultiviewStrategy(CloudjectDetectionPipeline::DETECT_MULTIVIEW);
+                pCjDetectionPipeline->setValidationParameters(correspCriteria, detectionThreshs, interactionThreshs, mvLateFusionStrategies, mvCorrespThreshs);
+
                 // Load predictions and dists to margin
                 std::vector<cv::Mat> predictionsTr, distsToMarginTr;
                 for (int tt = 0; tt < NUM_OF_SUBJECTS; tt++)
@@ -515,6 +520,8 @@ int runDetectionPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
 
 int main(int argc, char** argv)
 {
+    std::cout.precision(3);
+
     // *-----------------------------------------------------------------------*
     // | Read parameters
     // *-----------------------------------------------------------------------*

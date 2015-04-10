@@ -127,7 +127,7 @@ void pclx::findNextCorrespondence(std::vector<std::vector<pcl::PointXYZ> >& posi
     }
 }
 
-void pclx::findCorrespondences(std::vector<std::vector<VoxelGridPtr> > grids, float tol, std::vector<std::vector<std::pair<std::pair<int,int>,VoxelGridPtr> > >& correspondences)
+void pclx::findCorrespondencesBasedOnInclusion(std::vector<std::vector<VoxelGridPtr> > grids, float tol, std::vector<std::vector<std::pair<std::pair<int,int>,VoxelGridPtr> > >& correspondences)
 {
     correspondences.clear();
     
@@ -136,10 +136,6 @@ void pclx::findCorrespondences(std::vector<std::vector<VoxelGridPtr> > grids, fl
     for (int v = 0; v < grids.size(); v++)
         assignations[v].resize(grids[v].size(), false);
     
-    // Cumbersome internal (from this function) structure:
-    // Vector of chains
-    // A chain is a list of points
-    // These points have somehow attached the 'view' and the 'index in the view'.
     for (int v = 0; v < grids.size(); v++)
     {
         for (int i = 0; i < grids[v].size(); i++)
@@ -150,8 +146,8 @@ void pclx::findCorrespondences(std::vector<std::vector<VoxelGridPtr> > grids, fl
                 chain.push_back( std::pair<std::pair<int,int>,VoxelGridPtr>(std::pair<int,int>(v,i), grids[v][i]) );
                 assignations[v][i] = true;
                 
-                if (tol > 0)
-                    findNextCorrespondence(grids, assignations, v+1, tol, chain); // recursion
+                if (tol >= 0)
+                    findNextCorrespondenceBasedOnInclusion(grids, assignations, v+1, tol, chain); // recursion
                 
                 correspondences.push_back(chain);
             }
@@ -159,8 +155,7 @@ void pclx::findCorrespondences(std::vector<std::vector<VoxelGridPtr> > grids, fl
     }
 }
 
-
-void pclx::findNextCorrespondence(std::vector<std::vector<VoxelGridPtr> >& grids, std::vector<std::vector<bool> >& assignations, int v, float tol, std::vector<std::pair<std::pair<int,int>,VoxelGridPtr> >& chain)
+void pclx::findNextCorrespondenceBasedOnInclusion(std::vector<std::vector<VoxelGridPtr> >& grids, std::vector<std::vector<bool> >& assignations, int v, float tol, std::vector<std::pair<std::pair<int,int>,VoxelGridPtr> >& chain)
 {
     if (v == grids.size())
     {
@@ -180,7 +175,7 @@ void pclx::findNextCorrespondence(std::vector<std::vector<VoxelGridPtr> >& grids
                     VoxelGridPtr p = chain[i].second;
                     float inc = pclx::computeInclusion3d(*q,*p);
                     
-                    if (inc > tol)
+                    if (inc >= tol)
                     {
                         chainTmp.push_back( std::pair<std::pair<int,int>,VoxelGridPtr>(std::pair<int,int>(v,j), grids[v][j]) );
                         assignations[v][j] = true;
@@ -191,7 +186,70 @@ void pclx::findNextCorrespondence(std::vector<std::vector<VoxelGridPtr> >& grids
         
         chain.insert(chain.end(), chainTmp.begin(), chainTmp.end());
         
-        findNextCorrespondence(grids, assignations, v+1, tol, chain);
+        findNextCorrespondenceBasedOnInclusion(grids, assignations, v+1, tol, chain);
+    }
+}
+
+void pclx::findCorrespondencesBasedOnOverlap(std::vector<std::vector<VoxelGridPtr> > grids, float tol, std::vector<std::vector<std::pair<std::pair<int,int>,VoxelGridPtr> > >& correspondences)
+{
+    correspondences.clear();
+    
+    // Keep already made assignations, to cut search paths
+    std::vector<std::vector<bool> > assignations (grids.size());
+    for (int v = 0; v < grids.size(); v++)
+        assignations[v].resize(grids[v].size(), false);
+    
+    for (int v = 0; v < grids.size(); v++)
+    {
+        for (int i = 0; i < grids[v].size(); i++)
+        {
+            if (!assignations[v][i])
+            {
+                std::vector<std::pair<std::pair<int,int>,VoxelGridPtr> > chain; // points chain
+                chain.push_back( std::pair<std::pair<int,int>,VoxelGridPtr>(std::pair<int,int>(v,i), grids[v][i]) );
+                assignations[v][i] = true;
+                
+                if (tol >= 0)
+                    findNextCorrespondenceBasedOnOverlap(grids, assignations, v+1, tol, chain); // recursion
+                
+                correspondences.push_back(chain);
+            }
+        }
+    }
+}
+
+void pclx::findNextCorrespondenceBasedOnOverlap(std::vector<std::vector<VoxelGridPtr> >& grids, std::vector<std::vector<bool> >& assignations, int v, float tol, std::vector<std::pair<std::pair<int,int>,VoxelGridPtr> >& chain)
+{
+    if (v == grids.size())
+    {
+        return;
+    }
+    else
+    {
+        std::vector<std::pair<std::pair<int,int>,VoxelGridPtr> > chainTmp;
+        for (int j = 0; j < grids[v].size(); j++)
+        {
+            if (!assignations[v][j])
+            {
+                VoxelGridPtr q = grids[v][j]; // candidate
+                
+                for (int i = 0; i < chain.size(); i++)
+                {
+                    VoxelGridPtr p = chain[i].second;
+                    float ovl = pclx::computeOverlap3d(*q,*p);
+                    
+                    if (ovl >= tol)
+                    {
+                        chainTmp.push_back( std::pair<std::pair<int,int>,VoxelGridPtr>(std::pair<int,int>(v,j), grids[v][j]) );
+                        assignations[v][j] = true;
+                    }
+                }
+            }
+        }
+        
+        chain.insert(chain.end(), chainTmp.begin(), chainTmp.end());
+        
+        findNextCorrespondenceBasedOnOverlap(grids, assignations, v+1, tol, chain);
     }
 }
 
