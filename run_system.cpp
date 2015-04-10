@@ -604,6 +604,12 @@ int main(int argc, char** argv)
     Groundtruth gt;
     remedi::loadGroundtruth(sequences, gt);
     
+    int numOfObjects = sizeof(g_ObjectsLabels)/sizeof(g_ObjectsLabels[0]);
+    std::vector<const char*> objectsLabels (g_ObjectsLabels, g_ObjectsLabels + numOfObjects);
+    
+    Interaction iact;
+    remedi::loadInteraction(sequences, objectsLabels, iact);
+    
     if (bClassificationTrain)
         runClassificationTrain(pSys, sequences, sequencesSids, gt, (beginFold < endFold) ? beginFold : 0, (beginFold < endFold) ? endFold : NUM_OF_SUBJECTS);
     if (bClassificationPrediction)

@@ -1051,6 +1051,7 @@ template void cvx::convert(cv::Mat mat, std::list<std::vector<int> >& lv);
 template void cvx::convert(cv::Mat mat, std::list<std::vector<float> >& lv);
 template void cvx::convert(cv::Mat mat, std::list<std::vector<double> >& lv);
 
+template void cvx::convert(const std::vector<std::vector<bool> >& vv, cv::Mat& mat);
 template void cvx::convert(const std::vector<std::vector<uchar> >& vv, cv::Mat& mat);
 template void cvx::convert(const std::vector<std::vector<ushort> >& vv, cv::Mat& mat);
 template void cvx::convert(const std::vector<std::vector<int> >& vv, cv::Mat& mat);
@@ -1063,6 +1064,7 @@ template void cvx::convert(const std::list<std::vector<int> >& lv, cv::Mat& mat)
 template void cvx::convert(const std::list<std::vector<float> >& lv, cv::Mat& mat);
 template void cvx::convert(const std::list<std::vector<double> >& lv, cv::Mat& mat);
 
+template cv::Mat cvx::convert(const std::vector<std::vector<bool> >& vv);
 template cv::Mat cvx::convert(const std::vector<std::vector<uchar> >& vv);
 template cv::Mat cvx::convert(const std::vector<std::vector<ushort> >& vv);
 template cv::Mat cvx::convert(const std::vector<std::vector<int> >& vv);

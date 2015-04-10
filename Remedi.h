@@ -36,14 +36,17 @@ using namespace std;
 // Typedefs
 //
 
-typedef std::map<std::string,std::vector<bool> >  ViewInteraction;
+// Each map representing a view its cardinality being: #{frames}
+typedef std::map<std::string,std::vector<int> >  ViewInteraction;
 typedef std::map<std::string,std::vector<ForegroundRegion> > ViewDetection;
 typedef std::map<std::string,std::map<std::string,std::map<std::string,GroundtruthRegion> > > ViewGroundtruth;
 
+// Each map representing a sequence its cardinality being: #{views}
 typedef std::map<std::string,ViewInteraction> SequenceInteraction;
 typedef std::map<std::string,ViewDetection> SequenceDetection;
 typedef std::map<std::string,ViewGroundtruth> SequenceGroundtruth;
 
+// Each map representing the dataset its cardinality being: #{sequences}
 typedef std::map<std::string,SequenceInteraction> Interaction;
 typedef std::map<std::string,SequenceDetection> Detection;
 typedef std::map<std::string,SequenceGroundtruth> Groundtruth;
@@ -205,7 +208,7 @@ namespace remedi
     void loadGroundtruth(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, Groundtruth& gt);
     void getGroundtruthForTraining(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, const std::vector<const char*> objectsLabels, const Groundtruth& gt, Groundtruth& gtTr);
     
-    void loadInteraction(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<std::string> objectLabels, Interaction& iact);
+    void loadInteraction(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectLabels, Interaction& iact);
     
     void getTrainingCloudjectsWithDescriptor(std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> partitions, int p, std::vector<const char*> annotationLabels, const Groundtruth& gt, std::string descriptorType, std::list<MockCloudject::Ptr>& cloudjects);
     void getTestCloudjectsWithDescriptor(std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> partitions, int p, const Groundtruth& gt, std::string descriptorType, std::list<MockCloudject::Ptr>& cloudjects);

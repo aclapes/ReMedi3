@@ -35,7 +35,7 @@
 //
 // Typedefs
 // -----------------------------------------------------------------------------
-typedef std::map<std::string,std::vector<bool> >  ViewInteraction;
+typedef std::map<std::string,std::vector<int> >  ViewInteraction;
 typedef std::map<std::string,std::vector<ForegroundRegion> > ViewDetection;
 typedef std::map<std::string,std::map<std::string,std::map<std::string,GroundtruthRegion> > > ViewGroundtruth;
 
