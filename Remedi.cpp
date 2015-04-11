@@ -321,26 +321,80 @@ void remedi::loadInteraction(const std::vector<Sequence<ColorDepthFrame>::Ptr> s
         std::string seqName = sequences[s]->getName();
         
         std::vector<std::vector<int> > interaction (sequences[s]->getNumOfViews(), std::vector<int>(objectLabels.size(), 0));
-
-        std::cout << seqName << std::endl;
+        
         sequences[s]->restart();
+        
+        sequences[s]->next();
+        vector<string> fidsPrev = sequences[s]->getFramesFilenames();
+        for (int v = 0; v < sequences[s]->getNumOfViews(); v++)
+            iact[seqName][sequences[s]->getViewName(v)][fidsPrev[v]] = interaction[v];
+        
         while (sequences[s]->hasNextFrames())
         {
+//            std::vector<ColorDepthFrame::Ptr> frames = sequences[s]->nextFrames();
             sequences[s]->next();
-            vector<string> fidsPrev = sequences[s]->getFramesFilenames();
-            
-            if (!sequences[s]->hasNextFrames())
-                continue;
-
-            std::vector<ColorDepthFrame::Ptr> frames = sequences[s]->nextFrames();
             vector<string> fidsCurr = sequences[s]->getFramesFilenames();
             
             for (int v = 0; v < sequences[s]->getNumOfViews(); v++)
             {
                 std::string viewName = sequences[s]->getViewName(v);
                 
-                std::string frameNamePrev = fidsPrev[v];
-                std::string frameNameCurr = fidsCurr[v];
+                std::map<std::string,std::map<std::string,GroundtruthRegion> > gtFramePrev, gtFrameCurr;
+                remedi::io::readAnnotationRegions(sequencesParent + std::string(FOREGROUND_GROUNDTRUTH_DIRNAME) + viewName, fidsPrev[v], gtFramePrev, true);
+                remedi::io::readAnnotationRegions(sequencesParent + std::string(FOREGROUND_GROUNDTRUTH_DIRNAME) + viewName, fidsCurr[v], gtFrameCurr, true);
+                
+                for (int k = 0; k < objectLabels.size(); k++)
+                    interaction[v][k] = (gtFrameCurr.count(objectLabels[k]) == 0);
+                
+                iact[seqName][viewName][fidsCurr[v]] = interaction[v];
+            }
+            
+//            // DEBUG
+//            cv::Mat mosaic (Y_RESOLUTION, sequences[s]->getNumOfViews() * X_RESOLUTION, CV_8UC3);
+//            for (int v = 0; v < sequences[s]->getNumOfViews(); v++)
+//            {
+//                std::cout << fidsCurr[v] << (v < sequences[s]->getNumOfViews() - 1 ? ", " : "\n");
+//                
+//                cv::Mat mosaicViewRoi (mosaic, cv::Rect(v * X_RESOLUTION, 0, X_RESOLUTION, mosaic.rows));
+//                frames[v]->getColor().copyTo(mosaicViewRoi);
+//            }
+//            std::cout << cvx::convert<int>(interaction) << std::endl;
+//            cv::imshow("mosaic", mosaic);
+//            cv::waitKey();
+//            
+//            fidsPrev = fidsCurr;
+        }
+    }
+}
+
+void remedi::loadInteractionBeginEnd(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectLabels, Interaction& iact)
+{
+    iact.clear();
+    
+    for (int s = 0; s < sequences.size(); s++)
+    {
+        std::string sequencesParent = string(PARENT_PATH) + string(SEQUENCES_SUBDIR)
+        + sequences[s]->getName() + "/" + string(KINECT_SUBSUBDIR);
+        std::string seqName = sequences[s]->getName();
+        
+        std::vector<std::vector<int> > interaction (sequences[s]->getNumOfViews(), std::vector<int>(objectLabels.size(), 0));
+        
+        sequences[s]->restart();
+        
+        sequences[s]->next();
+        vector<string> fidsPrev = sequences[s]->getFramesFilenames();
+        for (int v = 0; v < sequences[s]->getNumOfViews(); v++)
+            iact[seqName][sequences[s]->getViewName(v)][fidsPrev[v]] = interaction[v];
+        
+        while (sequences[s]->hasNextFrames())
+        {
+//            std::vector<ColorDepthFrame::Ptr> frames = sequences[s]->nextFrames();
+            sequences[s]->next();
+            vector<string> fidsCurr = sequences[s]->getFramesFilenames();
+            
+            for (int v = 0; v < sequences[s]->getNumOfViews(); v++)
+            {
+                std::string viewName = sequences[s]->getViewName(v);
                 
                 std::map<std::string,std::map<std::string,GroundtruthRegion> > gtFramePrev, gtFrameCurr;
                 remedi::io::readAnnotationRegions(sequencesParent + std::string(FOREGROUND_GROUNDTRUTH_DIRNAME) + viewName, fidsPrev[v], gtFramePrev, true);
@@ -349,31 +403,33 @@ void remedi::loadInteraction(const std::vector<Sequence<ColorDepthFrame>::Ptr> s
                 for (int k = 0; k < objectLabels.size(); k++)
                 {
                     std::string objName = objectLabels[k];
-//                    if (gtFramePrev.count(objectLabels[k]) == gtFrameCurr.count(objectLabels[k]))
-//                        interaction[v][k] = 0;
-//                    // Pick up (beginning of interaction): something annotated was there, and it is not there anymore.
-//                    else if (gtFramePrev.count(objectLabels[k]) > 0 && gtFrameCurr.count(objectLabels[k]) == 0)
-//                        interaction[v][k] = 1;
-//                    // Drop off (beginning of interaction): something annotated was there, and it is not there anymore.
-//                    else if (gtFramePrev.count(objectLabels[k]) == 0 && gtFrameCurr.count(objectLabels[k]) > 0)
-//                        interaction[v][k] = -1;
-                    interaction[v][k] = gtFrameCurr.count(objectLabels[k]) == 0;
+                    if (gtFramePrev.count(objectLabels[k]) == gtFrameCurr.count(objectLabels[k]))
+                        interaction[v][k] = 0;
+                    // Pick up (beginning of interaction): something annotated was there, and it is not there anymore.
+                    else if (gtFramePrev.count(objectLabels[k]) > 0 && gtFrameCurr.count(objectLabels[k]) == 0)
+                        interaction[v][k] = 1;
+                    // Drop off (beginning of interaction): something annotated was there, and it is not there anymore.
+                    else if (gtFramePrev.count(objectLabels[k]) == 0 && gtFrameCurr.count(objectLabels[k]) > 0)
+                        interaction[v][k] = -1;
                 }
                 
-                iact[seqName][viewName][frameNameCurr] = interaction[v];
+                iact[seqName][viewName][fidsCurr[v]] = interaction[v];
             }
             
-            cv::Mat mosaic (Y_RESOLUTION, sequences[s]->getNumOfViews() * X_RESOLUTION, CV_8UC3);
-            for (int v = 0; v < sequences[s]->getNumOfViews(); v++)
-            {
-                std::cout << fidsCurr[v] << (v < sequences[s]->getNumOfViews() - 1 ? ", " : "\n");
-                
-                cv::Mat mosaicViewRoi (mosaic, cv::Rect(v * X_RESOLUTION, 0, X_RESOLUTION, mosaic.rows));
-                frames[v]->getColor().copyTo(mosaicViewRoi);
-            }
-            std::cout << cvx::convert<int>(interaction) << std::endl;
-            cv::imshow("mosaic", mosaic);
-            cv::waitKey();
+//            // DEBUG
+//            cv::Mat mosaic (Y_RESOLUTION, sequences[s]->getNumOfViews() * X_RESOLUTION, CV_8UC3);
+//            for (int v = 0; v < sequences[s]->getNumOfViews(); v++)
+//            {
+//                std::cout << fidsCurr[v] << (v < sequences[s]->getNumOfViews() - 1 ? ", " : "\n");
+//                
+//                cv::Mat mosaicViewRoi (mosaic, cv::Rect(v * X_RESOLUTION, 0, X_RESOLUTION, mosaic.rows));
+//                frames[v]->getColor().copyTo(mosaicViewRoi);
+//            }
+//            std::cout << cvx::convert<int>(interaction) << std::endl;
+//            cv::imshow("mosaic", mosaic);
+//            cv::waitKey();
+//            
+//            fidsPrev = fidsCurr;
         }
     }
 }

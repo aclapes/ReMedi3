@@ -72,6 +72,7 @@ public:
             m_T = rhs.m_T;
             
             m_Predictions = rhs.m_Predictions;
+            m_Likelihoods = rhs.m_Likelihoods;
             
             m_LeafSize = rhs.m_LeafSize;
         }
@@ -195,14 +196,24 @@ public:
         m_T = T;
     }
     
-    void setPredictions(std::vector<float> predictions)
+    void setPredictions(std::vector<int> predictions)
     {
         m_Predictions = predictions;
     }
     
-    std::vector<float>& getPredictions()
+    void setLikelihoods(std::vector<float> likelihoods)
+    {
+        m_Likelihoods = likelihoods;
+    }
+    
+    std::vector<int>& getPredictions()
     {
         return m_Predictions;
+    }
+    
+    std::vector<float>& getLikelihoods()
+    {
+        return m_Likelihoods;
     }
     
     pcl::PointXYZ getCloudCentroid()
@@ -439,7 +450,8 @@ private:
     
     Eigen::Vector3f                                 m_LeafSize;
     
-    std::vector<float>                              m_Predictions;
+    std::vector<int>                                m_Predictions;
+    std::vector<float>                              m_Likelihoods;
 
     // Private methods
     

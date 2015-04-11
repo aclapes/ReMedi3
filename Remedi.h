@@ -209,6 +209,7 @@ namespace remedi
     void getGroundtruthForTraining(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, const std::vector<const char*> objectsLabels, const Groundtruth& gt, Groundtruth& gtTr);
     
     void loadInteraction(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectLabels, Interaction& iact);
+    void loadInteractionBeginEnd(const std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<const char*> objectLabels, Interaction& iact);
     
     void getTrainingCloudjectsWithDescriptor(std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> partitions, int p, std::vector<const char*> annotationLabels, const Groundtruth& gt, std::string descriptorType, std::list<MockCloudject::Ptr>& cloudjects);
     void getTestCloudjectsWithDescriptor(std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> partitions, int p, const Groundtruth& gt, std::string descriptorType, std::list<MockCloudject::Ptr>& cloudjects);

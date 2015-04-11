@@ -18,7 +18,7 @@
 #include "io.h"
 #include "features.h"
 #include "CloudjectSVMClassificationPipeline.h"
-#include "CloudjectDetectionPipeline.h"
+#include "CloudjectInteractionPipeline.h"
 
 #include <pcl/console/parse.h>
 
@@ -348,19 +348,19 @@ int runClassificationPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDept
     return 0;
 }
 
-int runDetectionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> sequencesSids, const Groundtruth& gt, int beginFold = 0, int endFold = 0)
+int runDetectionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> sequencesSids, const Groundtruth& gt, const Interaction& iact, int beginFold = 0, int endFold = 0)
 {
     int numOfObjects = sizeof(g_ObjectsLabels)/sizeof(g_ObjectsLabels[0]);
     std::vector<const char*> objectsLabels (g_ObjectsLabels, g_ObjectsLabels + numOfObjects);
     
     // Monocular and multiview parameters
     std::vector<float> detectionThreshs, correspCriteria, interactionThreshs;
-    correspCriteria += CloudjectDetectionPipeline::CORRESP_INC, CloudjectDetectionPipeline::CORRESP_OVL;
+    correspCriteria += CloudjectInteractionPipeline::CORRESP_INC, CloudjectInteractionPipeline::CORRESP_OVL;
     detectionThreshs += 1.f/objectsLabels.size(); //0, 1.f/objectsLabels.size(), 2.f/objectsLabels.size();
     interactionThreshs += 0.02, 0.04, 0.06, 0.12;
     // Multiview parameters
     std::vector<float> mvLateFusionStrategies, mvCorrespThreshs;
-    mvLateFusionStrategies += CloudjectDetectionPipeline::MULTIVIEW_LF_OR, CloudjectDetectionPipeline::MULTIVIEW_LFSCALE_DEV, CloudjectDetectionPipeline::MULTIVIEW_LFSCALE_SUMDIV;
+    mvLateFusionStrategies += CloudjectInteractionPipeline::MULTIVIEW_LF_OR, CloudjectInteractionPipeline::MULTIVIEW_LFSCALE_DEV, CloudjectInteractionPipeline::MULTIVIEW_LF_FURTHEST;
     mvCorrespThreshs += 1.f/objectsLabels.size(); //0.05, 1.f/objectsLabels.size(), 2.f/objectsLabels.size();
     
     for (int t = beginFold; t < endFold; t++)
@@ -385,36 +385,38 @@ int runDetectionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
             std::vector<Sequence<ColorDepthFrame>::Ptr> sequencesTe;
             remedi::getTestSequences(sequences, sequencesSids, t, sequencesTe);
             
-            CloudjectDetectionPipeline::Ptr pCjDetectionPipeline (new CloudjectDetectionPipeline);
-            pCjDetectionPipeline->setInputSequences(sequencesTe);
-            pCjDetectionPipeline->setCategories(objectsLabels);
+            CloudjectInteractionPipeline::Ptr pCjInteractionPipeline (new CloudjectInteractionPipeline);
+            pCjInteractionPipeline->setInputSequences(sequencesTe);
+            pCjInteractionPipeline->setCategories(objectsLabels);
             
-            pCjDetectionPipeline->setLeafSize(Eigen::Vector3f(.02f,.02f,.02f));
-            pCjDetectionPipeline->setDetectionGroundtruth(gt);
+            pCjInteractionPipeline->setLeafSize(Eigen::Vector3f(.02f,.02f,.02f));
+            pCjInteractionPipeline->setGroundtruth(gt);
+            pCjInteractionPipeline->setInteractionGroundtruth(iact);
+            pCjInteractionPipeline->setValidationInteractionType(CloudjectInteractionPipeline::INTERACTION_BEGINEND); // evaluate the goodness of detection begin-end of interaction
             
-            pCjDetectionPipeline->setInteractiveRegisterer(pSys->getRegisterer());
-            pCjDetectionPipeline->setTableModeler(pSys->getTableModeler());
+            pCjInteractionPipeline->setInteractiveRegisterer(pSys->getRegisterer());
+            pCjInteractionPipeline->setTableModeler(pSys->getTableModeler());
             
             for (int r = 0; r < NUM_REPETITIONS; r++)
             {
-                pCjDetectionPipeline->setClassificationPipeline(classificationPipelines[r]);
+                pCjInteractionPipeline->setClassificationPipeline(classificationPipelines[r]);
 
                 // MONOCULAR
                 std::cout << "Validating MONOCULAR .. " << std::endl;
-                pCjDetectionPipeline->setMultiviewStrategy(CloudjectDetectionPipeline::DETECT_MONOCULAR);
-                pCjDetectionPipeline->setValidationParameters(correspCriteria, detectionThreshs, interactionThreshs, std::vector<float>(), std::vector<float>());
+                pCjInteractionPipeline->setMultiviewStrategy(CloudjectInteractionPipeline::DETECT_MONOCULAR);
+                pCjInteractionPipeline->setValidationParameters(correspCriteria, detectionThreshs, interactionThreshs, std::vector<float>(), std::vector<float>());
                 
                 boost::timer timer;
-//                pCjDetectionPipeline->validate();
-                std::cout << pCjDetectionPipeline->getValidationPerformance() << std::endl;
+                pCjInteractionPipeline->validateInteraction();
+                std::cout << pCjInteractionPipeline->getValidationPerformance() << std::endl;
                 std::cout << "It took " << timer.elapsed() << " secs." << std::endl;
                 
-                pCjDetectionPipeline->save("detection_monocular_validation_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
+                pCjInteractionPipeline->save("detection_monocular_validation_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
                 
                 // MULTIVIEW
                 std::cout << "Validating MULTIVIEW .. " << std::endl;
-                pCjDetectionPipeline->setMultiviewStrategy(CloudjectDetectionPipeline::DETECT_MULTIVIEW);
-                pCjDetectionPipeline->setValidationParameters(correspCriteria, detectionThreshs, interactionThreshs, mvLateFusionStrategies, mvCorrespThreshs);
+                pCjInteractionPipeline->setMultiviewStrategy(CloudjectInteractionPipeline::DETECT_MULTIVIEW);
+                pCjInteractionPipeline->setValidationParameters(correspCriteria, detectionThreshs, interactionThreshs, mvLateFusionStrategies, mvCorrespThreshs);
 
                 // Load predictions and dists to margin
                 std::vector<cv::Mat> predictionsTr, distsToMarginTr;
@@ -441,14 +443,14 @@ int runDetectionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
                 // Set multiview-related parameters
                 cv::Mat scalingsMat;
                 remedi::computeScalingFactorsOfCategories(predictions, distsToMargin, scalingsMat);
-                pCjDetectionPipeline->setMultiviewLateFusionNormalization(cvx::convert<float>(scalingsMat)); // floats' Mat to vv<float>
+                pCjInteractionPipeline->setMultiviewLateFusionNormalization(cvx::convert<float>(scalingsMat)); // floats' Mat to vv<float>
             
                 timer.restart();
-                pCjDetectionPipeline->validate();
-                std::cout << pCjDetectionPipeline->getValidationPerformance() << std::endl;
+                pCjInteractionPipeline->validateInteraction();
+                std::cout << pCjInteractionPipeline->getValidationPerformance() << std::endl;
                 std::cout << "It took " << timer.elapsed() << " secs." << std::endl;
                 
-                pCjDetectionPipeline->save("detection_multiview_validation_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
+                pCjInteractionPipeline->save("detection_multiview_validation_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
             }
         }
     }
@@ -456,7 +458,7 @@ int runDetectionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
     return 0;
 }
 
-int runDetectionPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> sequencesSids, const Groundtruth& gt, int beginFold = 0, int endFold = 0)
+int runDetectionPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> sequencesSids, const Groundtruth& gt, const Interaction& iact, int beginFold = 0, int endFold = 0)
 {
     int numOfObjects = sizeof(g_ObjectsLabels)/sizeof(g_ObjectsLabels[0]);
     std::vector<const char*> objectsLabels (g_ObjectsLabels, g_ObjectsLabels + numOfObjects);
@@ -466,7 +468,7 @@ int runDetectionPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
         std::cout << "Detection prediction in fold " << t << " (LOSOCV) .." << std::endl;
         
         std::vector<CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr> classificationPipelines (NUM_REPETITIONS);
-        std::vector<CloudjectDetectionPipeline::Ptr> detectionPipelines (NUM_REPETITIONS);
+        std::vector<CloudjectInteractionPipeline::Ptr> InteractionPipelines (NUM_REPETITIONS);
 
         bool bSuccess = true;
         for (int r = 0; r < NUM_REPETITIONS; r++)
@@ -474,8 +476,8 @@ int runDetectionPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
             classificationPipelines[r] = CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr(new CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>);
             bSuccess &= classificationPipelines[r]->load("training_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
             
-            detectionPipelines[r] = CloudjectDetectionPipeline::Ptr(new CloudjectDetectionPipeline);
-            bSuccess &= detectionPipelines[r]->load("detection_training_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
+            InteractionPipelines[r] = CloudjectInteractionPipeline::Ptr(new CloudjectInteractionPipeline);
+            bSuccess &= InteractionPipelines[r]->load("detection_training_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
         }
         
         if (bSuccess)
@@ -488,21 +490,22 @@ int runDetectionPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
             std::vector<Sequence<ColorDepthFrame>::Ptr> sequencesTe;
             remedi::getTestSequences(sequences, sequencesSids, t, sequencesTe);
             
-            CloudjectDetectionPipeline::Ptr pCjDetectionPipeline (new CloudjectDetectionPipeline);
-            pCjDetectionPipeline->setInputSequences(sequencesTe);
-            pCjDetectionPipeline->setCategories(objectsLabels);
+            CloudjectInteractionPipeline::Ptr pCjInteractionPipeline (new CloudjectInteractionPipeline);
+            pCjInteractionPipeline->setInputSequences(sequencesTe);
+            pCjInteractionPipeline->setCategories(objectsLabels);
             
-            pCjDetectionPipeline->setDetectionGroundtruth(gt);
+            pCjInteractionPipeline->setGroundtruth(gt);
+            pCjInteractionPipeline->setInteractionGroundtruth(iact);
             
-            pCjDetectionPipeline->setInteractiveRegisterer(pSys->getRegisterer());
-            pCjDetectionPipeline->setTableModeler(pSys->getTableModeler());
+            pCjInteractionPipeline->setInteractiveRegisterer(pSys->getRegisterer());
+            pCjInteractionPipeline->setTableModeler(pSys->getTableModeler());
             
             // MONOCULAR
             for (int r = 0; r < NUM_REPETITIONS; r++)
             {
-                pCjDetectionPipeline->setClassificationPipeline(classificationPipelines[r]);
+                pCjInteractionPipeline->setClassificationPipeline(classificationPipelines[r]);
                 
-                pCjDetectionPipeline->detect();
+                pCjInteractionPipeline->detect();
                 
 //                    std::vector<DetectionResult> dtResultsFold = pSys->getDetectionResults();
 //                    for (int v = 0; v < dtResultsFold.size(); v++)
@@ -530,12 +533,12 @@ int main(int argc, char** argv)
     pcl::console::parse_2x_arguments(argc, argv, "-F", beginFold, endFold);
     
     bool bClassificationTrain, bClassificationPrediction,
-        bDetectionValidation, bDetectionPrediction;
+        bInteractionValidation, bInteractionPrediction;
     
     bClassificationTrain      = (pcl::console::find_argument(argc, argv, "-Ct") >= 0);
     bClassificationPrediction = (pcl::console::find_argument(argc, argv, "-Cp") >= 0);
-    bDetectionValidation      = (pcl::console::find_argument(argc, argv, "-Dv") >= 0);
-    bDetectionPrediction      = (pcl::console::find_argument(argc, argv, "-Dp") >= 0);
+    bInteractionValidation      = (pcl::console::find_argument(argc, argv, "-Dv") >= 0);
+    bInteractionPrediction      = (pcl::console::find_argument(argc, argv, "-Dp") >= 0);
     
     // *-----------------------------------------------------------------------*
     // | Read & list the paths of the seqs from PARENT_PATH/SEQUENCES_SUBDIR/
@@ -604,20 +607,21 @@ int main(int argc, char** argv)
     Groundtruth gt;
     remedi::loadGroundtruth(sequences, gt);
     
-    int numOfObjects = sizeof(g_ObjectsLabels)/sizeof(g_ObjectsLabels[0]);
-    std::vector<const char*> objectsLabels (g_ObjectsLabels, g_ObjectsLabels + numOfObjects);
-    
-    Interaction iact;
-    remedi::loadInteraction(sequences, objectsLabels, iact);
-    
     if (bClassificationTrain)
         runClassificationTrain(pSys, sequences, sequencesSids, gt, (beginFold < endFold) ? beginFold : 0, (beginFold < endFold) ? endFold : NUM_OF_SUBJECTS);
     if (bClassificationPrediction)
         runClassificationPrediction(pSys, sequences, sequencesSids, gt, (beginFold < endFold) ? beginFold : 0, (beginFold < endFold) ? endFold : NUM_OF_SUBJECTS);
-    if (bDetectionValidation)
-        runDetectionValidation(pSys, sequences, sequencesSids, gt, (beginFold < endFold) ? beginFold : 0, (beginFold < endFold) ? endFold : NUM_OF_SUBJECTS);
-    if (bDetectionPrediction)
-        runDetectionPrediction(pSys, sequences, sequencesSids, gt, (beginFold < endFold) ? beginFold : 0, (beginFold < endFold) ? endFold : NUM_OF_SUBJECTS);
+    
+    int numOfObjects = sizeof(g_ObjectsLabels)/sizeof(g_ObjectsLabels[0]);
+    std::vector<const char*> objectsLabels (g_ObjectsLabels, g_ObjectsLabels + numOfObjects);
+    
+    Interaction iact;
+    remedi::loadInteractionBeginEnd(sequences, objectsLabels, iact); // interaction groundtruth indicating just the begin-end of interactions
+    
+    if (bInteractionValidation)
+        runDetectionValidation(pSys, sequences, sequencesSids, gt, iact, (beginFold < endFold) ? beginFold : 0, (beginFold < endFold) ? endFold : NUM_OF_SUBJECTS);
+    if (bInteractionPrediction)
+        runDetectionPrediction(pSys, sequences, sequencesSids, gt, iact, (beginFold < endFold) ? beginFold : 0, (beginFold < endFold) ? endFold : NUM_OF_SUBJECTS);
     
     return 0;
 }
