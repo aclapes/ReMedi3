@@ -1,13 +1,13 @@
 //
-//  CloudjectDetectionPipeline.h
+//  CloudjectInteractionPipeline.h
 //  remedi3
 //
 //  Created by Albert Clapés on 06/04/15.
 //
 //
 
-#ifndef __remedi3__CloudjectDetectionPipeline__
-#define __remedi3__CloudjectDetectionPipeline__
+#ifndef __remedi3__CloudjectInteractionPipeline__
+#define __remedi3__CloudjectInteractionPipeline__
 
 #include <stdio.h>
 
@@ -62,45 +62,43 @@ typedef boost::shared_ptr<pcl::VoxelGrid<pcl::PointXYZRGB> > VoxelGridPtr;
 // Auxiliary classes
 //
 
-class DetectionResult
+
+class Result
 {
 public:
-    int tp;
-    int fp;
-    int fn;
+    int tp, fp, fn, tn;
     
-    DetectionResult() : tp(0), fp(0), fn(0) {}
-    DetectionResult (const DetectionResult& rhs) { *this = rhs; }
+    Result() : tp(0), fp(0), fn(0), tn(0) {}
+    Result (const Result& rhs) { *this = rhs; }
     
-    DetectionResult& operator=(const DetectionResult& rhs)
+    Result& operator=(const Result& rhs)
     {
         if (this != &rhs)
         {
             tp = rhs.tp;
             fp = rhs.fp;
             fn = rhs.fn;
+            tn = rhs.tn;
         }
         return *this;
     }
     
-    DetectionResult& operator+=(const DetectionResult& rhs)
+    Result& operator+=(const Result& rhs)
     {
         tp += rhs.tp;
         fp += rhs.fp;
         fn += rhs.fn;
+        tn += rhs.tn;
         
         return *this;
     }
     
-    cv::Vec3f toVector()
+    cv::Vec4f toVector()
     {
-        return cv::Vec3f(tp,fp,fn);
+        return cv::Vec4f(tp,fp,fn,tn);
     }
     
-//    friend std::ostream& operator<<(std::ostream& os, const DetectionResult& r)
-//    {
-//        return os << "[" << tp << "," << fp << "," << tp << "]";
-//    }
+    void clear() { tp = fp = fn = tn = 0; }
 };
 
 
@@ -108,13 +106,13 @@ public:
 // Main class
 //
 
-class CloudjectDetectionPipeline
+class CloudjectInteractionPipeline
 {
 public:
-    CloudjectDetectionPipeline();
-    CloudjectDetectionPipeline(const CloudjectDetectionPipeline& rhs);
+    CloudjectInteractionPipeline();
+    CloudjectInteractionPipeline(const CloudjectInteractionPipeline& rhs);
     
-    CloudjectDetectionPipeline& operator=(const CloudjectDetectionPipeline& rhs);
+    CloudjectInteractionPipeline& operator=(const CloudjectInteractionPipeline& rhs);
     
     void setInputSequences(const std::vector<Sequence<ColorDepthFrame>::Ptr>& sequences);
     void setCategories(const std::vector<const char*>& categories);
@@ -122,7 +120,8 @@ public:
     void setInteractiveRegisterer(InteractiveRegisterer::Ptr ir);
     void setTableModeler(TableModeler::Ptr tm);
     
-    void setDetectionGroundtruth(const Groundtruth& gt);
+    void setGroundtruth(const Groundtruth& gt);
+    void setInteractionGroundtruth(const Interaction& iact);
     
     void setClassificationPipeline(CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr pipeline);
     
@@ -144,21 +143,28 @@ public:
                                  std::vector<float> interactionThreshs,
                                  std::vector<float> multiviewLateFusionStrategies,
                                  std::vector<float> multiviewCorrespThreshs);
-    void validate();
+    
+    void setValidationInteractionOverlapCriterion(int crit);
+    
+    void validateDetection();
+    void validateInteraction();
+
     float getValidationPerformance();
     
     void save(std::string filename, std::string extension = ".yml");
     bool load(std::string filename, std::string extension = ".yml");
     
     void detect();
-    std::vector<std::vector<DetectionResult> > getDetectionResults();
+    std::vector<std::vector<Result> > getDetectionResults();
+    void detectInteraction();
+    std::vector<std::vector<Result> > getInteractionResults();
     
-    
-    typedef boost::shared_ptr<CloudjectDetectionPipeline> Ptr;
+    typedef boost::shared_ptr<CloudjectInteractionPipeline> Ptr;
     
     enum { DETECT_MONOCULAR, DETECT_MULTIVIEW };
-    enum { MULTIVIEW_LFSCALE_DEV, MULTIVIEW_LFSCALE_SUMDIV, MULTIVIEW_LF_OR };
+    enum { MULTIVIEW_LFSCALE_DEV, MULTIVIEW_LFSCALE_SUMDIV, MULTIVIEW_LF_OR, MULTIVIEW_LF_FURTHEST };
     enum { CORRESP_INC, CORRESP_OVL };
+    enum { INTERACTION_OVL_OVERALL, INTERACTION_OVL_BEGINEND };
     
 private:
     //
@@ -171,8 +177,9 @@ private:
     InteractiveRegisterer::Ptr m_pRegisterer;
     TableModeler::Ptr m_pTableModeler;
     CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr m_ClassificationPipeline;
-
+    
     Groundtruth m_Gt;
+    Interaction m_IAct;
     int m_CorrespCriterion;
     float m_DetectionCorrespThresh;
     float m_InteractionThresh;
@@ -185,50 +192,48 @@ private:
     std::vector<std::vector<float> > m_LateFusionScalings; // in case of multiview
     
     std::vector<std::vector<float> > m_ValParams;
+    int m_ValInteractionOvlCriterion;
     float m_ValPerf;
     
-    std::vector<std::vector<DetectionResult> > m_DetectionResults;
+    std::vector<std::vector<Result> > m_DetectionResults;
+    std::vector<std::vector<Result> > m_InteractionResults;
     
     //
     // Private methods
     //
     
     void setValidationParametersCombination(std::vector<float> combination); // of parameters
+    
     void detectMonocular();
     void detectMultiview();
+    void detectInteractionMonocular();
+    void detectInteractionMultiview();
     
     void findActors(std::vector<Cloudject::Ptr> candidates, std::vector<ColorPointCloudPtr> interactors, std::vector<Cloudject::Ptr>& actors, Eigen::Vector3f leafSize, std::vector<Cloudject::Ptr>& interactedActors);
     void findInteractions(std::vector<ColorPointCloudPtr> candidates, std::vector<ColorPointCloudPtr> interactors, std::vector<bool>& mask, Eigen::Vector3f leafSize);
     bool isInteractive(ColorPointCloudPtr tabletopRegionCluster, ColorPointCloudPtr interactionCloud, float tol);
     
-    void findCorrespondences(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, float tol, std::vector<std::vector<std::pair<int,Cloudject::Ptr> > >& correspondences, std::vector<std::vector<PointT> >& positions);
     void findCorrespondences(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, float tol, std::vector<std::vector<std::pair<int,Cloudject::Ptr> > >& correspondences, std::vector<std::vector<VoxelGridPtr> >& grids);
-    
-    void getDetectionPositions(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, bool bRegistrate, std::vector<std::vector<pcl::PointXYZ> >& positions);
     void getDetectionGrids(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, bool bRegistrate, std::vector<std::vector<VoxelGridPtr> >& grids);
-
-    void evaluateFrame(const std::map<std::string,std::map<std::string,GroundtruthRegion> >& gt, const std::vector<ForegroundRegion>& dt, DetectionResult& result);
-    void evaluateFrame(const vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > >& gt, const vector<std::map<std::string,std::map<std::string,pcl::PointXYZ> > >& gtCentroids, const std::vector<std::vector<std::pair<int, Cloudject::Ptr> > >& correspondences, DetectionResult& result);
-    void evaluateFrame2(const std::vector<ColorDepthFrame::Ptr>& frames, const vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > >& gt, std::vector<std::vector<std::pair<int, Cloudject::Ptr> > >& correspondences, Eigen::Vector3f leafSize,  std::vector<DetectionResult>& result);
-    void evaluateFrame2(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& gt, std::vector<Cloudject::Ptr>& detections, Eigen::Vector3f leafSize, std::vector<DetectionResult>& result);
+    
+    void maxPooling(std::vector<Cloudject::Ptr> correspondences, std::vector<int>& indices);
+    void maxPooling(std::vector<std::vector<std::pair<int, Cloudject::Ptr> > > correspondences, std::vector<int>& indices);
+    
+    void interactionFromNegativeDetections(std::vector<int> negatives, std::vector<int>& interaction);
+    
+    void evaluateDetectionInFrame(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& gt, std::vector<Cloudject::Ptr> detections, std::vector<int> indices, Eigen::Vector3f leafSize, std::vector<Result>& result);
+    void evaluateDetectionInFrame(const std::vector<ColorDepthFrame::Ptr>& frames, const vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > >& gt, std::vector<std::vector<std::pair<int, Cloudject::Ptr> > > correspondences, std::vector<int> indices, Eigen::Vector3f leafSize, std::vector<Result>& result);
+    
+    void evaluateInteractionInFrame(std::vector<int> prediction, std::vector<int> groundtruth, std::vector<Result>& result);
     
     template<typename RegionT>
     VoxelGridPtr computeGridFromRegion(ColorDepthFrame::Ptr frame, RegionT region, Eigen::Vector3f leafSize, bool bRegistrate = false);
-    template<typename RegionT>
-    pclx::Rectangle3D computeRectangleFromRegion(ColorDepthFrame::Ptr frame, RegionT region);
-    template<typename RegionT>
-    pcl::PointXYZ computeCentroidFromRegion(ColorDepthFrame::Ptr frame, RegionT region);
-    
     void precomputeGrids(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& annotations, Eigen::Vector3f leafSize, std::map<std::string,std::map<std::string,VoxelGridPtr> >& grids, bool bRegistrate = false);
     void precomputeGrids(ColorDepthFrame::Ptr frame, const std::vector<ForegroundRegion>& detections, Eigen::Vector3f leafSize, std::vector<VoxelGridPtr>& grids, bool bRegistrate = false);
     
-    void precomputeRectangles3D(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& annotations, std::map<std::string,std::map<std::string,pclx::Rectangle3D> >& rectangles);
-    void precomputeRectangles3D(ColorDepthFrame::Ptr frame, const std::vector<ForegroundRegion>& detections, std::vector<pclx::Rectangle3D>& rectangles);
-    
-    void precomputeCentroids(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& annotations, std::map<std::string,std::map<std::string,pcl::PointXYZ> >& centroids);
-    void precomputeCentroids(ColorDepthFrame::Ptr frame, const std::vector<ForegroundRegion>& detections, std::vector<pcl::PointXYZ>& centroids);
-    
     void fuseCorrespondences(const std::vector<std::vector<std::pair<int, Cloudject::Ptr> > >& correspondences);
+    
+    void firstDerivative(std::vector<int> inputPrev, std::vector<int> inputCurr, std::vector<int>& derivative);
 };
 
-#endif /* defined(__remedi3__CloudjectDetectionPipeline__) */
+#endif /* defined(__remedi3__CloudjectInteractionPipeline__) */

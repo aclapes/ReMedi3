@@ -76,7 +76,7 @@ void remedi::io::readAnnotationRegions(std::string parent, std::string fid, std:
     {
         GroundtruthRegion r = lineToAnnotationRegion(line);
         
-        std::string filepath = filepathPrefix + ".png." + r.getCategory() + ".png";
+        std::string filepath = filepathPrefix + std::string(".png.") + r.getCategory() + std::string(".png");
         if (fs::exists(fs::path(filepath)))
             r.setFilepath(filepath);
         else

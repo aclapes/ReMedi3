@@ -710,6 +710,16 @@ void cvx::harmonicMean(cv::InputArray src, cv::OutputArray dst, int dim)
     dst.getMatRef() = _dst;
 }
 
+template<typename T>
+cv::Mat cvx::convert(std::vector<T> v)
+{
+    cv::Mat m (1, v.size(), cv::DataType<T>::type);
+    
+    for (int i = 0; i < v.size(); i++)
+        m.at<T>(0,i) = v[i];
+    
+    return m;
+}
 
 template<typename T>
 void cvx::convert(cv::Mat mat, std::list<std::vector<T> >& lv)
@@ -1039,6 +1049,12 @@ float cvx::weightedOverlapBetweenRegions(cv::Mat src1, cv::Mat src2, cv::Rect r1
     return wovl;
 }
 
+template cv::Mat cvx::convert(std::vector<uchar> v);
+template cv::Mat cvx::convert(std::vector<ushort> v);
+template cv::Mat cvx::convert(std::vector<int> v);
+template cv::Mat cvx::convert(std::vector<float> v);
+template cv::Mat cvx::convert(std::vector<double> v);
+
 template void cvx::convert(cv::Mat mat, std::vector<std::vector<uchar> >& vv);
 template void cvx::convert(cv::Mat mat, std::vector<std::vector<ushort> >& vv);
 template void cvx::convert(cv::Mat mat, std::vector<std::vector<int> >& vv);
@@ -1051,6 +1067,7 @@ template void cvx::convert(cv::Mat mat, std::list<std::vector<int> >& lv);
 template void cvx::convert(cv::Mat mat, std::list<std::vector<float> >& lv);
 template void cvx::convert(cv::Mat mat, std::list<std::vector<double> >& lv);
 
+template void cvx::convert(const std::vector<std::vector<bool> >& vv, cv::Mat& mat);
 template void cvx::convert(const std::vector<std::vector<uchar> >& vv, cv::Mat& mat);
 template void cvx::convert(const std::vector<std::vector<ushort> >& vv, cv::Mat& mat);
 template void cvx::convert(const std::vector<std::vector<int> >& vv, cv::Mat& mat);
@@ -1063,6 +1080,7 @@ template void cvx::convert(const std::list<std::vector<int> >& lv, cv::Mat& mat)
 template void cvx::convert(const std::list<std::vector<float> >& lv, cv::Mat& mat);
 template void cvx::convert(const std::list<std::vector<double> >& lv, cv::Mat& mat);
 
+template cv::Mat cvx::convert(const std::vector<std::vector<bool> >& vv);
 template cv::Mat cvx::convert(const std::vector<std::vector<uchar> >& vv);
 template cv::Mat cvx::convert(const std::vector<std::vector<ushort> >& vv);
 template cv::Mat cvx::convert(const std::vector<std::vector<int> >& vv);

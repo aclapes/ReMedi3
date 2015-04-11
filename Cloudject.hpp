@@ -71,6 +71,9 @@ public:
             
             m_T = rhs.m_T;
             
+            m_Predictions = rhs.m_Predictions;
+            m_Likelihoods = rhs.m_Likelihoods;
+            
             m_LeafSize = rhs.m_LeafSize;
         }
         return *this;
@@ -106,6 +109,11 @@ public:
     void addRegionLabel(std::string label)
     {
         m_Region.addLabel(label);
+    }
+    
+    void removeAllRegionLabels()
+    {
+        m_Region.removeAllLabels();
     }
     
     void setRegionLabels(std::set<std::string> labels)
@@ -186,6 +194,26 @@ public:
     void setRegistrationTransformation(Eigen::Matrix4f T)
     {
         m_T = T;
+    }
+    
+    void setPredictions(std::vector<int> predictions)
+    {
+        m_Predictions = predictions;
+    }
+    
+    void setLikelihoods(std::vector<float> likelihoods)
+    {
+        m_Likelihoods = likelihoods;
+    }
+    
+    std::vector<int>& getPredictions()
+    {
+        return m_Predictions;
+    }
+    
+    std::vector<float>& getLikelihoods()
+    {
+        return m_Likelihoods;
     }
     
     pcl::PointXYZ getCloudCentroid()
@@ -421,6 +449,9 @@ private:
     Eigen::Matrix4f                                 m_T;
     
     Eigen::Vector3f                                 m_LeafSize;
+    
+    std::vector<int>                                m_Predictions;
+    std::vector<float>                              m_Likelihoods;
 
     // Private methods
     

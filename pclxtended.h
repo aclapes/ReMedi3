@@ -66,8 +66,10 @@ namespace pclx
     void findCorrespondences(std::vector<std::vector<pcl::PointXYZ> > positions, float tol, std::vector<std::vector<std::pair<std::pair<int,int>,pcl::PointXYZ> > >&  correspondences);
     void findNextCorrespondence(std::vector<std::vector<pcl::PointXYZ> >& detections, std::vector<std::vector<bool> >& assignations, int v, float tol, std::vector<std::pair<std::pair<int,int>,pcl::PointXYZ> >& chain);
     
-    void findCorrespondences(std::vector<std::vector<VoxelGridPtr> > grids, float tol, std::vector<std::vector<std::pair<std::pair<int,int>,VoxelGridPtr> > >&  correspondences);
-    void findNextCorrespondence(std::vector<std::vector<VoxelGridPtr> >& grids, std::vector<std::vector<bool> >& assignations, int v, float tol, std::vector<std::pair<std::pair<int,int>,VoxelGridPtr> >& chain);
+    void findCorrespondencesBasedOnInclusion(std::vector<std::vector<VoxelGridPtr> > grids, float tol, std::vector<std::vector<std::pair<std::pair<int,int>,VoxelGridPtr> > >&  correspondences);
+    void findNextCorrespondenceBasedOnInclusion(std::vector<std::vector<VoxelGridPtr> >& grids, std::vector<std::vector<bool> >& assignations, int v, float tol, std::vector<std::pair<std::pair<int,int>,VoxelGridPtr> >& chain);
+    void findCorrespondencesBasedOnOverlap(std::vector<std::vector<VoxelGridPtr> > grids, float tol, std::vector<std::vector<std::pair<std::pair<int,int>,VoxelGridPtr> > >&  correspondences);
+    void findNextCorrespondenceBasedOnOverlap(std::vector<std::vector<VoxelGridPtr> >& grids, std::vector<std::vector<bool> >& assignations, int v, float tol, std::vector<std::pair<std::pair<int,int>,VoxelGridPtr> >& chain);
     
     template<typename PointT>
     void voxelize(typename pcl::PointCloud<PointT>::Ptr pCloud, pcl::PointCloud<PointT>& vloud, pcl::VoxelGrid<PointT>& vox, Eigen::Vector3f leafSize);
