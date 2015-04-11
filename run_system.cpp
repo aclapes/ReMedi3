@@ -508,7 +508,7 @@ int runInteractionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFr
             pCjInteractionPipeline->setLeafSize(Eigen::Vector3f(.02f,.02f,.02f));
             pCjInteractionPipeline->setGroundtruth(gt);
             pCjInteractionPipeline->setInteractionGroundtruth(iact);
-            pCjInteractionPipeline->setValidationInteractionType(CloudjectInteractionPipeline::INTERACTION_BEGINEND); // evaluate the goodness of detection begin-end of interaction
+            pCjInteractionPipeline->setValidationInteractionOverlapCriterion(CloudjectInteractionPipeline::INTERACTION_OVL_OVERALL); // evaluate the goodness of detection begin-end of interaction
             
             pCjInteractionPipeline->setInteractiveRegisterer(pSys->getRegisterer());
             pCjInteractionPipeline->setTableModeler(pSys->getTableModeler());
@@ -684,7 +684,7 @@ int main(int argc, char** argv)
         runDetectionPrediction(pSys, sequences, sequencesSids, gt, (beginFold < endFold) ? beginFold : 0, (beginFold < endFold) ? endFold : NUM_OF_SUBJECTS);
     
     Interaction iact;
-    remedi::loadInteractionBeginEnd(sequences, objectsLabels, iact); // interaction groundtruth indicating just the begin-end of interactions
+    remedi::loadInteraction(sequences, objectsLabels, iact); // interaction groundtruth indicating just the begin-end of interactions
     
     if (bInteractionValidation)
         runInteractionValidation(pSys, sequences, sequencesSids, gt, iact, (beginFold < endFold) ? beginFold : 0, (beginFold < endFold) ? endFold : NUM_OF_SUBJECTS);

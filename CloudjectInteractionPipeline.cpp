@@ -154,9 +154,9 @@ void CloudjectInteractionPipeline::setValidationParameters(std::vector<float> co
         m_ValParams.push_back(multiviewCorrespThreshs);
 }
 
-void CloudjectInteractionPipeline::setValidationInteractionType(int type)
+void CloudjectInteractionPipeline::setValidationInteractionOverlapCriterion(int crit)
 {
-    m_ValInteractionType = type;
+    m_ValInteractionOvlCriterion = crit;
 }
 
 void CloudjectInteractionPipeline::validateDetection()
@@ -176,7 +176,7 @@ void CloudjectInteractionPipeline::validateDetection()
         float fscore = .0f;
         for (int v = 0; v < m_DetectionResults.size(); v++)
         {
-            DetectionResult result;
+            Result result;
             for (int j = 0; j < m_DetectionResults[v].size(); j++)
                 result += m_DetectionResults[v][j];
             
@@ -215,11 +215,11 @@ void CloudjectInteractionPipeline::validateInteraction()
         float ovl = .0f;
         for (int v = 0; v < m_InteractionResults.size(); v++)
         {
-            InteractionResult result;
+            Result result;
             for (int j = 0; j < m_InteractionResults[v].size(); j++)
                 result += m_InteractionResults[v][j];
             
-            float ovlView = result.tp / (result.tp + result.fp + result.fn);
+            float ovlView = ((float)result.tp) / (result.tp + result.fp + result.fn);
             std::cout << result.toVector() << ", (" << ovlView << ")" << ((v < m_InteractionResults.size() - 1) ? "," : ";\n");
             
             ovl += (ovlView / m_InteractionResults.size());
@@ -278,6 +278,8 @@ void CloudjectInteractionPipeline::save(std::string filename, std::string extens
     fs << "leafSizeY" << m_LeafSize.y();
     fs << "leafSizeZ" << m_LeafSize.z();
     
+    fs << "valInteractionOvlCriterion" << m_ValInteractionOvlCriterion;
+    
     fs << "numViews" << ((int) m_LateFusionScalings.size());
     for (int v = 0; v < m_LateFusionScalings.size(); v++)
         fs << ("lateFusionScalings-" + boost::lexical_cast<std::string>(v)) << m_LateFusionScalings[v];
@@ -303,8 +305,10 @@ bool CloudjectInteractionPipeline::load(std::string filename, std::string extens
     fs["detectionThresh"] >> m_DetectionCorrespThresh;
     fs["interactionThresh"] >> m_InteractionThresh;
     
-    fs << "MultiviewStrategy" << m_MultiviewStrategy;
-    fs << "multiviewLateFusionStrategy" << m_MultiviewLateFusionStrategy;
+    fs["valInteractionOvlCriterion"] >> m_ValInteractionOvlCriterion;
+    
+    fs["MultiviewStrategy"] >> m_MultiviewStrategy;
+    fs["multiviewLateFusionStrategy"] >> m_MultiviewLateFusionStrategy;
     
     float leafSizeX, leafSizeY, leafSizeZ;
     fs["leafSizeX"] >> leafSizeX;
@@ -325,7 +329,7 @@ bool CloudjectInteractionPipeline::load(std::string filename, std::string extens
     return true;
 }
 
-std::vector<std::vector<DetectionResult> > CloudjectInteractionPipeline::getDetectionResults()
+std::vector<std::vector<Result> > CloudjectInteractionPipeline::getDetectionResults()
 {
     return m_DetectionResults; // one per view
 }
@@ -366,7 +370,7 @@ void CloudjectInteractionPipeline::setValidationParametersCombination(std::vecto
 void CloudjectInteractionPipeline::detectMonocular()
 {
     m_DetectionResults.clear();
-    m_DetectionResults.resize(m_Sequences[0]->getNumOfViews(), std::vector<DetectionResult>(m_Categories.size()));
+    m_DetectionResults.resize(m_Sequences[0]->getNumOfViews(), std::vector<Result>(m_Categories.size()));
     
     for (int s = 0; s < m_Sequences.size(); s++)
     {
@@ -449,7 +453,7 @@ void CloudjectInteractionPipeline::detectMonocular()
                 
                 // Evaluation
                 
-                std::vector<DetectionResult> resultsFrame;
+                std::vector<Result> resultsFrame;
                 evaluateDetectionInFrame (frames[v],
                                           m_Gt.at(m_Sequences[s]->getName()).at(m_Sequences[s]->getViewName(v)).at(fids[v]),
                                           nonInteractedActors[v],
@@ -471,7 +475,7 @@ void CloudjectInteractionPipeline::detectMonocular()
 void CloudjectInteractionPipeline::detectMultiview()
 {
     m_DetectionResults.clear();
-    m_DetectionResults.resize(1, std::vector<DetectionResult>(m_Categories.size()));
+    m_DetectionResults.resize(1, std::vector<Result>(m_Categories.size()));
     
     for (int s = 0; s < m_Sequences.size(); s++)
     {
@@ -562,7 +566,7 @@ void CloudjectInteractionPipeline::detectMultiview()
             for (int v = 0; v < m_Sequences[s]->getNumOfViews(); v++)
                 annotationsF[v] = m_Gt.at(m_Sequences[s]->getName()).at(m_Sequences[s]->getViewName(v)).at(fids[v]);
             
-            std::vector<DetectionResult> resultsFrame;
+            std::vector<Result> resultsFrame;
             evaluateDetectionInFrame(frames, annotationsF, correspondences, indices, m_LeafSize, resultsFrame);
             
             for (int i = 0; i < resultsFrame.size(); i++)
@@ -582,7 +586,7 @@ void CloudjectInteractionPipeline::detectMultiview()
 void CloudjectInteractionPipeline::detectInteractionMonocular()
 {
     m_InteractionResults.clear();
-    m_InteractionResults.resize(m_Sequences[0]->getNumOfViews(), std::vector<DetectionResult>(m_Categories.size()));
+    m_InteractionResults.resize(m_Sequences[0]->getNumOfViews(), std::vector<Result>(m_Categories.size()));
     
     for (int s = 0; s < m_Sequences.size(); s++)
     {
@@ -595,10 +599,11 @@ void CloudjectInteractionPipeline::detectInteractionMonocular()
         MultiviewVisualizer viz;
         viz.create(V, m_pRegisterer);
 #endif
-        // Using OpenCV Makes much more easer the evaluation of interaction
-        // And will be done when finished processing a sequence
-        std::vector<cv::Mat> P (m_Sequences[s]->getNumOfViews(), cv::Mat(m_Sequences[s]->getMinNumOfFrames(), m_Categories.size(), cv::DataType<int>::type));
-        std::vector<cv::Mat> G (m_Sequences[s]->getNumOfViews(), cv::Mat(m_Sequences[s]->getMinNumOfFrames(), m_Categories.size(), cv::DataType<int>::type));
+        std::vector<std::vector<std::vector<int> > > P (m_Sequences[s]->getNumOfViews(), std::vector<std::vector<int> >(m_Sequences[s]->getMinNumOfFrames()));
+        std::vector<std::vector<std::vector<int> > > G (m_Sequences[s]->getNumOfViews(), std::vector<std::vector<int> >(m_Sequences[s]->getMinNumOfFrames()));
+        
+        std::vector<std::vector<int> > interactionsPrPrev (m_Sequences[s]->getNumOfViews(), std::vector<int>(m_Categories.size(), 0));
+        std::vector<std::vector<int> > interactionsGtPrev (m_Sequences[s]->getNumOfViews(), std::vector<int>(m_Categories.size(), 0));
         
         int f = 0;
         m_Sequences[s]->restart();
@@ -649,6 +654,7 @@ void CloudjectInteractionPipeline::detectInteractionMonocular()
                 findActors(cloudjectsF, interactors, nonInteractedActors[v], m_LeafSize, interactedActors[v]);
             }
             
+            std::vector<int> interactionsPr (V);
             for (int v = 0; v < V; v++)
             {
                 std::vector<std::vector<float> > margins (nonInteractedActors[v].size());
@@ -677,8 +683,34 @@ void CloudjectInteractionPipeline::detectInteractionMonocular()
                 std::vector<int> interactionsGt;
                 interactionsGt = m_IAct.at(m_Sequences[s]->getName()).at(m_Sequences[s]->getViewName(v)).at(fids[v]);
                 
-                P[v].row(f) = m_ValInteractionType == INTERACTION_BEGINEND ? firstDerivative(interactionsPr) : interactionsPr;
-                G[v].row(f) = m_ValInteractionType == INTERACTION_BEGINEND ? firstDerivative(interactionsGt) : interactionsGt;
+                std::vector<Result> results;
+                evaluateInteractionInFrame(interactionsPr, interactionsGt, results);
+                for (int i = 0; i < results.size(); i++)
+                    m_InteractionResults[v][i] += results[i];
+                
+                cv::Mat interactionsPrBE, interactionsGtBE;
+                if (m_ValInteractionOvlCriterion == INTERACTION_OVL_BEGINEND)
+                {
+                    firstDerivative(interactionsPrPrev[v], interactionsPr, P[v][f]);
+                    firstDerivative(interactionsGtPrev[v], interactionsGt, G[v][f]);
+                }
+                else
+                {
+                    P[v][f] = interactionsPr;
+                    G[v][f] = interactionsGt;
+                }
+                
+                // debug
+                // -----
+//                std::copy(P[v][f].begin(), P[v][f].end(), std::ostream_iterator<int>(std::cout, "\t"));
+//                std::cout << ";" << std::endl;
+//                std::copy(G[v][f].begin(), G[v][f].end(), std::ostream_iterator<int>(std::cout, "\t"));
+//                std::cout << ";" << std::endl;
+//                std::cout << std::endl;
+                //
+
+                interactionsPrPrev[v] = interactionsPr;
+                interactionsGtPrev[v] = interactionsGt;
             }
 #ifdef DEBUG_VISUALIZE_DETECTIONS
             viz.visualize(interactors, interactedActors, nonInteractedActors);
@@ -686,14 +718,13 @@ void CloudjectInteractionPipeline::detectInteractionMonocular()
             
             f++;
         }
-        
     }
 }
 
 void CloudjectInteractionPipeline::detectInteractionMultiview()
 {
-    m_DetectionResults.clear();
-    m_DetectionResults.resize(1, std::vector<DetectionResult>(m_Categories.size()));
+    m_InteractionResults.clear();
+    m_InteractionResults.resize(1, std::vector<Result>(m_Categories.size()));
     
     for (int s = 0; s < m_Sequences.size(); s++)
     {
@@ -707,12 +738,11 @@ void CloudjectInteractionPipeline::detectInteractionMultiview()
         std::cout << "[" << std::endl;
 #endif
         
-        // Using OpenCV Makes much more easer the evaluation of interaction
-        // And will be done when finished processing a sequence
-        cv::Mat P, G; // Prediction and groundtruth
+        std::vector<std::vector<int> > P (m_Sequences[s]->getMinNumOfFrames());
+        std::vector<std::vector<int> > G (m_Sequences[s]->getMinNumOfFrames());
         
-        P.create(m_Sequences[s]->getMinNumOfFrames(), m_Categories.size(), cv::DataType<int>::type);
-        G.create(m_Sequences[s]->getMinNumOfFrames(), m_Categories.size(), cv::DataType<int>::type);
+        std::vector<int> interactionsPrPrev (m_Categories.size(), 0);
+        std::vector<int> interactionsGtPrev (m_Categories.size(), 0);
         
         int f = 0;
         m_Sequences[s]->restart();
@@ -804,9 +834,34 @@ void CloudjectInteractionPipeline::detectInteractionMultiview()
                     interactionsGt[k] = interactionsViewGt[k];
             }
             
-            P.row(f) = m_ValInteractionType == INTERACTION_BEGINEND ? firstDerivative(interactionsPr) : interactionsPr;
-            G.row(f) = m_ValInteractionType == INTERACTION_BEGINEND ? firstDerivative(interactionsGt) : interactionsGt;
+            std::vector<Result> results;
+            evaluateInteractionInFrame(interactionsPr, interactionsGt, results);
+            for (int i = 0; i < results.size(); i++)
+                m_InteractionResults[0][i] += results[i];
             
+            cv::Mat interactionsPrBE, interactionsGtBE;
+            if (m_ValInteractionOvlCriterion == INTERACTION_OVL_BEGINEND)
+            {
+                firstDerivative(interactionsPrPrev, interactionsPr, P[f]);
+                firstDerivative(interactionsGtPrev, interactionsGt, G[f]);
+            }
+            else
+            {
+                P[f] = interactionsPr;
+                G[f] = interactionsGt;
+            }
+            
+            // debug
+            // -----
+//            std::copy(P[f].begin(), P[f].end(), std::ostream_iterator<int>(std::cout, "\t"));
+//            std::cout << ";" << std::endl;
+//            std::copy(G[f].begin(), G[f].end(), std::ostream_iterator<int>(std::cout, "\t"));
+//            std::cout << ";" << std::endl;
+//            std::cout << std::endl;
+            //
+            
+            interactionsPrPrev = interactionsPr;
+            interactionsGtPrev = interactionsGt;
             f++;
         }
     }
@@ -1119,7 +1174,7 @@ void CloudjectInteractionPipeline::interactionFromNegativeDetections(std::vector
 }
 
 // Evaluate detection performance in a frame per object
-void CloudjectInteractionPipeline::evaluateDetectionInFrame(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& gt, std::vector<Cloudject::Ptr> detections, std::vector<int> indices, Eigen::Vector3f leafSize, std::vector<DetectionResult>& result)
+void CloudjectInteractionPipeline::evaluateDetectionInFrame(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& gt, std::vector<Cloudject::Ptr> detections, std::vector<int> indices, Eigen::Vector3f leafSize, std::vector<Result>& result)
 {
     result.clear();
     result.resize(m_Categories.size());
@@ -1165,7 +1220,7 @@ void CloudjectInteractionPipeline::evaluateDetectionInFrame(ColorDepthFrame::Ptr
 }
 
 // Evaluate detection performance in a frame per object (multiple views)
-void CloudjectInteractionPipeline::evaluateDetectionInFrame(const std::vector<ColorDepthFrame::Ptr>& frames, const std::vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > >& gt, std::vector<std::vector<std::pair<int, Cloudject::Ptr> > > correspondences, std::vector<int> indices, Eigen::Vector3f leafSize, std::vector<DetectionResult>& result)
+void CloudjectInteractionPipeline::evaluateDetectionInFrame(const std::vector<ColorDepthFrame::Ptr>& frames, const std::vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > >& gt, std::vector<std::vector<std::pair<int, Cloudject::Ptr> > > correspondences, std::vector<int> indices, Eigen::Vector3f leafSize, std::vector<Result>& result)
 {
     result.clear();
     result.resize(m_Categories.size());
@@ -1225,21 +1280,21 @@ void CloudjectInteractionPipeline::evaluateDetectionInFrame(const std::vector<Co
     }
 }
 
-void CloudjectInteractionPipeline::evaluateInteractionInFrame(std::vector<int> prediction, std::vector<int> groundtruth, InteractionResult& result)
+void CloudjectInteractionPipeline::evaluateInteractionInFrame(std::vector<int> prediction, std::vector<int> groundtruth, std::vector<Result>& result)
 {
     assert (prediction.size() == groundtruth.size());
     
-    result.clear();
+    result.resize(prediction.size());
     for (int k = 0; k < prediction.size(); k++)
     {
         if (prediction[k] == 1 && groundtruth[k] == 1)
-            result.tp++;
+            result[k].tp++;
         else if (prediction[k] == 1 && groundtruth[k] == 0)
-            result.fp++;
+            result[k].fp++;
         else if (prediction[k] == 0 && groundtruth[k] == 1)
-            result.fn++;
+            result[k].fn++;
         else if (prediction[k] == 0 && groundtruth[k] == 0)
-            result.tn++;
+            result[k].tn++;
     }
 }
 
@@ -1281,17 +1336,16 @@ void CloudjectInteractionPipeline::precomputeGrids(ColorDepthFrame::Ptr frame, c
         grids[i] = computeGridFromRegion(frame, detections[i], leafSize, bRegistrate);
 }
 
-std::vector<int> CloudjectInteractionPipeline::firstDerivative(std::vector<int> input)
+void CloudjectInteractionPipeline::firstDerivative(std::vector<int> inputPrev, std::vector<int> inputCurr, std::vector<int>& derivative)
 {
-    std::vector<int> output (input.size(), 0);
+    assert(inputPrev.size() == inputCurr.size());
     
-    for (int i = 1; i < input.size(); i++)
+    derivative.resize(inputCurr.size(), 0);
+    for (int i = 0; i < inputCurr.size(); i++)
     {
-        if (input[i-1] == 0 && input[i] == 1)
-            output[i] = 1;
-        else if (input[i-1] == 1 && input[i] == 0)
-            output[i] = -1;
+        if (inputPrev[i] == 0 && inputCurr[i] == 1)
+            derivative[i] = 1;
+        else if (inputPrev[i] == 1 && inputCurr[i] == 0)
+            derivative[i] = -1;
     }
-    
-    return output;
 }

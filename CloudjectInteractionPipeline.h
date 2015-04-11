@@ -62,51 +62,16 @@ typedef boost::shared_ptr<pcl::VoxelGrid<pcl::PointXYZRGB> > VoxelGridPtr;
 // Auxiliary classes
 //
 
-class DetectionResult
-{
-public:
-    int tp, fp, fn;
-    
-    DetectionResult() : tp(0), fp(0), fn(0) {}
-    DetectionResult (const DetectionResult& rhs) { *this = rhs; }
-    
-    DetectionResult& operator=(const DetectionResult& rhs)
-    {
-        if (this != &rhs)
-        {
-            tp = rhs.tp;
-            fp = rhs.fp;
-            fn = rhs.fn;
-        }
-        return *this;
-    }
-    
-    DetectionResult& operator+=(const DetectionResult& rhs)
-    {
-        tp += rhs.tp;
-        fp += rhs.fp;
-        fn += rhs.fn;
-        
-        return *this;
-    }
-    
-    cv::Vec3f toVector()
-    {
-        return cv::Vec3f(tp,fp,fn);
-    }
-    
-    void clear() { tp = fp = fn = 0; }
-};
 
-class InteractionResult
+class Result
 {
 public:
     int tp, fp, fn, tn;
     
-    InteractionResult() : tp(0), fp(0), fn(0), tn(0) {}
-    InteractionResult (const DetectionResult& rhs) { *this = rhs; }
+    Result() : tp(0), fp(0), fn(0), tn(0) {}
+    Result (const Result& rhs) { *this = rhs; }
     
-    InteractionResult& operator=(const InteractionResult& rhs)
+    Result& operator=(const Result& rhs)
     {
         if (this != &rhs)
         {
@@ -118,7 +83,7 @@ public:
         return *this;
     }
     
-    InteractionResult& operator+=(const InteractionResult& rhs)
+    Result& operator+=(const Result& rhs)
     {
         tp += rhs.tp;
         fp += rhs.fp;
@@ -179,7 +144,7 @@ public:
                                  std::vector<float> multiviewLateFusionStrategies,
                                  std::vector<float> multiviewCorrespThreshs);
     
-    void setValidationInteractionType(int type);
+    void setValidationInteractionOverlapCriterion(int crit);
     
     void validateDetection();
     void validateInteraction();
@@ -190,16 +155,16 @@ public:
     bool load(std::string filename, std::string extension = ".yml");
     
     void detect();
-    std::vector<std::vector<DetectionResult> > getDetectionResults();
+    std::vector<std::vector<Result> > getDetectionResults();
     void detectInteraction();
-    std::vector<std::vector<InteractionResult> > getInteractionResults();
+    std::vector<std::vector<Result> > getInteractionResults();
     
     typedef boost::shared_ptr<CloudjectInteractionPipeline> Ptr;
     
     enum { DETECT_MONOCULAR, DETECT_MULTIVIEW };
     enum { MULTIVIEW_LFSCALE_DEV, MULTIVIEW_LFSCALE_SUMDIV, MULTIVIEW_LF_OR, MULTIVIEW_LF_FURTHEST };
     enum { CORRESP_INC, CORRESP_OVL };
-    enum { INTERACTION_OVERALL, INTERACTION_BEGINEND };
+    enum { INTERACTION_OVL_OVERALL, INTERACTION_OVL_BEGINEND };
     
 private:
     //
@@ -227,11 +192,11 @@ private:
     std::vector<std::vector<float> > m_LateFusionScalings; // in case of multiview
     
     std::vector<std::vector<float> > m_ValParams;
-    int m_ValInteractionType;
+    int m_ValInteractionOvlCriterion;
     float m_ValPerf;
     
-    std::vector<std::vector<DetectionResult> > m_DetectionResults;
-    std::vector<std::vector<DetectionResult> > m_InteractionResults;
+    std::vector<std::vector<Result> > m_DetectionResults;
+    std::vector<std::vector<Result> > m_InteractionResults;
     
     //
     // Private methods
@@ -256,10 +221,10 @@ private:
     
     void interactionFromNegativeDetections(std::vector<int> negatives, std::vector<int>& interaction);
     
-    void evaluateDetectionInFrame(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& gt, std::vector<Cloudject::Ptr> detections, std::vector<int> indices, Eigen::Vector3f leafSize, std::vector<DetectionResult>& result);
-    void evaluateDetectionInFrame(const std::vector<ColorDepthFrame::Ptr>& frames, const vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > >& gt, std::vector<std::vector<std::pair<int, Cloudject::Ptr> > > correspondences, std::vector<int> indices, Eigen::Vector3f leafSize, std::vector<DetectionResult>& result);
+    void evaluateDetectionInFrame(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& gt, std::vector<Cloudject::Ptr> detections, std::vector<int> indices, Eigen::Vector3f leafSize, std::vector<Result>& result);
+    void evaluateDetectionInFrame(const std::vector<ColorDepthFrame::Ptr>& frames, const vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > >& gt, std::vector<std::vector<std::pair<int, Cloudject::Ptr> > > correspondences, std::vector<int> indices, Eigen::Vector3f leafSize, std::vector<Result>& result);
     
-    void evaluateInteractionInFrame(std::vector<int> prediction, std::vector<int> groundtruth, InteractionResult& result);
+    void evaluateInteractionInFrame(std::vector<int> prediction, std::vector<int> groundtruth, std::vector<Result>& result);
     
     template<typename RegionT>
     VoxelGridPtr computeGridFromRegion(ColorDepthFrame::Ptr frame, RegionT region, Eigen::Vector3f leafSize, bool bRegistrate = false);
@@ -268,7 +233,7 @@ private:
     
     void fuseCorrespondences(const std::vector<std::vector<std::pair<int, Cloudject::Ptr> > >& correspondences);
     
-    std::vector<int> firstDerivative(std::vector<int> input);
+    void firstDerivative(std::vector<int> inputPrev, std::vector<int> inputCurr, std::vector<int>& derivative);
 };
 
 #endif /* defined(__remedi3__CloudjectInteractionPipeline__) */

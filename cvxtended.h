@@ -94,6 +94,8 @@ namespace cvx
     void harmonicMean(cv::InputArray src, cv::OutputArray dst, int dim);
     
     template<typename T>
+    cv::Mat convert(std::vector<T> v);
+    template<typename T>
     void convert(cv::Mat mat, std::vector<std::vector<T> >& vv);
     template<typename T>
     void convert(cv::Mat mat, std::list<std::vector<T> >& lv);
