@@ -10,11 +10,12 @@
 #include "constants.h"
 #include "statistics.h"
 #include <pcl/point_types.h>
+#include "MultiviewVisualizer.h"
 
 CloudjectInteractionPipeline::CloudjectInteractionPipeline() :
-m_MultiviewStrategy(DETECT_MONOCULAR),
-m_InteractionThresh(3),
-m_ValPerf(0)
+    m_MultiviewStrategy(DETECT_MONOCULAR),
+    m_InteractionThresh(3),
+    m_ValPerf(0)
 {
     
 }
@@ -329,9 +330,17 @@ std::vector<std::vector<DetectionResult> > CloudjectInteractionPipeline::getDete
     return m_DetectionResults; // one per view
 }
 
+
+// =============================================================================
 //
-// Private methods
 //
+//
+//  Private methods
+//
+//
+//
+// =============================================================================
+
 
 void CloudjectInteractionPipeline::setValidationParametersCombination(std::vector<float> combination)
 {
@@ -350,46 +359,9 @@ void CloudjectInteractionPipeline::setValidationParametersCombination(std::vecto
     }
 }
 
-void createVisualizationSetup(int V, InteractiveRegisterer::Ptr pRegisterer, pcl::visualization::PCLVisualizer& viz, std::vector<int>& vp)
-{
-    vp.resize(V + 1);
-    for (int v = 0; v < (V + 1); v++)
-    {
-        viz.createViewPort(v*(1.f/(V+1)), 0, (v+1)*(1.f/(V+1)), 1, vp[v]);
-        viz.setBackgroundColor (1, 1, 1, vp[v]);
-        viz.addCoordinateSystem(0.1, 0, 0, 0, "cs" + boost::lexical_cast<string>(v), vp[v]);
-        pRegisterer->setDefaultCamera(viz, vp[v]);
-    }
-}
-
-void visualizeMonocular(pcl::visualization::PCLVisualizer::Ptr pViz, std::vector<int> vp, std::vector<ColorPointCloudPtr> interactors, std::vector<std::vector<Cloudject::Ptr> > interactions, std::vector<std::vector<Cloudject::Ptr> > actors)
-{
-    // Count the number of views (viewports - 1)
-    int V = vp.size() - 1;
-    
-    for (int v = 0; v < V; v++)
-    {
-        pViz->removeAllPointClouds(vp[v]);
-        pViz->removeAllShapes(vp[v]);
-        
-        for (int i = 0; i < interactors.size(); i++)
-            pViz->addPointCloud(interactors[i], "interactor" + boost::lexical_cast<string>(v) + "-" + boost::lexical_cast<string>(i), vp[v] );
-        
-        for (int i = 0; i < interactions[v].size(); i++)
-        {
-            pViz->addPointCloud(interactions[v][i]->getRegisteredCloud(), "nactor" + boost::lexical_cast<string>(v) + "-" + boost::lexical_cast<string>(i), vp[v] );
-            pViz->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 0, 0, "nactor" + boost::lexical_cast<string>(v) + "-" + boost::lexical_cast<string>(i), vp[v]);
-        }
-        
-        for (int i = 0; i < actors[v].size(); i++)
-        {
-            pViz->addPointCloud(actors[v][i]->getRegisteredCloud(), "actor" + boost::lexical_cast<string>(v) + "-" + boost::lexical_cast<string>(i), vp[v] );
-            pViz->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, g_Colors[i%14][0], g_Colors[i%14][1], g_Colors[i%14][2], "actor" + boost::lexical_cast<string>(v) + "-" + boost::lexical_cast<string>(i), vp[v]);
-        }
-    }
-    
-    pViz->spinOnce(50);
-}
+//
+// Detection
+//
 
 void CloudjectInteractionPipeline::detectMonocular()
 {
@@ -404,11 +376,8 @@ void CloudjectInteractionPipeline::detectMonocular()
         int V = m_Sequences[s]->getNumOfViews();
         
 #ifdef DEBUG_VISUALIZE_DETECTIONS
-        pcl::visualization::PCLVisualizer::Ptr pViz (new pcl::visualization::PCLVisualizer);
-        std::vector<int> vp;
-        
-        createVisualizationSetup(V, m_pRegisterer, *pViz, vp);
-        std::cout << "[" << std::endl;
+        MultiviewVisualizer viz;
+        viz.create(V, m_pRegisterer);
 #endif
         m_Sequences[s]->restart();
         while (m_Sequences[s]->hasNextFrames())
@@ -478,6 +447,8 @@ void CloudjectInteractionPipeline::detectMonocular()
                 std::vector<int> indices;
                 maxPooling(nonInteractedActors[v], indices);
                 
+                // Evaluation
+                
                 std::vector<DetectionResult> resultsFrame;
                 evaluateDetectionInFrame (frames[v],
                                           m_Gt.at(m_Sequences[s]->getName()).at(m_Sequences[s]->getViewName(v)).at(fids[v]),
@@ -491,14 +462,122 @@ void CloudjectInteractionPipeline::detectMonocular()
             }
             
 #ifdef DEBUG_VISUALIZE_DETECTIONS
-            visualizeMonocular(pViz, vp, interactors, interactedActors, nonInteractedActors);
+            viz.visualize(interactors, interactedActors, nonInteractedActors);
 #endif //DEBUG_VISUALIZE_DETECTIONS
         }
-#ifdef DEBUG_VISUALIZE_DETECTIONS
-        std::cout << "];" << std::endl;
-#endif //DEBUG_VISUALIZE_DETECTIONS
     }
 }
+
+void CloudjectInteractionPipeline::detectMultiview()
+{
+    m_DetectionResults.clear();
+    m_DetectionResults.resize(1, std::vector<DetectionResult>(m_Categories.size()));
+    
+    for (int s = 0; s < m_Sequences.size(); s++)
+    {
+        std::string resultsParent = string(PARENT_PATH) + string(RESULTS_SUBDIR)
+        + m_Sequences[s]->getName() + "/" + string(KINECT_SUBSUBDIR);
+        
+        int V = m_Sequences[s]->getNumOfViews();
+#ifdef DEBUG_VISUALIZE_DETECTIONS
+        MultiviewVisualizer viz;
+        viz.create(V, m_pRegisterer);
+        std::cout << "[" << std::endl;
+#endif
+        m_Sequences[s]->restart();
+        while (m_Sequences[s]->hasNextFrames())
+        {
+            vector<ColorDepthFrame::Ptr> frames = m_Sequences[s]->nextFrames();
+            m_pRegisterer->setInputFrames(frames);
+            m_pRegisterer->registrate(frames);
+            
+            std::vector<cv::Mat> tabletops;
+            std::vector<cv::Mat> interactions;
+            m_pTableModeler->getTabletopMask(frames, tabletops);
+            m_pTableModeler->getInteractionMask(frames, interactions);
+            
+            vector<string> fids = m_Sequences[s]->getFramesFilenames();
+            
+            // Prepare the interactors from the different views
+            
+            std::vector<ColorPointCloudPtr> interactors (m_Sequences[s]->getNumOfViews());
+            for (int v = 0; v < m_Sequences[s]->getNumOfViews(); v++)
+            {
+                interactors[v] = ColorPointCloudPtr(new ColorPointCloud);
+                cv::Mat aux;
+                cvx::open(interactions[v] & ~tabletops[v], 2, aux);
+                frames[v]->getRegisteredColoredPointCloud(aux, *(interactors[v]));
+            }
+            
+            // Distinguish actors from interactors
+            std::vector<std::vector<Cloudject::Ptr> > nonInteractedActors (m_Sequences[s]->getNumOfViews());
+            std::vector<std::vector<Cloudject::Ptr> > interactedActors (m_Sequences[s]->getNumOfViews());
+            
+            for (int v = 0; v < m_Sequences[s]->getNumOfViews(); v++)
+            {
+                std::vector<ForegroundRegion> regionsF;
+                remedi::io::readPredictionRegions(resultsParent + string(CLOUDJECTS_DIRNAME)
+                                                  + m_Sequences[s]->getViewName(v), fids[v], regionsF, true);
+                
+                // Read the cloudjects representing the selected regions
+                std::vector<Cloudject::Ptr> cloudjectsF;
+                remedi::io::readCloudjectsWithDescriptor(resultsParent + string(CLOUDJECTS_DIRNAME) + m_Sequences[s]->getViewName(v), fids[v], regionsF, "pfhrgb250", cloudjectsF, true);
+                
+                for (int i = 0; i < cloudjectsF.size(); i++)
+                {
+                    cloudjectsF[i]->setLeafSize(m_LeafSize);
+                    cloudjectsF[i]->setRegistrationTransformation(frames[v]->getRegistrationTransformation());
+                }
+                
+                findActors(cloudjectsF, interactors, nonInteractedActors[v], m_LeafSize, interactedActors[v]);
+            }
+            
+            // Find the correspondences among actor clouds
+            std::vector<std::vector<std::pair<int, Cloudject::Ptr> > > correspondences;
+            // Using grids
+            std::vector<std::vector<VoxelGridPtr> > grids;
+            findCorrespondences(frames, nonInteractedActors, m_MultiviewCorrespThresh, correspondences, grids); // false (not to registrate)
+            
+            for (int i = 0; i < correspondences.size(); i++)
+            {
+                for (int j = 0; j < correspondences[i].size(); j++)
+                {
+                    std::vector<float> distsToMargin;
+                    m_ClassificationPipeline->predict(correspondences[i][j].second, distsToMargin);
+                    correspondences[i][j].second->setLikelihoods(distsToMargin);
+                    
+                    for (int k = 0; k < m_Categories.size(); k++)
+                        if (distsToMargin[k] < 0) correspondences[i][j].second->addRegionLabel(m_Categories[k]);
+                }
+            }
+            
+            fuseCorrespondences(correspondences);
+            
+            std::vector<int> indices;
+            maxPooling(correspondences, indices);
+            
+            // Evaluation
+            
+            std::vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > > annotationsF (V);
+            for (int v = 0; v < m_Sequences[s]->getNumOfViews(); v++)
+                annotationsF[v] = m_Gt.at(m_Sequences[s]->getName()).at(m_Sequences[s]->getViewName(v)).at(fids[v]);
+            
+            std::vector<DetectionResult> resultsFrame;
+            evaluateDetectionInFrame(frames, annotationsF, correspondences, indices, m_LeafSize, resultsFrame);
+            
+            for (int i = 0; i < resultsFrame.size(); i++)
+                m_DetectionResults[0][i] += resultsFrame[i];
+            
+#ifdef DEBUG_VISUALIZE_DETECTIONS
+            viz.visualize(interactors, interactedActors, correspondences);
+#endif //DEBUG_VISUALIZE_DETECTIONS
+        }
+    }
+}
+
+//
+// Interaction
+//
 
 void CloudjectInteractionPipeline::detectInteractionMonocular()
 {
@@ -513,11 +592,8 @@ void CloudjectInteractionPipeline::detectInteractionMonocular()
         int V = m_Sequences[s]->getNumOfViews();
         
 #ifdef DEBUG_VISUALIZE_DETECTIONS
-        pcl::visualization::PCLVisualizer::Ptr pViz (new pcl::visualization::PCLVisualizer);
-        std::vector<int> vp;
-        
-        createVisualizationSetup(V, m_pRegisterer, *pViz, vp);
-        std::cout << "[" << std::endl;
+        MultiviewVisualizer viz;
+        viz.create(V, m_pRegisterer);
 #endif
         // Using OpenCV Makes much more easer the evaluation of interaction
         // And will be done when finished processing a sequence
@@ -593,128 +669,309 @@ void CloudjectInteractionPipeline::detectInteractionMonocular()
                 std::vector<int> indices;
                 maxPooling(nonInteractedActors[v], indices);
                 
-                std::vector<int> interactionsGt;
-                interactionsGt = m_IAct.at(m_Sequences[s]->getName()).at(m_Sequences[s]->getViewName(v)).at(fids[v]);
-                
                 std::vector<int> interactionsPr;
                 interactionFromNegativeDetections(indices, interactionsPr);
                 
-                if (m_ValInteractionType == INTERACTION_BEGINEND)
-                {
-                    std::vector<int> interactionsPrBE, interactionsGtBE;
-                    
-                    findChanges(interactionsPr, interactionsPrBE);
-                    findChanges(interactionsGt, interactionsGtBE);
-                    
-                    cv::Mat(interactionsPrBE).copyTo(P[v].row(f));
-                    cv::Mat(interactionsGtBE).copyTo(G[v].row(f));
-                }
-                else
-                {
-                    cv::Mat(interactionsPr).copyTo(P[v].row(f));
-                    cv::Mat(interactionsGt).copyTo(G[v].row(f));
-                }
+                // Evaluation
                 
+                std::vector<int> interactionsGt;
+                interactionsGt = m_IAct.at(m_Sequences[s]->getName()).at(m_Sequences[s]->getViewName(v)).at(fids[v]);
+                
+                P[v].row(f) = m_ValInteractionType == INTERACTION_BEGINEND ? firstDerivative(interactionsPr) : interactionsPr;
+                G[v].row(f) = m_ValInteractionType == INTERACTION_BEGINEND ? firstDerivative(interactionsGt) : interactionsGt;
             }
-            
 #ifdef DEBUG_VISUALIZE_DETECTIONS
-            visualizeMonocular(pViz, vp, interactors, interactedActors, nonInteractedActors);
+            viz.visualize(interactors, interactedActors, nonInteractedActors);
 #endif //DEBUG_VISUALIZE_DETECTIONS
             
             f++;
         }
-#ifdef DEBUG_VISUALIZE_DETECTIONS
-        std::cout << "];" << std::endl;
-#endif //DEBUG_VISUALIZE_DETECTIONS
+        
     }
 }
 
-void visualizeMultiview(pcl::visualization::PCLVisualizer::Ptr pViz, std::vector<int> vp, std::vector<ColorPointCloudPtr> interactors, std::vector<std::vector<Cloudject::Ptr> > interactions, std::vector<std::vector<std::pair<int, Cloudject::Ptr> > > correspondences)
+void CloudjectInteractionPipeline::detectInteractionMultiview()
 {
-    // Count the number of views (viewports - 1)
-    int V = vp.size() - 1;
+    m_DetectionResults.clear();
+    m_DetectionResults.resize(1, std::vector<DetectionResult>(m_Categories.size()));
     
-    for (int v = 0; v < V; v++)
+    for (int s = 0; s < m_Sequences.size(); s++)
     {
-        pViz->removeAllPointClouds(vp[v]);
-        pViz->removeAllShapes(vp[v]);
-    }
-    
-    for (int v = 0; v < V; v++)
-    {
-        for (int i = 0; i < interactors.size(); i++)
-            pViz->addPointCloud(interactors[i], "interactor" + boost::lexical_cast<string>(v) + "-" + boost::lexical_cast<string>(i), vp[v] );
+        std::string resultsParent = string(PARENT_PATH) + string(RESULTS_SUBDIR)
+        + m_Sequences[s]->getName() + "/" + string(KINECT_SUBSUBDIR);
         
-        for (int i = 0; i < interactions[v].size(); i++)
+        int V = m_Sequences[s]->getNumOfViews();
+#ifdef DEBUG_VISUALIZE_DETECTIONS
+        MultiviewVisualizer viz;
+        viz.create(V, m_pRegisterer);
+        std::cout << "[" << std::endl;
+#endif
+        
+        // Using OpenCV Makes much more easer the evaluation of interaction
+        // And will be done when finished processing a sequence
+        cv::Mat P, G; // Prediction and groundtruth
+        
+        P.create(m_Sequences[s]->getMinNumOfFrames(), m_Categories.size(), cv::DataType<int>::type);
+        G.create(m_Sequences[s]->getMinNumOfFrames(), m_Categories.size(), cv::DataType<int>::type);
+        
+        int f = 0;
+        m_Sequences[s]->restart();
+        while (m_Sequences[s]->hasNextFrames())
         {
-            pViz->addPointCloud(interactions[v][i]->getRegisteredCloud(), "nactor" + boost::lexical_cast<string>(v) + "-" + boost::lexical_cast<string>(i), vp[v] );
-            pViz->setPointCloudRenderingProperties(pcl::visualization::PCL_VISUALIZER_COLOR, 0, 0, 0, "nactor" + boost::lexical_cast<string>(v) + "-" + boost::lexical_cast<string>(i), vp[v]);
-        }
-    }
-    
-    for (int i = 0; i < correspondences.size(); i++)
-    {
-        std::vector<VoxelGridPtr> grids (correspondences[i].size());
-        for (int j = 0; j < correspondences[i].size(); j++)
-        {
-            int v = correspondences[i][j].first;
+            vector<ColorDepthFrame::Ptr> frames = m_Sequences[s]->nextFrames();
+            m_pRegisterer->setInputFrames(frames);
+            m_pRegisterer->registrate(frames);
             
-            // Visualize in color and boxed in the viewpoirt
+            std::vector<cv::Mat> tabletops;
+            std::vector<cv::Mat> interactions;
+            m_pTableModeler->getTabletopMask(frames, tabletops);
+            m_pTableModeler->getInteractionMask(frames, interactions);
             
-            pViz->addPointCloud(correspondences[i][j].second->getRegisteredCloud(), "actor" + boost::lexical_cast<string>(i) + "-" + boost::lexical_cast<string>(j), vp[v] );
+            vector<string> fids = m_Sequences[s]->getFramesFilenames();
             
-            grids[j] = correspondences[i][j].second->getRegisteredGrid();
-            Eigen::Vector3f leafSize = grids[j]->getLeafSize();
-            Eigen::Vector3i min = grids[j]->getMinBoxCoordinates();
-            Eigen::Vector3i max = grids[j]->getMaxBoxCoordinates();
+            // Prepare the interactors from the different views
             
-            pViz->addCube(min.x() * leafSize.x(), max.x() * leafSize.x(), min.y() * leafSize.y(), max.y() * leafSize.y(), min.z() * leafSize.z(), max.z() * leafSize.z(), g_Colors[i%14][0], g_Colors[i%14][1], g_Colors[i%14][2], "cube" + boost::lexical_cast<string>(i) + "-" + boost::lexical_cast<string>(j), vp[v]);
-            
-            // Visualize shaded and with the grid boxes in the fusion viewport (to notice the overlap)
-            for (int x = min.x(); x < max.x(); x++) for (int y = min.y(); y < max.y(); y++) for (int z = min.z(); z < max.z(); z++)
+            std::vector<ColorPointCloudPtr> interactors (m_Sequences[s]->getNumOfViews());
+            for (int v = 0; v < m_Sequences[s]->getNumOfViews(); v++)
             {
-                if (grids[j]->getCentroidIndexAt(Eigen::Vector3i(x,y,z)) > 0)
-                    pViz->addCube(x * leafSize.x(), (x+1) * leafSize.x(), y * leafSize.y(), (y+1) * leafSize.y(), z * leafSize.z(), (z+1) * leafSize.z(), g_Colors[v%14][0], g_Colors[v%14][1], g_Colors[v%14][2], "cube" + boost::lexical_cast<string>(i) + "-" + boost::lexical_cast<string>(j) + "-" + boost::lexical_cast<string>(x) + "-" + boost::lexical_cast<string>(y) + "-" + boost::lexical_cast<string>(z), vp[V]);
+                interactors[v] = ColorPointCloudPtr(new ColorPointCloud);
+                cv::Mat aux;
+                cvx::open(interactions[v] & ~tabletops[v], 2, aux);
+                frames[v]->getRegisteredColoredPointCloud(aux, *(interactors[v]));
             }
+            
+            // Distinguish actors from interactors
+            std::vector<std::vector<Cloudject::Ptr> > nonInteractedActors (m_Sequences[s]->getNumOfViews());
+            std::vector<std::vector<Cloudject::Ptr> > interactedActors (m_Sequences[s]->getNumOfViews());
+            
+            for (int v = 0; v < m_Sequences[s]->getNumOfViews(); v++)
+            {
+                std::vector<ForegroundRegion> regionsF;
+                remedi::io::readPredictionRegions(resultsParent + string(CLOUDJECTS_DIRNAME)
+                                                  + m_Sequences[s]->getViewName(v), fids[v], regionsF, true);
+                
+                // Read the cloudjects representing the selected regions
+                std::vector<Cloudject::Ptr> cloudjectsF;
+                remedi::io::readCloudjectsWithDescriptor(resultsParent + string(CLOUDJECTS_DIRNAME) + m_Sequences[s]->getViewName(v), fids[v], regionsF, "pfhrgb250", cloudjectsF, true);
+                
+                for (int i = 0; i < cloudjectsF.size(); i++)
+                {
+                    cloudjectsF[i]->setLeafSize(m_LeafSize);
+                    cloudjectsF[i]->setRegistrationTransformation(frames[v]->getRegistrationTransformation());
+                }
+                
+                findActors(cloudjectsF, interactors, nonInteractedActors[v], m_LeafSize, interactedActors[v]);
+            }
+            
+            // Find the correspondences among actor clouds
+            std::vector<std::vector<std::pair<int, Cloudject::Ptr> > > correspondences;
+            // Using grids
+            std::vector<std::vector<VoxelGridPtr> > grids;
+            findCorrespondences(frames, nonInteractedActors, m_MultiviewCorrespThresh, correspondences, grids); // false (not to registrate)
+            
+            for (int i = 0; i < correspondences.size(); i++)
+            {
+                for (int j = 0; j < correspondences[i].size(); j++)
+                {
+                    std::vector<float> distsToMargin;
+                    m_ClassificationPipeline->predict(correspondences[i][j].second, distsToMargin);
+                    correspondences[i][j].second->setLikelihoods(distsToMargin);
+                    
+                    for (int k = 0; k < m_Categories.size(); k++)
+                        if (distsToMargin[k] < 0) correspondences[i][j].second->addRegionLabel(m_Categories[k]);
+                }
+            }
+            
+            fuseCorrespondences(correspondences);
+            
+#ifdef DEBUG_VISUALIZE_DETECTIONS
+            viz.visualize(interactors, interactedActors, correspondences);
+#endif //DEBUG_VISUALIZE_DETECTIONS
+            
+            std::vector<int> indices;
+            maxPooling(correspondences, indices);
+            
+            std::vector<int> interactionsPr;
+            interactionFromNegativeDetections(indices, interactionsPr);
+            
+            // Evaluation
+            
+            std::vector<int> interactionsGt (m_Categories.size(), 0);
+            for (int v = 0; v < m_Sequences[s]->getNumOfViews(); v++)
+            {
+                std::vector<int> interactionsViewGt = m_IAct.at(m_Sequences[s]->getName()).at(m_Sequences[s]->getViewName(v)).at(fids[v]);
+                for (int k = 0; k < m_Categories.size(); k++)
+                    interactionsGt[k] = interactionsViewGt[k];
+            }
+            
+            P.row(f) = m_ValInteractionType == INTERACTION_BEGINEND ? firstDerivative(interactionsPr) : interactionsPr;
+            G.row(f) = m_ValInteractionType == INTERACTION_BEGINEND ? firstDerivative(interactionsGt) : interactionsGt;
+            
+            f++;
+        }
+    }
+}
+
+void downsample(ColorPointCloudPtr pCloud, float leafSize, ColorPointCloud& cloudFiltered)
+{
+    if (leafSize == 0.f)
+    {
+        cloudFiltered = *pCloud; // copy
+    }
+    else
+    {
+        pcl::VoxelGrid<ColorPointT> vg;
+        vg.setInputCloud(pCloud);
+        vg.setLeafSize(leafSize, leafSize, leafSize);
+        vg.filter(cloudFiltered);
+    }
+}
+
+void CloudjectInteractionPipeline::findActors(std::vector<Cloudject::Ptr> candidates, std::vector<ColorPointCloudPtr> interactors, std::vector<Cloudject::Ptr>& actors, Eigen::Vector3f leafSize, std::vector<Cloudject::Ptr>& interactedActors)
+{
+    actors.clear();
+    interactedActors.clear();
+    
+    std::vector<ColorPointCloudPtr> _candidates (candidates.size());
+    for (int i = 0; i < candidates.size(); i++)
+        _candidates[i] = candidates[i]->getRegisteredCloud();
+    
+    std::vector<bool> interactionsMask;
+    findInteractions(_candidates, interactors, interactionsMask, leafSize);
+    
+    assert (interactionsMask.size() == _candidates.size());
+    
+    actors.reserve(candidates.size());
+    interactedActors.reserve(candidates.size());
+    
+    for (int i = 0; i < candidates.size(); i++)
+    {
+        if (!interactionsMask[i])
+            actors.push_back(candidates[i]);
+        else
+            interactedActors.push_back(candidates[i]);
+    }
+}
+
+void CloudjectInteractionPipeline::findInteractions(std::vector<ColorPointCloudPtr> candidates, std::vector<ColorPointCloudPtr> interactors, std::vector<bool>& mask, Eigen::Vector3f leafSize)
+{
+    mask.clear();
+    mask.resize(candidates.size(), false);
+    
+    std::vector<ColorPointCloudPtr> interactorsFilt;
+    bool bMainInteractorsPresent = false;
+    
+    for (int i = 0; i < interactors.size(); i++)
+    {
+        ColorPointCloudPtr pInteractorFilt (new ColorPointCloud);
+        downsample(interactors[i], leafSize.x(), *pInteractorFilt);
+        
+        ColorPointCloudPtr pMainInteractorFilt (new ColorPointCloud);
+        biggestEuclideanCluster(pInteractorFilt, 250, 25000, leafSize.x(), *pMainInteractorFilt);
+        
+        if (pMainInteractorFilt->size() > 0)
+            interactorsFilt.push_back(pMainInteractorFilt);
+    }
+    
+    if (!interactorsFilt.empty())
+    {
+        std::vector<ColorPointCloudPtr> candidatesCloudsFilt (candidates.size());
+        for (int i = 0; i < candidates.size(); i++)
+        {
+            ColorPointCloudPtr pCandidateCloudFilt (new ColorPointCloud);
+            downsample(candidates[i], leafSize.x(), *pCandidateCloudFilt);
+            
+            candidatesCloudsFilt[i] = pCandidateCloudFilt;
         }
         
-        Eigen::Vector3f leafSize = grids[0]->getLeafSize();
+        // Check for each cluster that lies on the table
+        for (int j = 0; j < interactorsFilt.size(); j++) for (int i = 0; i < candidatesCloudsFilt.size(); i++)
+            if (isInteractive(candidatesCloudsFilt[i], interactorsFilt[j], m_InteractionThresh/*4.*leafSize.x()*/))
+                mask[i] = true;
+    }
+}
+
+void CloudjectInteractionPipeline::getDetectionGrids(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, bool bRegistrate, std::vector<std::vector<VoxelGridPtr> >& grids)
+{
+    grids.clear();
+    
+    grids.resize(detections.size());
+    for (int v = 0; v < detections.size(); v++)
+    {
+        std::vector<VoxelGridPtr> viewGrids (detections[v].size());
         
-        for (int j1 = 0; j1 < correspondences[i].size(); j1++)
+        for (int i = 0; i < detections[v].size(); i++)
         {
-            for (int j2 = j1 + 1; j2 < correspondences[i].size(); j2++)
+            //            if (!bRegistrate)
+            //                viewGrids[i] = detections[v][i]->getCloudCentroid();
+            //            else
+            //                viewGrids[i] = detections[v][i]->getRegisteredCloudCentroid();
+            viewGrids[i] = detections[v][i]->getRegisteredGrid();
+        }
+        
+        grids[v] = viewGrids;
+    }
+}
+
+bool CloudjectInteractionPipeline::isInteractive(ColorPointCloudPtr tabletopRegionCluster, ColorPointCloudPtr interactionCloud, float tol)
+{
+    bool interactive = false;
+    
+    // if some of its points
+    for (int k_i = 0; k_i < tabletopRegionCluster->points.size() && !interactive; k_i++)
+    {
+        if (tabletopRegionCluster->points[k_i].z > 0)
+        {
+            // some point of the interaction region.
+            for (int k_j = 0; k_j < interactionCloud->points.size() && !interactive; k_j++)
             {
-                Eigen::Vector3f leafSize = grids[j1]->getLeafSize();
-                Eigen::Vector3f leafSizeAux = grids[j2]->getLeafSize();
-                // Check they are equal
-                
-                Eigen::Vector3i min1 = grids[j1]->getMinBoxCoordinates();
-                Eigen::Vector3i min2 = grids[j2]->getMinBoxCoordinates();
-                Eigen::Vector3i max1 = grids[j1]->getMaxBoxCoordinates();
-                Eigen::Vector3i max2 = grids[j2]->getMaxBoxCoordinates();
-                
-                Eigen::Vector3i minI (min1.x() > min2.x() ? min1.x() : min2.x(),
-                                      min1.y() > min2.y() ? min1.y() : min2.y(),
-                                      min1.z() > min2.z() ? min1.z() : min2.z());
-                Eigen::Vector3i maxI (max1.x() < max2.x() ? max1.x() : max2.x(),
-                                      max1.y() < max2.y() ? max1.y() : max2.y(),
-                                      max1.z() < max2.z() ? max1.z() : max2.z());
-                
-                for (int x = minI.x(); x < maxI.x(); x++) for (int y = minI.y(); y < maxI.y(); y++) for (int z = minI.z(); z < maxI.z(); z++)
+                if (interactionCloud->points[k_j].z > 0)
                 {
-                    int idx1 = grids[j1]->getCentroidIndexAt(Eigen::Vector3i(x,y,z));
-                    int idx2 = grids[j2]->getCentroidIndexAt(Eigen::Vector3i(x,y,z));
-                    if (idx1 != 1 && idx2 != -1)
-                    {
-                        std::string name = "ovl_sphere_" + boost::lexical_cast<string>(i) + "-" + boost::lexical_cast<string>(x) + "-" + boost::lexical_cast<string>(y) + "-" + boost::lexical_cast<string>(z);
-                        pViz->addSphere(pcl::PointXYZ(x*leafSize.x()+(leafSize.x()/2.f),y*leafSize.y()+(leafSize.y()/2.f),z*leafSize.z()+(leafSize.z()/2.f)), leafSize.x()/2.f, 0, 0, 1, name, vp[V]);
-                    }
+                    ColorPointT p = tabletopRegionCluster->points[k_i];
+                    ColorPointT q = interactionCloud->points[k_j];
+                    
+                    // If they are practically contiguous, they must had been part of the same cloud
+                    float pqDist = sqrt(pow(p.x - q.x, 2) + pow(p.y - q.y, 2) + pow(p.z - q.z, 2));
+                    interactive = (pqDist <= tol); // if tabletop cluster is stick to any cluster
+                    // in the interaction region, we say it is interactive
+                    // and become an interactor
                 }
             }
         }
     }
     
-    pViz->spinOnce(50);
+    return interactive;
+}
+
+void CloudjectInteractionPipeline::findCorrespondences(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, float tol, std::vector<std::vector<std::pair<int,Cloudject::Ptr> > >& correspondences, std::vector<std::vector<VoxelGridPtr> >& grids)
+{
+    correspondences.clear();
+    
+    // Correspondences found using the positions of the clouds' centroids
+    //    std::vector<std::vector<PointT> > positions;
+    getDetectionGrids(frames, detections, true, grids); // registrate is "true"
+    
+    std::vector<std::vector<std::pair<std::pair<int,int>,VoxelGridPtr> > > _correspondences;
+    
+    if (m_CorrespCriterion == CloudjectInteractionPipeline::CORRESP_INC)
+        pclx::findCorrespondencesBasedOnInclusion(grids, tol, _correspondences);
+    else if (m_CorrespCriterion == CloudjectInteractionPipeline::CORRESP_OVL)
+        pclx::findCorrespondencesBasedOnOverlap(grids, tol, _correspondences);
+    
+    // Bc we want to have chains of clouds (not points) and the views to which they correspond, transform _correspondences -> correspondences
+    correspondences.clear();
+    for (int i = 0; i < _correspondences.size(); i++)
+    {
+        std::vector<std::pair<int,Cloudject::Ptr> > chain; // clouds chain
+        for (int j = 0; j < _correspondences[i].size(); j++)
+        {
+            int v   = _correspondences[i][j].first.first;
+            int idx = _correspondences[i][j].first.second;
+            
+            chain.push_back( std::pair<int,Cloudject::Ptr>(v, detections[v][idx]) );
+        }
+        correspondences.push_back( chain );
+    }
 }
 
 void CloudjectInteractionPipeline::fuseCorrespondences(const std::vector<std::vector<std::pair<int, Cloudject::Ptr> > >& correspondences)
@@ -810,490 +1067,6 @@ void CloudjectInteractionPipeline::fuseCorrespondences(const std::vector<std::ve
             for (int k = 0; k < m_Categories.size(); k++)
                 if (marginsFused[k] < 0) correspondences[i][j].second->addRegionLabel(m_Categories[k]);
         }
-    }
-}
-
-void printCorrespondences(const std::vector<std::vector<std::pair<int,Cloudject::Ptr> > >& correspondences)
-{
-    for (int i = 0; i < correspondences.size(); i++)
-    {
-        for (int j = 0; j < correspondences[i].size(); j++)
-            std::cout << cv::Mat(correspondences[i][j].second->getLikelihoods()) << std::endl;
-        std::cout << std::endl;
-    }
-}
-
-void CloudjectInteractionPipeline::detectMultiview()
-{
-    m_DetectionResults.clear();
-    //    m_DetectionResults.resize(1, std::vector<DetectionResult>(m_Categories.size()));
-    m_DetectionResults.resize(m_Sequences[0]->getNumOfViews(), std::vector<DetectionResult>(m_Categories.size()));
-    
-    for (int s = 0; s < m_Sequences.size(); s++)
-    {
-        std::string resultsParent = string(PARENT_PATH) + string(RESULTS_SUBDIR)
-        + m_Sequences[s]->getName() + "/" + string(KINECT_SUBSUBDIR);
-        
-        int V = m_Sequences[s]->getNumOfViews();
-#ifdef DEBUG_VISUALIZE_DETECTIONS
-        pcl::visualization::PCLVisualizer::Ptr pViz (new pcl::visualization::PCLVisualizer);
-        std::vector<int> vp;
-        
-        createVisualizationSetup(V, m_pRegisterer, *pViz, vp);
-        std::cout << "[" << std::endl;
-#endif
-        m_Sequences[s]->restart();
-        while (m_Sequences[s]->hasNextFrames())
-        {
-            vector<ColorDepthFrame::Ptr> frames = m_Sequences[s]->nextFrames();
-            m_pRegisterer->setInputFrames(frames);
-            m_pRegisterer->registrate(frames);
-            
-            std::vector<cv::Mat> tabletops;
-            std::vector<cv::Mat> interactions;
-            m_pTableModeler->getTabletopMask(frames, tabletops);
-            m_pTableModeler->getInteractionMask(frames, interactions);
-            
-            vector<string> fids = m_Sequences[s]->getFramesFilenames();
-            
-            // Prepare the interactors from the different views
-            
-            std::vector<ColorPointCloudPtr> interactors (m_Sequences[s]->getNumOfViews());
-            for (int v = 0; v < m_Sequences[s]->getNumOfViews(); v++)
-            {
-                interactors[v] = ColorPointCloudPtr(new ColorPointCloud);
-                cv::Mat aux;
-                cvx::open(interactions[v] & ~tabletops[v], 2, aux);
-                frames[v]->getRegisteredColoredPointCloud(aux, *(interactors[v]));
-            }
-            
-            // Distinguish actors from interactors
-            std::vector<std::vector<Cloudject::Ptr> > nonInteractedActors (m_Sequences[s]->getNumOfViews());
-            std::vector<std::vector<Cloudject::Ptr> > interactedActors (m_Sequences[s]->getNumOfViews());
-            
-            for (int v = 0; v < m_Sequences[s]->getNumOfViews(); v++)
-            {
-                std::vector<ForegroundRegion> regionsF;
-                remedi::io::readPredictionRegions(resultsParent + string(CLOUDJECTS_DIRNAME)
-                                                  + m_Sequences[s]->getViewName(v), fids[v], regionsF, true);
-                
-                // Read the cloudjects representing the selected regions
-                std::vector<Cloudject::Ptr> cloudjectsF;
-                remedi::io::readCloudjectsWithDescriptor(resultsParent + string(CLOUDJECTS_DIRNAME) + m_Sequences[s]->getViewName(v), fids[v], regionsF, "pfhrgb250", cloudjectsF, true);
-                
-                for (int i = 0; i < cloudjectsF.size(); i++)
-                {
-                    cloudjectsF[i]->setLeafSize(m_LeafSize);
-                    cloudjectsF[i]->setRegistrationTransformation(frames[v]->getRegistrationTransformation());
-                }
-                
-                findActors(cloudjectsF, interactors, nonInteractedActors[v], m_LeafSize, interactedActors[v]);
-            }
-            
-            // Find the correspondences among actor clouds
-            std::vector<std::vector<std::pair<int, Cloudject::Ptr> > > correspondences;
-            // Using grids
-            std::vector<std::vector<VoxelGridPtr> > grids;
-            findCorrespondences(frames, nonInteractedActors, m_MultiviewCorrespThresh, correspondences, grids); // false (not to registrate)
-            
-            for (int i = 0; i < correspondences.size(); i++)
-            {
-                for (int j = 0; j < correspondences[i].size(); j++)
-                {
-                    std::vector<float> distsToMargin;
-                    m_ClassificationPipeline->predict(correspondences[i][j].second, distsToMargin);
-                    correspondences[i][j].second->setLikelihoods(distsToMargin);
-                    
-                    for (int k = 0; k < m_Categories.size(); k++)
-                        if (distsToMargin[k] < 0) correspondences[i][j].second->addRegionLabel(m_Categories[k]);
-                }
-            }
-            
-            fuseCorrespondences(correspondences);
-            
-            std::vector<int> indices;
-            maxPooling(correspondences, indices);
-            
-            
-            //
-            // Detection
-            // ...
-            
-            std::vector<std::map<std::string,std::map<std::string,GroundtruthRegion> > > annotationsF (V);
-            for (int v = 0; v < m_Sequences[s]->getNumOfViews(); v++)
-                annotationsF[v] = m_Gt.at(m_Sequences[s]->getName()).at(m_Sequences[s]->getViewName(v)).at(fids[v]);
-            
-            std::vector<DetectionResult> resultsFrame;
-            evaluateDetectionInFrame(frames, annotationsF, correspondences, indices, m_LeafSize, resultsFrame);
-            
-            for (int i = 0; i < resultsFrame.size(); i++)
-                m_DetectionResults[0][i] += resultsFrame[i];
-            
-#ifdef DEBUG_VISUALIZE_DETECTIONS
-            visualizeMultiview(pViz, vp, interactors, interactedActors, correspondences);
-#endif //DEBUG_VISUALIZE_DETECTIONS
-        }
-        
-#ifdef DEBUG_VISUALIZE_DETECTIONS
-        std::cout << "];" << std::endl;
-#endif //DEBUG_VISUALIZE_DETECTIONS
-        
-    }
-}
-
-void CloudjectInteractionPipeline::detectInteractionMultiview()
-{
-    m_DetectionResults.clear();
-    //    m_DetectionResults.resize(1, std::vector<DetectionResult>(m_Categories.size()));
-    m_DetectionResults.resize(m_Sequences[0]->getNumOfViews(), std::vector<DetectionResult>(m_Categories.size()));
-    
-    for (int s = 0; s < m_Sequences.size(); s++)
-    {
-        std::string resultsParent = string(PARENT_PATH) + string(RESULTS_SUBDIR)
-        + m_Sequences[s]->getName() + "/" + string(KINECT_SUBSUBDIR);
-        
-        int V = m_Sequences[s]->getNumOfViews();
-#ifdef DEBUG_VISUALIZE_DETECTIONS
-        pcl::visualization::PCLVisualizer::Ptr pViz (new pcl::visualization::PCLVisualizer);
-        std::vector<int> vp;
-        
-        createVisualizationSetup(V, m_pRegisterer, *pViz, vp);
-        std::cout << "[" << std::endl;
-#endif
-        
-        // Using OpenCV Makes much more easer the evaluation of interaction
-        // And will be done when finished processing a sequence
-        cv::Mat P, G; // Prediction and groundtruth
-        
-        P.create(m_Sequences[s]->getMinNumOfFrames(), m_Categories.size(), cv::DataType<int>::type);
-        G.create(m_Sequences[s]->getMinNumOfFrames(), m_Categories.size(), cv::DataType<int>::type);
-        
-        int f = 0;
-        m_Sequences[s]->restart();
-        while (m_Sequences[s]->hasNextFrames())
-        {
-            vector<ColorDepthFrame::Ptr> frames = m_Sequences[s]->nextFrames();
-            m_pRegisterer->setInputFrames(frames);
-            m_pRegisterer->registrate(frames);
-            
-            std::vector<cv::Mat> tabletops;
-            std::vector<cv::Mat> interactions;
-            m_pTableModeler->getTabletopMask(frames, tabletops);
-            m_pTableModeler->getInteractionMask(frames, interactions);
-            
-            vector<string> fids = m_Sequences[s]->getFramesFilenames();
-            
-            // Prepare the interactors from the different views
-            
-            std::vector<ColorPointCloudPtr> interactors (m_Sequences[s]->getNumOfViews());
-            for (int v = 0; v < m_Sequences[s]->getNumOfViews(); v++)
-            {
-                interactors[v] = ColorPointCloudPtr(new ColorPointCloud);
-                cv::Mat aux;
-                cvx::open(interactions[v] & ~tabletops[v], 2, aux);
-                frames[v]->getRegisteredColoredPointCloud(aux, *(interactors[v]));
-            }
-            
-            // Distinguish actors from interactors
-            std::vector<std::vector<Cloudject::Ptr> > nonInteractedActors (m_Sequences[s]->getNumOfViews());
-            std::vector<std::vector<Cloudject::Ptr> > interactedActors (m_Sequences[s]->getNumOfViews());
-            
-            for (int v = 0; v < m_Sequences[s]->getNumOfViews(); v++)
-            {
-                std::vector<ForegroundRegion> regionsF;
-                remedi::io::readPredictionRegions(resultsParent + string(CLOUDJECTS_DIRNAME)
-                                                  + m_Sequences[s]->getViewName(v), fids[v], regionsF, true);
-                
-                // Read the cloudjects representing the selected regions
-                std::vector<Cloudject::Ptr> cloudjectsF;
-                remedi::io::readCloudjectsWithDescriptor(resultsParent + string(CLOUDJECTS_DIRNAME) + m_Sequences[s]->getViewName(v), fids[v], regionsF, "pfhrgb250", cloudjectsF, true);
-                
-                for (int i = 0; i < cloudjectsF.size(); i++)
-                {
-                    cloudjectsF[i]->setLeafSize(m_LeafSize);
-                    cloudjectsF[i]->setRegistrationTransformation(frames[v]->getRegistrationTransformation());
-                }
-                
-                findActors(cloudjectsF, interactors, nonInteractedActors[v], m_LeafSize, interactedActors[v]);
-            }
-            
-            // Find the correspondences among actor clouds
-            std::vector<std::vector<std::pair<int, Cloudject::Ptr> > > correspondences;
-            // Using grids
-            std::vector<std::vector<VoxelGridPtr> > grids;
-            findCorrespondences(frames, nonInteractedActors, m_MultiviewCorrespThresh, correspondences, grids); // false (not to registrate)
-            
-            for (int i = 0; i < correspondences.size(); i++)
-            {
-                for (int j = 0; j < correspondences[i].size(); j++)
-                {
-                    std::vector<float> distsToMargin;
-                    m_ClassificationPipeline->predict(correspondences[i][j].second, distsToMargin);
-                    correspondences[i][j].second->setLikelihoods(distsToMargin);
-                    
-                    for (int k = 0; k < m_Categories.size(); k++)
-                        if (distsToMargin[k] < 0) correspondences[i][j].second->addRegionLabel(m_Categories[k]);
-                }
-            }
-            
-            fuseCorrespondences(correspondences);
-            
-#ifdef DEBUG_VISUALIZE_DETECTIONS
-            visualizeMultiview(pViz, vp, interactors, interactedActors, correspondences);
-#endif //DEBUG_VISUALIZE_DETECTIONS
-            
-            std::vector<int> indices;
-            maxPooling(correspondences, indices);
-
-            //
-            // Interaction
-            // ...
-            
-            
-            std::vector<int> interactionsGt (m_Categories.size(), 0);
-            for (int v = 0; v < m_Sequences[s]->getNumOfViews(); v++)
-            {
-                std::vector<int> interactionsViewGt = m_IAct.at(m_Sequences[s]->getName()).at(m_Sequences[s]->getViewName(v)).at(fids[v]);
-                for (int k = 0; k < m_Categories.size(); k++)
-                    interactionsGt[k] |= interactionsViewGt[k];
-            }
-            
-            std::vector<int> interactionsPr;
-            interactionFromNegativeDetections(indices, interactionsPr);
-            
-            if (m_ValInteractionType == INTERACTION_BEGINEND)
-            {
-                std::vector<int> interactionsPrBE, interactionsGtBE;
-                
-                findChanges(interactionsPr, interactionsPrBE);
-                findChanges(interactionsGt, interactionsGtBE);
-                
-                cv::Mat(interactionsPrBE).copyTo(P.row(f));
-                cv::Mat(interactionsGtBE).copyTo(G.row(f));
-            }
-            else
-            {
-                cv::Mat(interactionsPr).copyTo(P.row(f));
-                cv::Mat(interactionsGt).copyTo(G.row(f));
-            }
-            
-            f++;
-        }
-        
-#ifdef DEBUG_VISUALIZE_DETECTIONS
-        std::cout << "];" << std::endl;
-#endif //DEBUG_VISUALIZE_DETECTIONS
-        
-    }
-}
-
-void downsample(ColorPointCloudPtr pCloud, float leafSize, ColorPointCloud& cloudFiltered)
-{
-    if (leafSize == 0.f)
-    {
-        cloudFiltered = *pCloud; // copy
-    }
-    else
-    {
-        pcl::VoxelGrid<ColorPointT> vg;
-        vg.setInputCloud(pCloud);
-        vg.setLeafSize(leafSize, leafSize, leafSize);
-        vg.filter(cloudFiltered);
-    }
-}
-
-void CloudjectInteractionPipeline::findActors(std::vector<Cloudject::Ptr> candidates, std::vector<ColorPointCloudPtr> interactors, std::vector<Cloudject::Ptr>& actors, Eigen::Vector3f leafSize, std::vector<Cloudject::Ptr>& interactedActors)
-{
-    actors.clear();
-    interactedActors.clear();
-    
-    std::vector<ColorPointCloudPtr> _candidates (candidates.size());
-    for (int i = 0; i < candidates.size(); i++)
-        _candidates[i] = candidates[i]->getRegisteredCloud();
-    
-    std::vector<bool> interactionsMask;
-    findInteractions(_candidates, interactors, interactionsMask, leafSize);
-    
-    assert (interactionsMask.size() == _candidates.size());
-    
-    actors.reserve(candidates.size());
-    interactedActors.reserve(candidates.size());
-    
-    for (int i = 0; i < candidates.size(); i++)
-    {
-        if (!interactionsMask[i])
-            actors.push_back(candidates[i]);
-        else
-            interactedActors.push_back(candidates[i]);
-    }
-}
-
-void CloudjectInteractionPipeline::findInteractions(std::vector<ColorPointCloudPtr> candidates, std::vector<ColorPointCloudPtr> interactors, std::vector<bool>& mask, Eigen::Vector3f leafSize)
-{
-    mask.clear();
-    mask.resize(candidates.size(), false);
-    
-    std::vector<ColorPointCloudPtr> interactorsFilt;
-    bool bMainInteractorsPresent = false;
-    
-    for (int i = 0; i < interactors.size(); i++)
-    {
-        ColorPointCloudPtr pInteractorFilt (new ColorPointCloud);
-        downsample(interactors[i], leafSize.x(), *pInteractorFilt);
-        
-        ColorPointCloudPtr pMainInteractorFilt (new ColorPointCloud);
-        biggestEuclideanCluster(pInteractorFilt, 250, 25000, leafSize.x(), *pMainInteractorFilt);
-        
-        if (pMainInteractorFilt->size() > 0)
-            interactorsFilt.push_back(pMainInteractorFilt);
-    }
-    
-    if (!interactorsFilt.empty())
-    {
-        std::vector<ColorPointCloudPtr> candidatesCloudsFilt (candidates.size());
-        for (int i = 0; i < candidates.size(); i++)
-        {
-            ColorPointCloudPtr pCandidateCloudFilt (new ColorPointCloud);
-            downsample(candidates[i], leafSize.x(), *pCandidateCloudFilt);
-            
-            candidatesCloudsFilt[i] = pCandidateCloudFilt;
-        }
-        
-        // Check for each cluster that lies on the table
-        for (int j = 0; j < interactorsFilt.size(); j++) for (int i = 0; i < candidatesCloudsFilt.size(); i++)
-            if (isInteractive(candidatesCloudsFilt[i], interactorsFilt[j], m_InteractionThresh/*4.*leafSize.x()*/))
-                mask[i] = true;
-    }
-}
-
-void CloudjectInteractionPipeline::getDetectionPositions(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, bool bRegistrate, std::vector<std::vector<PointT> >& positions)
-{
-    positions.clear();
-    
-    positions.resize(detections.size());
-    for (int v = 0; v < detections.size(); v++)
-    {
-        std::vector<PointT> viewPositions (detections[v].size());
-        
-        for (int i = 0; i < detections[v].size(); i++)
-        {
-            if (!bRegistrate)
-                viewPositions[i] = detections[v][i]->getCloudCentroid();
-            else
-                viewPositions[i] = detections[v][i]->getRegisteredCloudCentroid();
-        }
-        
-        positions[v] = viewPositions;
-    }
-}
-
-void CloudjectInteractionPipeline::getDetectionGrids(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, bool bRegistrate, std::vector<std::vector<VoxelGridPtr> >& grids)
-{
-    grids.clear();
-    
-    grids.resize(detections.size());
-    for (int v = 0; v < detections.size(); v++)
-    {
-        std::vector<VoxelGridPtr> viewGrids (detections[v].size());
-        
-        for (int i = 0; i < detections[v].size(); i++)
-        {
-            //            if (!bRegistrate)
-            //                viewGrids[i] = detections[v][i]->getCloudCentroid();
-            //            else
-            //                viewGrids[i] = detections[v][i]->getRegisteredCloudCentroid();
-            viewGrids[i] = detections[v][i]->getRegisteredGrid();
-        }
-        
-        grids[v] = viewGrids;
-    }
-}
-
-bool CloudjectInteractionPipeline::isInteractive(ColorPointCloudPtr tabletopRegionCluster, ColorPointCloudPtr interactionCloud, float tol)
-{
-    bool interactive = false;
-    
-    // if some of its points
-    for (int k_i = 0; k_i < tabletopRegionCluster->points.size() && !interactive; k_i++)
-    {
-        if (tabletopRegionCluster->points[k_i].z > 0)
-        {
-            // some point of the interaction region.
-            for (int k_j = 0; k_j < interactionCloud->points.size() && !interactive; k_j++)
-            {
-                if (interactionCloud->points[k_j].z > 0)
-                {
-                    ColorPointT p = tabletopRegionCluster->points[k_i];
-                    ColorPointT q = interactionCloud->points[k_j];
-                    
-                    // If they are practically contiguous, they must had been part of the same cloud
-                    float pqDist = sqrt(pow(p.x - q.x, 2) + pow(p.y - q.y, 2) + pow(p.z - q.z, 2));
-                    interactive = (pqDist <= tol); // if tabletop cluster is stick to any cluster
-                    // in the interaction region, we say it is interactive
-                    // and become an interactor
-                }
-            }
-        }
-    }
-    
-    return interactive;
-}
-
-void CloudjectInteractionPipeline::findCorrespondences(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, float tol, std::vector<std::vector<std::pair<int,Cloudject::Ptr> > >& correspondences, std::vector<std::vector<PointT> >& positions)
-{
-    correspondences.clear();
-    
-    // Correspondences found using the positions of the clouds' centroids
-    //    std::vector<std::vector<PointT> > positions;
-    getDetectionPositions(frames, detections, true, positions); // registrate is "true"
-    
-    std::vector<std::vector<std::pair<std::pair<int,int>,PointT> > > _correspondences;
-    pclx::findCorrespondences(positions, tol, _correspondences);
-    
-    // Bc we want to have chains of clouds (not points) and the views to which they correspond, transform _correspondences -> correspondences
-    correspondences.clear();
-    for (int i = 0; i < _correspondences.size(); i++)
-    {
-        std::vector<std::pair<int,Cloudject::Ptr> > chain; // clouds chain
-        for (int j = 0; j < _correspondences[i].size(); j++)
-        {
-            int v   = _correspondences[i][j].first.first;
-            int idx = _correspondences[i][j].first.second;
-            
-            chain.push_back( std::pair<int,Cloudject::Ptr>(v, detections[v][idx]) );
-        }
-        correspondences.push_back( chain );
-    }
-}
-
-void CloudjectInteractionPipeline::findCorrespondences(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, float tol, std::vector<std::vector<std::pair<int,Cloudject::Ptr> > >& correspondences, std::vector<std::vector<VoxelGridPtr> >& grids)
-{
-    correspondences.clear();
-    
-    // Correspondences found using the positions of the clouds' centroids
-    //    std::vector<std::vector<PointT> > positions;
-    getDetectionGrids(frames, detections, true, grids); // registrate is "true"
-    
-    std::vector<std::vector<std::pair<std::pair<int,int>,VoxelGridPtr> > > _correspondences;
-    
-    if (m_CorrespCriterion == CloudjectInteractionPipeline::CORRESP_INC)
-        pclx::findCorrespondencesBasedOnInclusion(grids, tol, _correspondences);
-    else if (m_CorrespCriterion == CloudjectInteractionPipeline::CORRESP_OVL)
-        pclx::findCorrespondencesBasedOnOverlap(grids, tol, _correspondences);
-    
-    // Bc we want to have chains of clouds (not points) and the views to which they correspond, transform _correspondences -> correspondences
-    correspondences.clear();
-    for (int i = 0; i < _correspondences.size(); i++)
-    {
-        std::vector<std::pair<int,Cloudject::Ptr> > chain; // clouds chain
-        for (int j = 0; j < _correspondences[i].size(); j++)
-        {
-            int v   = _correspondences[i][j].first.first;
-            int idx = _correspondences[i][j].first.second;
-            
-            chain.push_back( std::pair<int,Cloudject::Ptr>(v, detections[v][idx]) );
-        }
-        correspondences.push_back( chain );
     }
 }
 
@@ -1492,22 +1265,6 @@ VoxelGridPtr CloudjectInteractionPipeline::computeGridFromRegion(ColorDepthFrame
     return pGrid;
 }
 
-template<typename RegionT>
-pcl::PointXYZ CloudjectInteractionPipeline::computeCentroidFromRegion(ColorDepthFrame::Ptr frame, RegionT region)
-{
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud (new pcl::PointCloud<pcl::PointXYZRGB>);
-    
-    region.allocateMask();
-    int pos[2] = {region.getRect().x, region.getRect().y};
-    unsigned short range[2] = {MIN_DEPTH,MAX_DEPTH};
-    MatToColoredPointCloud(frame->getDepth(), frame->getColor(), region.getMask(), pos, range, *pCloud);
-    region.releaseMask();
-    
-    pcl::PointXYZ centroid = computeCentroid(*pCloud);
-    
-    return centroid;
-}
-
 void CloudjectInteractionPipeline::precomputeGrids(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& annotations, Eigen::Vector3f leafSize, std::map<std::string,std::map<std::string,VoxelGridPtr> >& grids, bool bRegistrate)
 {
     std::map<std::string,std::map<std::string,GroundtruthRegion> >::const_iterator it;
@@ -1524,58 +1281,10 @@ void CloudjectInteractionPipeline::precomputeGrids(ColorDepthFrame::Ptr frame, c
         grids[i] = computeGridFromRegion(frame, detections[i], leafSize, bRegistrate);
 }
 
-template<typename RegionT>
-pclx::Rectangle3D CloudjectInteractionPipeline::computeRectangleFromRegion(ColorDepthFrame::Ptr frame, RegionT region)
+std::vector<int> CloudjectInteractionPipeline::firstDerivative(std::vector<int> input)
 {
-    pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud (new pcl::PointCloud<pcl::PointXYZRGB>);
+    std::vector<int> output (input.size(), 0);
     
-    region.allocateMask();
-    int pos[2] = {region.getRect().x, region.getRect().y};
-    unsigned short range[2] = {MIN_DEPTH,MAX_DEPTH};
-    MatToColoredPointCloud(frame->getDepth(), frame->getColor(), region.getMask(), pos, range, *pCloud);
-    region.releaseMask();
-    
-    pclx::Rectangle3D rectangle;
-    computeRectangle3D(*pCloud,rectangle.min,rectangle.max);
-    
-    return rectangle;
-}
-
-void CloudjectInteractionPipeline::precomputeRectangles3D(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& annotations, std::map<std::string,std::map<std::string,pclx::Rectangle3D> >& rectangles)
-{
-    std::map<std::string,std::map<std::string,GroundtruthRegion> >::const_iterator it;
-    std::map<std::string,GroundtruthRegion>::const_iterator jt;
-    for (it = annotations.begin(); it != annotations.end(); ++it)
-        for (jt = it->second.begin(); jt != it->second.end(); ++jt)
-            rectangles[it->first][jt->first] = computeRectangleFromRegion(frame, annotations.at(it->first).at(jt->first));
-}
-
-void CloudjectInteractionPipeline::precomputeRectangles3D(ColorDepthFrame::Ptr frame, const std::vector<ForegroundRegion>& detections, std::vector<pclx::Rectangle3D>& rectangles)
-{
-    rectangles.resize(detections.size());
-    for (int i = 0; i < detections.size(); ++i)
-        rectangles[i] = computeRectangleFromRegion(frame, detections[i]);
-}
-
-void CloudjectInteractionPipeline::precomputeCentroids(ColorDepthFrame::Ptr frame, const std::map<std::string,std::map<std::string,GroundtruthRegion> >& annotations, std::map<std::string,std::map<std::string,pcl::PointXYZ> >& centroids)
-{
-    std::map<std::string,std::map<std::string,GroundtruthRegion> >::const_iterator it;
-    std::map<std::string,GroundtruthRegion>::const_iterator jt;
-    for (it = annotations.begin(); it != annotations.end(); ++it)
-        for (jt = it->second.begin(); jt != it->second.end(); ++jt)
-            centroids[it->first][jt->first] = computeCentroidFromRegion(frame, annotations.at(it->first).at(jt->first));
-}
-
-void CloudjectInteractionPipeline::precomputeCentroids(ColorDepthFrame::Ptr frame, const std::vector<ForegroundRegion>& detections, std::vector<pcl::PointXYZ>& centroids)
-{
-    centroids.resize(detections.size());
-    for (int i = 0; i < detections.size(); ++i)
-        centroids[i] = computeCentroidFromRegion(frame, detections[i]);
-}
-
-void CloudjectInteractionPipeline::findChanges(std::vector<int> input, std::vector<int> output)
-{
-    output.resize(input.size(), 0);
     for (int i = 1; i < input.size(); i++)
     {
         if (input[i-1] == 0 && input[i] == 1)
@@ -1583,4 +1292,6 @@ void CloudjectInteractionPipeline::findChanges(std::vector<int> input, std::vect
         else if (input[i-1] == 1 && input[i] == 0)
             output[i] = -1;
     }
+    
+    return output;
 }
