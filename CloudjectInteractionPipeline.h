@@ -16,6 +16,7 @@
 #include "Sequence.h"
 #include "ColorDepthFrame.h"
 
+#include "BackgroundSubtractor.h"
 #include "InteractiveRegisterer.h"
 #include "TableModeler.h"
 #include "CloudjectSVMClassificationPipeline.h"
@@ -31,6 +32,8 @@
 
 #include <pcl/filters/voxel_grid.h>
 #include <boost/shared_ptr.hpp>
+
+#include <opencv2/opencv.hpp>
 
 //
 // Typedefs
@@ -117,6 +120,7 @@ public:
     void setInputSequences(const std::vector<Sequence<ColorDepthFrame>::Ptr>& sequences);
     void setCategories(const std::vector<const char*>& categories);
     
+    void setBackgroundSubtractor(BackgroundSubtractor<cv::BackgroundSubtractorMOG2, ColorDepthFrame>::Ptr bs);
     void setInteractiveRegisterer(InteractiveRegisterer::Ptr ir);
     void setTableModeler(TableModeler::Ptr tm);
     
@@ -162,7 +166,7 @@ public:
     typedef boost::shared_ptr<CloudjectInteractionPipeline> Ptr;
     
     enum { DETECT_MONOCULAR, DETECT_MULTIVIEW };
-    enum { MULTIVIEW_LFSCALE_DEV, MULTIVIEW_LFSCALE_SUMDIV, MULTIVIEW_LF_OR, MULTIVIEW_LF_FURTHEST };
+    enum { MULTIVIEW_LF_OR, MULTIVIEW_LFSCALE_DEV, MULTIVIEW_LF_FURTHEST, MULTIVIEW_LFSCALE_SUMDIV };
     enum { CORRESP_INC, CORRESP_OVL };
     enum { INTERACTION_OVL_OVERALL, INTERACTION_OVL_BEGINEND };
     
@@ -174,6 +178,7 @@ private:
     std::vector<Sequence<ColorDepthFrame>::Ptr> m_Sequences;
     std::vector<const char*> m_Categories;
     
+    BackgroundSubtractor<cv::BackgroundSubtractorMOG2,ColorDepthFrame>::Ptr m_pSubtractor;
     InteractiveRegisterer::Ptr m_pRegisterer;
     TableModeler::Ptr m_pTableModeler;
     CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr m_ClassificationPipeline;
@@ -209,7 +214,7 @@ private:
     void detectInteractionMonocular();
     void detectInteractionMultiview();
     
-    void findActors(std::vector<Cloudject::Ptr> candidates, std::vector<ColorPointCloudPtr> interactors, std::vector<Cloudject::Ptr>& actors, Eigen::Vector3f leafSize, std::vector<Cloudject::Ptr>& interactedActors);
+    void findActors(std::vector<ColorPointCloudPtr> actors, std::vector<ColorPointCloudPtr> interactors, std::vector<ColorPointCloudPtr>& nonInteractedActors, Eigen::Vector3f leafSize, std::vector<ColorPointCloudPtr>& interactedActors);
     void findInteractions(std::vector<ColorPointCloudPtr> candidates, std::vector<ColorPointCloudPtr> interactors, std::vector<bool>& mask, Eigen::Vector3f leafSize);
     bool isInteractive(ColorPointCloudPtr tabletopRegionCluster, ColorPointCloudPtr interactionCloud, float tol);
     
@@ -234,6 +239,8 @@ private:
     void fuseCorrespondences(const std::vector<std::vector<std::pair<int, Cloudject::Ptr> > >& correspondences);
     
     void firstDerivative(std::vector<int> inputPrev, std::vector<int> inputCurr, std::vector<int>& derivative);
+    
+    void findInclusions(std::vector<Cloudject::Ptr> cloudjectsIn, std::vector<ColorPointCloudPtr> clouds, Eigen::Vector3f leafSize, std::vector<Cloudject::Ptr>& cloudjectsOut);
 };
 
 #endif /* defined(__remedi3__CloudjectInteractionPipeline__) */

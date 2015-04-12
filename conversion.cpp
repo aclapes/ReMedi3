@@ -462,49 +462,6 @@ void enclosure(cv::Mat src, cv::Mat& dst, int size)
 	cv::dilate(src, dst, dilate_element);
 }
 
-template<typename PointT>
-void biggestEuclideanCluster(typename pcl::PointCloud<PointT>::Ptr pCloud, int minSz, int maxSz, float clusterTol,
-	pcl::PointCloud<PointT>& cluster)
-{
-    // Not even try
-    // bc the entire cloud is smaller than the minSz
-    if (pCloud->points.size() < minSz)
-        return;
-    
-	typename pcl::PointCloud<PointT>::Ptr pNanFreeCloud (new pcl::PointCloud<PointT>);
-
-	std::vector< int > indices;
-	pcl::removeNaNFromPointCloud(*pCloud,*pNanFreeCloud,indices);
-
-	// Creating the KdTree object for the search method of the extraction
-	typename pcl::search::KdTree<PointT>::Ptr tree (new pcl::search::KdTree<PointT>);
-	tree->setInputCloud (pNanFreeCloud);
-    
-	std::vector<pcl::PointIndices> clusterIndices;
-    
-	pcl::EuclideanClusterExtraction<PointT> ec;
-    ec.setInputCloud (pNanFreeCloud);
-	ec.setClusterTolerance (clusterTol); // 2cm
-	ec.setMinClusterSize (minSz);
-	ec.setMaxClusterSize (maxSz);
-	ec.setSearchMethod (tree);
-
-	ec.extract (clusterIndices);
-
-    if (clusterIndices.size() > 0)
-    {
-        // biggest is the first in the list of extractions' indices
-        std::vector<pcl::PointIndices>::const_iterator it = clusterIndices.begin();
-        for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); pit++)
-            cluster.points.push_back (pNanFreeCloud->points[*pit]);
-
-        cluster.width = cluster.points.size ();
-        cluster.height = 1;
-        cluster.is_dense = false;
-    }
-}
-
-
 float euclideanDistance(Eigen::Vector4f u, Eigen::Vector4f v)
 {
 	return std::sqrtf(std::powf(u.x() - v.x(), 2) + std::powf(u.y() - v.y(), 2) + std::powf(u.z() - v.z(), 2));
@@ -857,9 +814,6 @@ template cv::Mat wToMat(std::vector<std::vector<double> > w);
 template std::vector<std::vector<int> > matTow(cv::Mat mat);
 template std::vector<std::vector<float> > matTow(cv::Mat mat);
 template std::vector<std::vector<double> > matTow(cv::Mat mat);
-
-template void biggestEuclideanCluster<pcl::PointXYZ>(pcl::PointCloud<pcl::PointXYZ>::Ptr, int, int, float, pcl::PointCloud<pcl::PointXYZ>&);
-template void biggestEuclideanCluster<pcl::PointXYZRGB>(pcl::PointCloud<pcl::PointXYZRGB>::Ptr, int, int, float, pcl::PointCloud<pcl::PointXYZRGB>&);
 
 template pcl::PointXYZ computeCentroid(const pcl::PointCloud<pcl::PointXYZ>&);
 template pcl::PointXYZ computeCentroid(const pcl::PointCloud<pcl::PointXYZRGB>&);
