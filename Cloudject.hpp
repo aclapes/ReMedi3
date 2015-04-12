@@ -307,7 +307,7 @@ public:
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloudTmp (new pcl::PointCloud<pcl::PointXYZRGB>);
         boost::shared_ptr<pcl::VoxelGrid<pcl::PointXYZRGB> > pGrid (new pcl::VoxelGrid<pcl::PointXYZRGB>);
         
-        pclx::voxelize(m_pCloud, *pCloudTmp, *pGrid, m_LeafSize);
+        pclx::voxelize(m_pCloud, m_LeafSize, *pCloudTmp, *pGrid);
         
         return pGrid;
     }
@@ -317,7 +317,7 @@ public:
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloudTmp (new pcl::PointCloud<pcl::PointXYZRGB>);
         boost::shared_ptr<pcl::VoxelGrid<pcl::PointXYZRGB> > pGrid (new pcl::VoxelGrid<pcl::PointXYZRGB>);
         
-        pclx::voxelize(getRegisteredCloud(), *pCloudTmp, *pGrid, m_LeafSize);
+        pclx::voxelize(getRegisteredCloud(), m_LeafSize, *pCloudTmp, *pGrid);
         
         return pGrid;
     }

@@ -62,7 +62,7 @@ static const char* g_AnnotationLabels[] = {"dish","pillbox","book","tetrabrick",
 #define TM_NORMAL_RADIUS                    0.05
 #define TM_SAC_ITERS                        200
 #define TM_SAC_DIST_THRESH                  0.03
-#define TM_TT_Y_OFFSET                      0.4 // tabletop y-dim offset
+#define TM_TT_Y_OFFSET                      0.30 // tabletop y-dim offset
 #define TM_INTERACTIVE_BORDER_DIST          0.7
 #define TM_CONF_LEVEL                       99
 

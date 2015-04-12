@@ -7,6 +7,7 @@
 //
 
 #include "pclxtended.h"
+#include <pcl/segmentation/extract_clusters.h>
 
 pclx::Rectangle3D pclx::rectangleIntersection(pclx::Rectangle3D a, pclx::Rectangle3D b)
 {
@@ -253,25 +254,58 @@ void pclx::findNextCorrespondenceBasedOnOverlap(std::vector<std::vector<VoxelGri
     }
 }
 
-
 template<typename PointT>
-void pclx::voxelize(typename pcl::PointCloud<PointT>::Ptr pCloud, pcl::PointCloud<PointT>& vloud, pcl::VoxelGrid<PointT>& vox, Eigen::Vector3f leafSize)
+void pclx::downsample(typename pcl::PointCloud<PointT>::Ptr pCloudIn, Eigen::Vector3f leafSize, pcl::PointCloud<PointT>& cloudOut)
 {
-    typename pcl::PointCloud<PointT>::Ptr pCloudAux = pCloud;
-    vox.setInputCloud(pCloud);
+    pcl::VoxelGrid<PointT> vox;
+    vox.setInputCloud(pCloudIn);
     vox.setLeafSize(leafSize.x(), leafSize.y(), leafSize.z());
     
-    // Reading errors are at (x,y,0), so filter z=0 values
-//    vox.setFilterFieldName("x");
-//    vox.setFilterLimits(-2*leafSize.x(),2*leafSize.x());
-//    vox.setFilterFieldName("y");
-//    vox.setFilterLimits(-2*leafSize.y(),2*leafSize.y());
-//    vox.setFilterFieldName("z");
-//    vox.setFilterLimits(-2*leafSize.z(),2*leafSize.z());
-//    vox.setFilterLimitsNegative(true);
-    
+    vox.filter(cloudOut);
+}
+
+template<typename PointT>
+void pclx::voxelize(typename pcl::PointCloud<PointT>::Ptr pCloud, Eigen::Vector3f leafSize, pcl::PointCloud<PointT>& vloud, pcl::VoxelGrid<PointT>& vox)
+{
+    vox.setInputCloud(pCloud);
+    vox.setLeafSize(leafSize.x(), leafSize.y(), leafSize.z());
+
     vox.setSaveLeafLayout(true); // the most important thing!
     vox.filter(vloud);
+}
+
+template<typename PointT>
+void voxelize(std::vector<typename pcl::PointCloud<PointT>::Ptr> clouds, Eigen::Vector3f leafSize, std::vector<typename pcl::PointCloud<PointT>::Ptr>& vlouds, std::vector<typename boost::shared_ptr<pcl::VoxelGrid<PointT> > >& grids)
+{
+    grids.resize(clouds.size());
+    for (int i = 0; i < clouds.size(); i++)
+    {
+        typename pcl::PointCloud<PointT>::Ptr pVloud (new pcl::PointCloud<PointT>);
+        grids[i] = typename boost::shared_ptr<pcl::VoxelGrid<PointT> > (new pcl::VoxelGrid<PointT>);
+        pclx::voxelize(clouds[i], leafSize, *pVloud, *(grids[i]));
+    }
+}
+
+void voxelize(std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> clouds, Eigen::Vector3f leafSize, std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr>& vlouds, std::vector<boost::shared_ptr<pcl::VoxelGrid<pcl::PointXYZ> > >& grids)
+{
+    grids.resize(clouds.size());
+    for (int i = 0; i < clouds.size(); i++)
+    {
+        pcl::PointCloud<pcl::PointXYZ>::Ptr pVloud (new pcl::PointCloud<pcl::PointXYZ>);
+        grids[i] = boost::shared_ptr<pcl::VoxelGrid<pcl::PointXYZ> > (new pcl::VoxelGrid<pcl::PointXYZ>);
+        pclx::voxelize(clouds[i], leafSize, *pVloud, *(grids[i]));
+    }
+}
+
+void voxelize(std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> clouds, Eigen::Vector3f leafSize, std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr>& vlouds, std::vector<boost::shared_ptr<pcl::VoxelGrid<pcl::PointXYZRGB> > >& grids)
+{
+    grids.resize(clouds.size());
+    for (int i = 0; i < clouds.size(); i++)
+    {
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr pVloud (new pcl::PointCloud<pcl::PointXYZRGB>);
+        grids[i] = boost::shared_ptr<pcl::VoxelGrid<pcl::PointXYZRGB> > (new pcl::VoxelGrid<pcl::PointXYZRGB>);
+        pclx::voxelize(clouds[i], leafSize, *pVloud, *(grids[i]));
+    }
 }
 
 template<typename PointT>
@@ -280,8 +314,8 @@ float pclx::computeInclusion3d(typename pcl::PointCloud<PointT>::Ptr pCloud1, ty
     pcl::VoxelGrid<PointT> vox1, vox2;
     pcl::PointCloud<PointT> vloud1, vloud2;
     
-    voxelize(pCloud1, vloud1, vox1, leafSize);
-    voxelize(pCloud2, vloud2, vox2, leafSize);
+    voxelize(pCloud1, leafSize, vloud1, vox1);
+    voxelize(pCloud2, leafSize, vloud2, vox2);
     
     return pclx::computeInclusion3d(vox1, vox2);
 }
@@ -304,8 +338,8 @@ float pclx::computeOverlap3d(typename pcl::PointCloud<PointT>::Ptr pCloud1, type
     pcl::VoxelGrid<PointT> vox1, vox2;
     pcl::PointCloud<PointT> vloud1, vloud2;
     
-    voxelize(pCloud1, vloud1, vox1, leafSize);
-    voxelize(pCloud2, vloud2, vox2, leafSize);
+    voxelize(pCloud1, leafSize, vloud1, vox1);
+    voxelize(pCloud2, leafSize, vloud2, vox2);
     
     return pclx::computeOverlap3d(vox1, vox2);
 }
@@ -376,9 +410,87 @@ void pclx::countIntersections3d(pcl::VoxelGrid<PointT>& vox1, pcl::VoxelGrid<Poi
     }
 }
 
+template<typename PointT>
+void pclx::clusterize(typename pcl::PointCloud<PointT>::Ptr pCloud, float tol, int minSize, std::vector<typename pcl::PointCloud<PointT>::Ptr>& clusters)
+{
+    clusters.clear();
+    
+    // Creating the KdTree object for the search method of the extraction
+    typename pcl::search::KdTree<PointT>::Ptr tree (new pcl::search::KdTree<PointT>);
+    tree->setInputCloud (pCloud);
+    
+    std::vector<pcl::PointIndices> cluster_indices;
+    typename pcl::EuclideanClusterExtraction<PointT> ec;
+    ec.setClusterTolerance (tol);
+    ec.setMinClusterSize (minSize);
+    ec.setMaxClusterSize (pCloud->points.size());
+    ec.setSearchMethod (tree);
+    ec.setInputCloud (pCloud);
+    ec.extract (cluster_indices);
+    
+    std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin();
+    for ( ; it != cluster_indices.end (); ++it)
+    {
+        typename pcl::PointCloud<PointT>::Ptr pCluster (new pcl::PointCloud<PointT>);
+        
+        std::vector<int>::const_iterator pit = it->indices.begin();
+        for ( ; pit != it->indices.end (); pit++)
+            pCluster->points.push_back (pCloud->points[*pit]); //*
+        
+        pCluster->width = pCluster->points.size ();
+        pCluster->height = 1;
+        pCluster->is_dense = true;
+        
+        clusters.push_back(pCluster);
+    }
+}
 
-template void pclx::voxelize(pcl::PointCloud<pcl::PointXYZ>::Ptr pCloud, pcl::PointCloud<pcl::PointXYZ>& vloud, pcl::VoxelGrid<pcl::PointXYZ>& vox, Eigen::Vector3f leafSize);
-template void pclx::voxelize( pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud, pcl::PointCloud<pcl::PointXYZRGB>& vloud, pcl::VoxelGrid<pcl::PointXYZRGB>& vox, Eigen::Vector3f leafSize);
+template<typename PointT>
+void pclx::biggestEuclideanCluster(typename pcl::PointCloud<PointT>::Ptr pCloud, float tol, int minSize, pcl::PointCloud<PointT>& cluster)
+{
+    // Not even try
+    // bc the entire cloud is smaller than the minSize
+    if (pCloud->points.size() < minSize)
+        return;
+    
+    typename pcl::PointCloud<PointT>::Ptr pNanFreeCloud (new pcl::PointCloud<PointT>);
+    
+    std::vector< int > indices;
+    pcl::removeNaNFromPointCloud(*pCloud,*pNanFreeCloud,indices);
+    
+    // Creating the KdTree object for the search method of the extraction
+    typename pcl::search::KdTree<PointT>::Ptr tree (new pcl::search::KdTree<PointT>);
+    tree->setInputCloud (pNanFreeCloud);
+    
+    std::vector<pcl::PointIndices> clusterIndices;
+    
+    pcl::EuclideanClusterExtraction<PointT> ec;
+    ec.setInputCloud (pNanFreeCloud);
+    ec.setClusterTolerance (tol); // 2cm
+    ec.setMinClusterSize (minSize);
+    ec.setMaxClusterSize (std::numeric_limits<float>::max());
+    ec.setSearchMethod (tree);
+    
+    ec.extract (clusterIndices);
+    
+    if (clusterIndices.size() > 0)
+    {
+        // biggest is the first in the list of extractions' indices
+        std::vector<pcl::PointIndices>::const_iterator it = clusterIndices.begin();
+        for (std::vector<int>::const_iterator pit = it->indices.begin (); pit != it->indices.end (); pit++)
+            cluster.points.push_back (pNanFreeCloud->points[*pit]);
+        
+        cluster.width = cluster.points.size ();
+        cluster.height = 1;
+        cluster.is_dense = false;
+    }
+}
+
+template void pclx::downsample(pcl::PointCloud<pcl::PointXYZ>::Ptr pCloudIn, Eigen::Vector3f leafSize, pcl::PointCloud<pcl::PointXYZ>& cloudOut);
+template void pclx::downsample(pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloudIn, Eigen::Vector3f leafSize, pcl::PointCloud<pcl::PointXYZRGB>& cloudOut);
+
+template void pclx::voxelize<pcl::PointXYZ>(pcl::PointCloud<pcl::PointXYZ>::Ptr pCloud, Eigen::Vector3f leafSize, pcl::PointCloud<pcl::PointXYZ>& vloud, pcl::VoxelGrid<pcl::PointXYZ>& vox);
+template void pclx::voxelize<pcl::PointXYZRGB>( pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud, Eigen::Vector3f leafSize, pcl::PointCloud<pcl::PointXYZRGB>& vloud, pcl::VoxelGrid<pcl::PointXYZRGB>& vox);
 
 template float pclx::computeOverlap3d<pcl::PointXYZ>(pcl::PointCloud<pcl::PointXYZ>::Ptr pCloud1,  pcl::PointCloud<pcl::PointXYZ>::Ptr pCloud2, Eigen::Vector3f leafSize);
 template float pclx::computeOverlap3d<pcl::PointXYZRGB>(pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud1, pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud2, Eigen::Vector3f leafSize);
@@ -392,3 +504,9 @@ template float pclx::computeInclusion3d<pcl::PointXYZRGB>(pcl::VoxelGrid<pcl::Po
 
 template void pclx::countIntersections3d(pcl::VoxelGrid<pcl::PointXYZ>& vox1, pcl::VoxelGrid<pcl::PointXYZ>& vox2, int& voxels1, int& voxels2, int& voxelsI);
 template void pclx::countIntersections3d(pcl::VoxelGrid<pcl::PointXYZRGB>& vox1, pcl::VoxelGrid<pcl::PointXYZRGB>& vox2, int& voxels1, int& voxels2, int& voxelsI);
+
+template void pclx::clusterize<pcl::PointXYZ>(pcl::PointCloud<pcl::PointXYZ>::Ptr pCloud, float tol, int minSize, std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr>& clusters);
+template void pclx::clusterize<pcl::PointXYZRGB>(pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud, float tol, int minSize, std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr>& clusters);
+
+template void pclx::biggestEuclideanCluster<pcl::PointXYZ>(pcl::PointCloud<pcl::PointXYZ>::Ptr, float tol, int minSize, pcl::PointCloud<pcl::PointXYZ>&);
+template void pclx::biggestEuclideanCluster<pcl::PointXYZRGB>(pcl::PointCloud<pcl::PointXYZRGB>::Ptr, float tol, int minSize, pcl::PointCloud<pcl::PointXYZRGB>&);

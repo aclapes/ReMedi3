@@ -473,7 +473,7 @@ int runInteractionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFr
     std::vector<float> detectionThreshs, correspCriteria, interactionThreshs;
     correspCriteria += CloudjectInteractionPipeline::CORRESP_INC, CloudjectInteractionPipeline::CORRESP_OVL;
     detectionThreshs += 1.f/objectsLabels.size(); //0, 1.f/objectsLabels.size(), 2.f/objectsLabels.size();
-    interactionThreshs += 0.02, 0.04, 0.06, 0.12;
+    interactionThreshs += 0.025, 0.05, 0.10;
     // Multiview parameters
     std::vector<float> mvLateFusionStrategies, mvCorrespThreshs;
     mvLateFusionStrategies += CloudjectInteractionPipeline::MULTIVIEW_LF_OR, CloudjectInteractionPipeline::MULTIVIEW_LFSCALE_DEV, CloudjectInteractionPipeline::MULTIVIEW_LF_FURTHEST;
@@ -513,6 +513,8 @@ int runInteractionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFr
             pCjInteractionPipeline->setBackgroundSubtractor(pSys->getBackgroundSubtractor());
             pCjInteractionPipeline->setInteractiveRegisterer(pSys->getRegisterer());
             pCjInteractionPipeline->setTableModeler(pSys->getTableModeler());
+            
+            pSys->getBackgroundSubtractor()->model();
             
             for (int r = 0; r < NUM_REPETITIONS; r++)
             {

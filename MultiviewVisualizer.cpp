@@ -76,7 +76,7 @@ void MultiviewVisualizer::visualize(std::vector<pcl::PointCloud<pcl::PointXYZRGB
     // Count the number of views (viewports - 1)
     int V = m_Viewports.size() - 1;
     
-    for (int v = 0; v < V; v++)
+    for (int v = 0; v <= V; v++)
     {
         m_pViz->removeAllPointClouds(m_Viewports[v]);
         m_pViz->removeAllShapes(m_Viewports[v]);

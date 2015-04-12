@@ -72,9 +72,13 @@ namespace pclx
     void findNextCorrespondenceBasedOnOverlap(std::vector<std::vector<VoxelGridPtr> >& grids, std::vector<std::vector<bool> >& assignations, int v, float tol, std::vector<std::pair<std::pair<int,int>,VoxelGridPtr> >& chain);
     
     template<typename PointT>
-    void voxelize(typename pcl::PointCloud<PointT>::Ptr pCloud, pcl::PointCloud<PointT>& vloud, pcl::VoxelGrid<PointT>& vox, Eigen::Vector3f leafSize);
+    void downsample(typename pcl::PointCloud<PointT>::Ptr pCloudIn, Eigen::Vector3f leafSize, pcl::PointCloud<PointT>& cloudOut);
     template<typename PointT>
-    
+    void voxelize(typename pcl::PointCloud<PointT>::Ptr pCloud, Eigen::Vector3f leafSize, pcl::PointCloud<PointT>& vloud, pcl::VoxelGrid<PointT>& vox);
+    void voxelize(std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> clouds, Eigen::Vector3f leafSize, std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr>& vlouds, std::vector<boost::shared_ptr<pcl::VoxelGrid<pcl::PointXYZ> > >& grids);
+    void voxelize(std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr> clouds, Eigen::Vector3f leafSize, std::vector<pcl::PointCloud<pcl::PointXYZRGB>::Ptr>& vlouds, std::vector<boost::shared_ptr<pcl::VoxelGrid<pcl::PointXYZRGB> > >& grids);
+
+    template<typename PointT>
     float computeOverlap3d(typename pcl::PointCloud<PointT>::Ptr pCloud1, typename pcl::PointCloud<PointT>::Ptr pCloud2, Eigen::Vector3f leafSize);
     template<typename PointT>
     float computeOverlap3d(pcl::VoxelGrid<PointT>& vox1, pcl::VoxelGrid<PointT>& vox2);
@@ -86,6 +90,12 @@ namespace pclx
     
     template<typename PointT>
     void countIntersections3d(pcl::VoxelGrid<PointT>& vox1, pcl::VoxelGrid<PointT>& vox2, int& voxels1, int& voxels2, int& voxelsI);
+    
+    template<typename PointT>
+    void clusterize(typename pcl::PointCloud<PointT>::Ptr pCloud, float tol, int minSize, std::vector<typename pcl::PointCloud<PointT>::Ptr>& clusters);
+    
+    template<typename PointT>
+    void biggestEuclideanCluster(typename pcl::PointCloud<PointT>::Ptr, float tol, int minSize, pcl::PointCloud<PointT>&);
 }
 
 #endif /* defined(__remedi3__pclxtended__) */

@@ -10,6 +10,7 @@
 #include <pcl/io/pcd_io.h>
 
 #include "cvxtended.h"
+#include "pclxtended.h"
 
 
 TableModeler::TableModeler()
@@ -369,7 +370,7 @@ void TableModeler::estimate(PointCloudPtr pCloud, float leafSize, PointT referen
 			sor.setMeanK (50);
 			sor.setStddevMulThresh (1);
 			sor.filter (*pPlaneFiltered);
-            biggestEuclideanCluster(pPlaneFiltered, 100, 25000, 2.5f * m_LeafSize, planeSegmented);
+            pclx::biggestEuclideanCluster(pPlaneFiltered, 2.5f * m_LeafSize, 100, planeSegmented);
             
             coefficients = *pCoefficients;
             
