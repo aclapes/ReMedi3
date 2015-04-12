@@ -360,7 +360,7 @@ int runDetectionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
     interactionThreshs += 0.02, 0.04, 0.06, 0.12;
     // Multiview parameters
     std::vector<float> mvLateFusionStrategies, mvCorrespThreshs;
-    mvLateFusionStrategies += CloudjectInteractionPipeline::MULTIVIEW_LF_OR, CloudjectInteractionPipeline::MULTIVIEW_LFSCALE_DEV, CloudjectInteractionPipeline::MULTIVIEW_LF_FURTHEST;
+    mvLateFusionStrategies += ((int)CloudjectInteractionPipeline::MULTIVIEW_LF_OR), ((int)CloudjectInteractionPipeline::MULTIVIEW_LFSCALE_DEV), ((int)CloudjectInteractionPipeline::MULTIVIEW_LF_FURTHEST);
     mvCorrespThreshs += 1.f/objectsLabels.size(); //0.05, 1.f/objectsLabels.size(), 2.f/objectsLabels.size();
     
     for (int t = beginFold; t < endFold; t++)
@@ -476,7 +476,7 @@ int runInteractionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFr
     interactionThreshs += 0.02, 0.04, 0.06, 0.12;
     // Multiview parameters
     std::vector<float> mvLateFusionStrategies, mvCorrespThreshs;
-    mvLateFusionStrategies += CloudjectInteractionPipeline::MULTIVIEW_LF_OR, CloudjectInteractionPipeline::MULTIVIEW_LFSCALE_DEV, CloudjectInteractionPipeline::MULTIVIEW_LF_FURTHEST;
+    mvLateFusionStrategies += ((int)CloudjectInteractionPipeline::MULTIVIEW_LF_OR), ((int)CloudjectInteractionPipeline::MULTIVIEW_LFSCALE_DEV), ((int)CloudjectInteractionPipeline::MULTIVIEW_LF_FURTHEST);
     mvCorrespThreshs += 1.f/objectsLabels.size(); //0.05, 1.f/objectsLabels.size(), 2.f/objectsLabels.size();
     
     for (int t = beginFold; t < endFold; t++)
