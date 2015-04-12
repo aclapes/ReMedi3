@@ -16,6 +16,7 @@
 #include "Sequence.h"
 #include "ColorDepthFrame.h"
 
+#include "BackgroundSubtractor.h"
 #include "InteractiveRegisterer.h"
 #include "TableModeler.h"
 #include "CloudjectSVMClassificationPipeline.h"
@@ -31,6 +32,8 @@
 
 #include <pcl/filters/voxel_grid.h>
 #include <boost/shared_ptr.hpp>
+
+#include <opencv2/opencv.hpp>
 
 //
 // Typedefs
@@ -117,6 +120,7 @@ public:
     void setInputSequences(const std::vector<Sequence<ColorDepthFrame>::Ptr>& sequences);
     void setCategories(const std::vector<const char*>& categories);
     
+    void setBackgroundSubtractor(BackgroundSubtractor<cv::BackgroundSubtractorMOG2, ColorDepthFrame>::Ptr bs);
     void setInteractiveRegisterer(InteractiveRegisterer::Ptr ir);
     void setTableModeler(TableModeler::Ptr tm);
     
@@ -174,6 +178,7 @@ private:
     std::vector<Sequence<ColorDepthFrame>::Ptr> m_Sequences;
     std::vector<const char*> m_Categories;
     
+    BackgroundSubtractor<cv::BackgroundSubtractorMOG2,ColorDepthFrame>::Ptr m_pSubtractor;
     InteractiveRegisterer::Ptr m_pRegisterer;
     TableModeler::Ptr m_pTableModeler;
     CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr m_ClassificationPipeline;

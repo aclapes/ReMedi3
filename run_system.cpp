@@ -510,6 +510,7 @@ int runInteractionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFr
             pCjInteractionPipeline->setInteractionGroundtruth(iact);
             pCjInteractionPipeline->setValidationInteractionOverlapCriterion(CloudjectInteractionPipeline::INTERACTION_OVL_OVERALL); // evaluate the goodness of detection begin-end of interaction
             
+            pCjInteractionPipeline->setBackgroundSubtractor(pSys->getBackgroundSubtractor());
             pCjInteractionPipeline->setInteractiveRegisterer(pSys->getRegisterer());
             pCjInteractionPipeline->setTableModeler(pSys->getTableModeler());
             

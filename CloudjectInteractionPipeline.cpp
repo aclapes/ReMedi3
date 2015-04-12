@@ -73,9 +73,14 @@ void CloudjectInteractionPipeline::setInteractiveRegisterer(InteractiveRegistere
     m_pRegisterer = ir;
 }
 
-void CloudjectInteractionPipeline::setTableModeler(TableModeler::Ptr tm)
+void CloudjectInteractionPipeline::setTableModeler(TableModeler::Ptr pTM)
 {
-    m_pTableModeler = tm;
+    m_pTableModeler = pTM;
+}
+
+void CloudjectInteractionPipeline::setBackgroundSubtractor(BackgroundSubtractor<cv::BackgroundSubtractorMOG2,ColorDepthFrame>::Ptr pBS)
+{
+    m_pSubtractor = pBS;
 }
 
 void CloudjectInteractionPipeline::setGroundtruth(const Groundtruth& gt)
@@ -202,6 +207,8 @@ void CloudjectInteractionPipeline::validateInteraction()
 {
     std::vector<std::vector<float> > combinations;
     expandParameters<float>(m_ValParams, combinations);
+    
+    m_pSubtractor->model();
     
     float valPerf = 0.f;
     int valIdx = 0;
@@ -610,6 +617,11 @@ void CloudjectInteractionPipeline::detectInteractionMonocular()
         while (m_Sequences[s]->hasNextFrames())
         {
             vector<ColorDepthFrame::Ptr> frames = m_Sequences[s]->nextFrames();
+
+            std::vector<cv::Mat> foregroundMasks;
+            m_pSubtractor->setInputFrames(frames);
+            m_pSubtractor->subtract(foregroundMasks);
+            
             m_pRegisterer->setInputFrames(frames);
             m_pRegisterer->registrate(frames);
             
