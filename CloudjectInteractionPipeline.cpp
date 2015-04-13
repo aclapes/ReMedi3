@@ -211,12 +211,12 @@ void CloudjectInteractionPipeline::validateInteraction()
     expandParameters<float>(m_ValParams, combinations);
     
     if (m_MultiviewStrategy == DETECT_MONOCULAR)
-        m_InteractionResults.resize(1, cv::Mat(combinations.size(), m_Categories.size(),
-                                               CV_32FC4, cv::Scalar(0,0,0,0)));
-    else if (m_MultiviewStrategy == DETECT_MULTIVIEW)
         m_InteractionResults.resize(m_pSubtractor->getNumOfViews(),
                                     cv::Mat(combinations.size(), m_Categories.size(),
                                             CV_32FC4, cv::Scalar(0,0,0,0)));
+    else if (m_MultiviewStrategy == DETECT_MULTIVIEW)
+        m_InteractionResults.resize(1, cv::Mat(combinations.size(), m_Categories.size(),
+                                               CV_32FC4, cv::Scalar(0,0,0,0)));
         
     float valPerf = 0.f;
     int valIdx = 0;
@@ -343,12 +343,12 @@ bool CloudjectInteractionPipeline::load(std::string filename, std::string extens
     for (int v = 0; v < V; v++)
         fs["lateFusionScalings-" + boost::lexical_cast<std::string>(v)] >> m_LateFusionScalings[v];
     
-    if (m_MultiviewStrategy == DETECT_MONOCULAR)
+    if (m_MultiviewStrategy == DETECT_MULTIVIEW)
     {
         m_InteractionResults.resize(1);
         fs["interactionResults-0"] >> m_InteractionResults[0];
     }
-    else if (m_MultiviewStrategy == DETECT_MULTIVIEW)
+    else if (m_MultiviewStrategy == DETECT_MONOCULAR)
     {
         m_InteractionResults.resize(V);
         for (int v = 0; v < V; v++)
@@ -403,7 +403,7 @@ void CloudjectInteractionPipeline::setValidationParametersCombination(std::vecto
 void CloudjectInteractionPipeline::detectMonocular()
 {
     m_DetectionResults.clear();
-    m_DetectionResults.resize(m_Sequences[0]->getNumOfViews(), std::vector<Result>(m_Categories.size()));
+    m_DetectionResults.resize(m_pSubtractor->getNumOfViews(), std::vector<Result>(m_Categories.size()));
     
     for (int s = 0; s < m_Sequences.size(); s++)
     {
@@ -655,7 +655,7 @@ void CloudjectInteractionPipeline::findInclusions(std::vector<Cloudject::Ptr> cl
 void CloudjectInteractionPipeline::detectInteractionMonocular()
 {
     m_InteractionCombResults.clear();
-    m_InteractionCombResults.resize(m_Sequences[0]->getNumOfViews(), std::vector<Result>(m_Categories.size()));
+    m_InteractionCombResults.resize(m_pSubtractor->getNumOfViews(), std::vector<Result>(m_Categories.size()));
     
     for (int s = 0; s < m_Sequences.size(); s++)
     {
