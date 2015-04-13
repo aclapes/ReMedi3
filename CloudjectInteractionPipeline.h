@@ -201,7 +201,8 @@ private:
     float m_ValPerf;
     
     std::vector<std::vector<Result> > m_DetectionResults;
-    std::vector<std::vector<Result> > m_InteractionResults;
+    std::vector<std::vector<Result> > m_InteractionCombResults;
+    std::vector<cv::Mat> m_InteractionResults; // as many as views, combinations x categories x 4 (channesls)
     
     //
     // Private methods

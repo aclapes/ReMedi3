@@ -161,6 +161,11 @@ void BackgroundSubtractor<cv::BackgroundSubtractorMOG2, ColorFrame>::setInputFra
     m_InputFrames = frames;
 }
 
+int BackgroundSubtractor<cv::BackgroundSubtractorMOG2, ColorFrame>::getNumOfViews() const
+{
+    return m_pSeq->getNumOfViews();
+}
+
 vector<ColorFrame::Ptr> BackgroundSubtractor<cv::BackgroundSubtractorMOG2, ColorFrame>::getInputFrames() const
 {
     return m_InputFrames;
@@ -278,6 +283,11 @@ void BackgroundSubtractor<cv::BackgroundSubtractorMOG2, DepthFrame>::setBackgrou
 void BackgroundSubtractor<cv::BackgroundSubtractorMOG2, DepthFrame>::setInputFrames(vector<DepthFrame::Ptr> frames)
 {
     m_InputFrames = frames;
+}
+
+int BackgroundSubtractor<cv::BackgroundSubtractorMOG2, DepthFrame>::getNumOfViews() const
+{
+    return m_pSeq->getNumOfViews();
 }
 
 vector<DepthFrame::Ptr> BackgroundSubtractor<cv::BackgroundSubtractorMOG2, DepthFrame>::getInputFrames() const
@@ -429,6 +439,11 @@ void BackgroundSubtractor<cv::BackgroundSubtractorMOG2, ColorDepthFrame>::setInp
     
     // Its own
     m_InputFrames = frames;
+}
+
+int BackgroundSubtractor<cv::BackgroundSubtractorMOG2, ColorDepthFrame>::getNumOfViews() const
+{
+    return m_pSeq->getNumOfViews();
 }
 
 void BackgroundSubtractor<cv::BackgroundSubtractorMOG2, ColorDepthFrame>::setFramesResolution(int xres, int yres)
