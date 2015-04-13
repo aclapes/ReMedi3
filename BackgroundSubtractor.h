@@ -85,6 +85,7 @@ public:
     void setBackgroundSequence(Sequence<ColorFrame>::Ptr pSeq, int n = 0);
     void setInputFrames(vector<ColorFrame::Ptr> frames);
     vector<ColorFrame::Ptr> getInputFrames() const;
+    int getNumOfViews() const;
     
     void setShadowsModeling(bool shadowsModeling = true);
     
@@ -114,6 +115,7 @@ public:
     void setBackgroundSequence(Sequence<DepthFrame>::Ptr pSeq, int n = 0);
     void setInputFrames(vector<DepthFrame::Ptr> frames);
     vector<DepthFrame::Ptr> getInputFrames() const;
+    int getNumOfViews() const;
     
     void model();
     
@@ -139,7 +141,8 @@ public:
     
     void setBackgroundSequence(Sequence<ColorDepthFrame>::Ptr pSeq, int n = 0);
     void setInputFrames(vector<ColorDepthFrame::Ptr> frames);
-    
+    int getNumOfViews() const;
+
     void setFramesResolution(int xres, int yres);
     
     void setModality(int m);
