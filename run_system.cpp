@@ -579,8 +579,115 @@ int runInteractionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFr
 
 int runInteractionPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> sequencesSids, const Groundtruth& gt, const Interaction& iact, int beginFold = 0, int endFold = 0)
 {
-    // TODO: implement
-
+    int numOfObjects = sizeof(g_ObjectsLabels)/sizeof(g_ObjectsLabels[0]);
+    std::vector<const char*> objectsLabels (g_ObjectsLabels, g_ObjectsLabels + numOfObjects);
+    
+    // Monocular and multiview parameters
+    std::vector<float> detectionThreshs, correspCriteria, interactionThreshs;
+    correspCriteria += CloudjectInteractionPipeline::CORRESP_INC, CloudjectInteractionPipeline::CORRESP_OVL;
+    detectionThreshs += 1.f/objectsLabels.size(); //0, 1.f/objectsLabels.size(), 2.f/objectsLabels.size();
+    interactionThreshs += 0.025, 0.05, 0.10;
+    // Multiview parameters
+    std::vector<float> mvLateFusionStrategies, mvCorrespThreshs;
+    mvLateFusionStrategies += CloudjectInteractionPipeline::MULTIVIEW_LF_OR, CloudjectInteractionPipeline::MULTIVIEW_LFSCALE_DEV, CloudjectInteractionPipeline::MULTIVIEW_LF_FURTHEST;
+    mvCorrespThreshs += 1.f/objectsLabels.size(); //0.05, 1.f/objectsLabels.size(), 2.f/objectsLabels.size();
+    
+    for (int t = beginFold; t < endFold; t++)
+    {
+        std::cout << "Interaction validation in fold " << t << " (LOSOCV) .." << std::endl;
+        
+        std::vector<CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr> classificationPipelines (NUM_REPETITIONS);
+        bool bSuccess = true;
+        for (int r = 0; r < NUM_REPETITIONS; r++)
+        {
+            classificationPipelines[r] = CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr(new CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>);
+            bSuccess &= classificationPipelines[r]->load("training_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
+        }
+        
+        if (bSuccess)
+        {
+//            std::cout << "Creating the sample of test cloudjects .." << std::endl;
+//            boost::shared_ptr<std::list<MockCloudject::Ptr> > pCloudjectsTe (new std::list<MockCloudject::Ptr>);
+//            remedi::getTestCloudjectsWithDescriptor(sequences, sequencesSids, t, gt, "pfhrgb250", *pCloudjectsTe);
+//            std::cout << "Created a training sample of " << pCloudjectsTe->size() << " cloudjects." << std::endl;
+//            
+//            std::vector<Sequence<ColorDepthFrame>::Ptr> sequencesTe;
+//            remedi::getTestSequences(sequences, sequencesSids, t, sequencesTe);
+//            
+            CloudjectInteractionPipeline::Ptr pCjInteractionPipeline (new CloudjectInteractionPipeline);
+//            pCjInteractionPipeline->setInputSequences(sequencesTe);
+//            pCjInteractionPipeline->setCategories(objectsLabels);
+//            
+//            pCjInteractionPipeline->setLeafSize(Eigen::Vector3f(.02f,.02f,.02f));
+//            pCjInteractionPipeline->setGroundtruth(gt);
+//            pCjInteractionPipeline->setInteractionGroundtruth(iact);
+//            pCjInteractionPipeline->setValidationInteractionOverlapCriterion(CloudjectInteractionPipeline::INTERACTION_OVL_OVERALL); // evaluate the goodness of detection begin-end of interaction
+//
+            pCjInteractionPipeline->setBackgroundSubtractor(pSys->getBackgroundSubtractor());
+//            pCjInteractionPipeline->setInteractiveRegisterer(pSys->getRegisterer());
+//            pCjInteractionPipeline->setTableModeler(pSys->getTableModeler());
+//            
+//            pSys->getBackgroundSubtractor()->model();
+            
+            for (int r = 0; r < NUM_REPETITIONS; r++)
+            {
+//                pCjInteractionPipeline->setClassificationPipeline(classificationPipelines[r]);
+//                
+//                // MONOCULAR
+//                std::cout << "Validating MONOCULAR .. " << std::endl;
+//                pCjInteractionPipeline->setMultiviewStrategy(CloudjectInteractionPipeline::DETECT_MONOCULAR);
+                pCjInteractionPipeline->load("interaction_monocular_validation_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
+                pCjInteractionPipeline->setValidationParameters(correspCriteria, detectionThreshs, interactionThreshs, std::vector<float>(), std::vector<float>());
+//
+//                boost::timer timer;
+//                pCjInteractionPipeline->validateInteraction();
+//                std::cout << pCjInteractionPipeline->getValidationPerformance() << std::endl;
+//                std::cout << "It took " << timer.elapsed() << " secs." << std::endl;
+                
+                pCjInteractionPipeline->save("interaction_monocular_validation_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
+                
+//                // MULTIVIEW
+//                std::cout << "Validating MULTIVIEW .. " << std::endl;
+//                pCjInteractionPipeline->setMultiviewStrategy(CloudjectInteractionPipeline::DETECT_MULTIVIEW);
+                pCjInteractionPipeline->load("interaction_multiview_validation_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
+                pCjInteractionPipeline->setValidationParameters(correspCriteria, detectionThreshs, interactionThreshs, mvLateFusionStrategies, mvCorrespThreshs);
+                
+//                // Load predictions and dists to margin
+//                std::vector<cv::Mat> predictionsTr, distsToMarginTr;
+//                for (int tt = 0; tt < NUM_OF_SUBJECTS; tt++)
+//                {
+//                    if (tt != t)
+//                    {
+//                        cv::FileStorage fs;
+//                        fs.open("testing_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r) + ".yml", cv::FileStorage::READ);
+//                        if (fs.isOpened())
+//                        {
+//                            cv::Mat aux;
+//                            fs["predictions"] >> aux;
+//                            predictionsTr.push_back(aux);
+//                            fs["distsToMargin"] >> aux;
+//                            distsToMarginTr.push_back(aux);
+//                        }
+//                    }
+//                }
+//                cv::Mat predictions, distsToMargin;
+//                vconcat(predictionsTr, predictions);
+//                vconcat(distsToMarginTr, distsToMargin);
+//                
+//                // Set multiview-related parameters
+//                cv::Mat scalingsMat;
+//                remedi::computeScalingFactorsOfCategories(predictions, distsToMargin, scalingsMat);
+//                pCjInteractionPipeline->setMultiviewLateFusionNormalization(cvx::convert<float>(scalingsMat)); // floats' Mat to vv<float>
+//                
+//                timer.restart();
+//                pCjInteractionPipeline->validateInteraction();
+//                std::cout << pCjInteractionPipeline->getValidationPerformance() << std::endl;
+//                std::cout << "It took " << timer.elapsed() << " secs." << std::endl;
+                
+                pCjInteractionPipeline->save("interaction_multiview_validation_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
+            }
+        }
+    }
     return 0;
 }
 

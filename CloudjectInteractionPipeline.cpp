@@ -176,7 +176,10 @@ void CloudjectInteractionPipeline::validateDetection()
         std::cout << cv::Mat(combinations[i]) << std::endl;
         setValidationParametersCombination(combinations[i]);
         
-        detect();
+        if (m_MultiviewStrategy == DETECT_MONOCULAR)
+            detectMonocular();
+        else
+            detectMultiview();
         
         float fscore = .0f;
         for (int v = 0; v < m_DetectionResults.size(); v++)
@@ -205,27 +208,35 @@ void CloudjectInteractionPipeline::validateDetection()
 
 void CloudjectInteractionPipeline::validateInteraction()
 {
+    m_InteractionPredictions.clear(); // not used in the validation
     m_InteractionResults.clear();
     
-    std::vector<std::vector<float> > combinations;
-    expandParameters<float>(m_ValParams, combinations);
+    expandParameters<float>(m_ValParams, m_ValCombs);
     
     if (m_MultiviewStrategy == DETECT_MONOCULAR)
-        m_InteractionResults.resize(m_pSubtractor->getNumOfViews(),
-                                    cv::Mat(combinations.size(), m_Categories.size(),
-                                            CV_32FC4, cv::Scalar(0,0,0,0)));
-    else if (m_MultiviewStrategy == DETECT_MULTIVIEW)
-        m_InteractionResults.resize(1, cv::Mat(combinations.size(), m_Categories.size(),
-                                               CV_32FC4, cv::Scalar(0,0,0,0)));
-        
-    float valPerf = 0.f;
-    int valIdx = 0;
-    for (int i = 0; i < combinations.size(); i++)
     {
-        std::cout << cv::Mat(combinations[i]) << std::endl;
-        setValidationParametersCombination(combinations[i]);
+        m_InteractionResults.resize(m_pSubtractor->getNumOfViews());
+        for (int v = 0; v < m_pSubtractor->getNumOfViews(); v++)
+            m_InteractionResults[v] = cv::Mat(m_ValCombs.size(), m_Categories.size(),
+                                              CV_32FC4, cv::Scalar(0,0,0,0));
+    }
+    else if (m_MultiviewStrategy == DETECT_MULTIVIEW)
+    {
+        m_InteractionResults.push_back(cv::Mat(m_ValCombs.size(), m_Categories.size(),
+                                               CV_32FC4, cv::Scalar(0,0,0,0)));
+    }
+    
+    m_ValPerf = 0.f;
+    m_ValIdx = 0;
+    for (int i = 0; i < m_ValCombs.size(); i++)
+    {
+        std::cout << cv::Mat(m_ValCombs[i]) << std::endl;
+        setValidationParametersCombination(m_ValCombs[i]);
         
-        detectInteraction();
+        if (m_MultiviewStrategy == DETECT_MONOCULAR)
+            detectInteractionMonocular();
+        else if (m_MultiviewStrategy == DETECT_MULTIVIEW)
+            detectInteractionMultiview();
         
         float ovl = .0f;
         for (int v = 0; v < m_InteractionCombResults.size(); v++)
@@ -233,8 +244,8 @@ void CloudjectInteractionPipeline::validateInteraction()
             Result result;
             for (int j = 0; j < m_InteractionCombResults[v].size(); j++)
             {
-                m_InteractionResults[v].at<cv::Vec4f>(i,j) = m_InteractionCombResults[v][j].toVector();
                 result += m_InteractionCombResults[v][j];
+                m_InteractionResults[v].at<cv::Vec4f>(i,j) = m_InteractionCombResults[v][j].toVector();
             }
             
             float ovlView = ((float)result.tp) / (result.tp + result.fp + result.fn);
@@ -243,16 +254,15 @@ void CloudjectInteractionPipeline::validateInteraction()
             ovl += (ovlView / m_InteractionCombResults.size());
         }
         
-        if (ovl > valPerf)
+        if (ovl > m_ValPerf)
         {
-            valPerf = ovl;
-            valIdx = i;
+            m_ValPerf = ovl;
+            m_ValIdx = i;
         }
     }
     
     // Set the parameters finally
-//    setValidationParametersCombination(combinations[valIdx]);
-//    m_ValPerf = valPerf;
+    setValidationParametersCombination(m_ValCombs[m_ValIdx]);
 }
 
 float CloudjectInteractionPipeline::getValidationPerformance()
@@ -260,20 +270,43 @@ float CloudjectInteractionPipeline::getValidationPerformance()
     return m_ValPerf;
 }
 
-void CloudjectInteractionPipeline::detect()
+void CloudjectInteractionPipeline::predictInteraction()
 {
-    if (m_MultiviewStrategy == DETECT_MONOCULAR)
-        detectMonocular();
-    else if (m_MultiviewStrategy == DETECT_MULTIVIEW)
-        detectMultiview();
-}
-
-void CloudjectInteractionPipeline::detectInteraction()
-{
-    if (m_MultiviewStrategy == DETECT_MONOCULAR)
-        detectInteractionMonocular();
-    else if (m_MultiviewStrategy == DETECT_MULTIVIEW)
-        detectInteractionMultiview();
+    m_InteractionPredictions.clear(); // not used in the validation
+    m_InteractionResults.clear();
+    
+    expandParameters<float>(m_ValParams, m_ValCombs);
+    
+//    if (m_MultiviewStrategy == DETECT_MONOCULAR)
+//    {
+//        m_InteractionPredictions.resize(m_pSubtractor->getNumOfViews());
+//        m_InteractionResults.resize(m_pSubtractor->getNumOfViews(), cv::Mat(1, m_Categories.size(), CV_32FC4, cv::Scalar(0,0,0,0)));
+//        
+//        detectInteractionMonocular();
+//    }
+//    else if (m_MultiviewStrategy == DETECT_MULTIVIEW)
+//    {
+//        m_InteractionPredictions.resize(1);
+//        m_InteractionResults.resize(1, cv::Mat(1, m_Categories.size(), CV_32FC4, cv::Scalar(0,0,0,0)));
+//        
+//        detectInteractionMultiview();
+//    }
+//    
+//    m_Perf = .0f;
+//    for (int v = 0; v < m_InteractionCombResults.size(); v++)
+//    {
+//        Result result;
+//        for (int j = 0; j < m_InteractionCombResults[v].size(); j++)
+//        {
+//            m_InteractionResults[v].at<cv::Vec4f>(0,j) = m_InteractionCombResults[v][j].toVector();
+//            result += m_InteractionCombResults[v][j];
+//        }
+//        
+//        float ovlView = ((float)result.tp) / (result.tp + result.fp + result.fn);
+//        std::cout << result.toVector() << ", (" << ovlView << ")" << ((v < m_InteractionCombResults.size() - 1) ? "," : ";\n");
+//        
+//        m_Perf += (ovlView / m_InteractionCombResults.size());
+//    }
 }
 
 void CloudjectInteractionPipeline::save(std::string filename, std::string extension)
@@ -297,15 +330,29 @@ void CloudjectInteractionPipeline::save(std::string filename, std::string extens
     fs << "leafSizeZ" << m_LeafSize.z();
     
     fs << "valInteractionOvlCriterion" << m_ValInteractionOvlCriterion;
+
+    cv::Mat valCombsMat;
+    cvx::convert<float>(m_ValCombs, valCombsMat);
+    fs << "valCombsMat" << valCombsMat;
+
+    fs << "numViews" << m_pSubtractor->getNumOfViews();
     
-    fs << "numViews" << ((int) m_LateFusionScalings.size());
     for (int v = 0; v < m_LateFusionScalings.size(); v++)
         fs << ("lateFusionScalings-" + boost::lexical_cast<std::string>(v)) << m_LateFusionScalings[v];
-    
+
     for (int v = 0; v < m_InteractionResults.size(); v++)
         fs << ("interactionResults-" + boost::lexical_cast<std::string>(v)) << m_InteractionResults[v];
     
+    for (int v = 0; v < m_InteractionPredictions.size(); v++)
+    {
+        cv::Mat Pv;
+        cvx::convert<int>(m_InteractionPredictions[v], Pv);
+        fs << ("interactionPredictions-" + boost::lexical_cast<std::string>(v)) << Pv;
+    }
+    
     fs << "valPerf" << m_ValPerf;
+    fs << "valIdx" << m_ValIdx;
+    fs << "perf" << m_Perf;
     
     fs.release();
 }
@@ -326,36 +373,56 @@ bool CloudjectInteractionPipeline::load(std::string filename, std::string extens
     fs["detectionThresh"] >> m_DetectionCorrespThresh;
     fs["interactionThresh"] >> m_InteractionThresh;
     
-    fs["valInteractionOvlCriterion"] >> m_ValInteractionOvlCriterion;
-    
     fs["MultiviewStrategy"] >> m_MultiviewStrategy;
     fs["multiviewLateFusionStrategy"] >> m_MultiviewLateFusionStrategy;
-    
+
     float leafSizeX, leafSizeY, leafSizeZ;
     fs["leafSizeX"] >> leafSizeX;
     fs["leafSizeY"] >> leafSizeY;
     fs["leafSizeZ"] >> leafSizeZ;
     m_LeafSize = Eigen::Vector3f(leafSizeX,leafSizeY,leafSizeZ);
     
+    fs["valInteractionOvlCriterion"] >> m_ValInteractionOvlCriterion;
+    
+    cv::Mat valCombsMat;
+    fs["valCombsMat"] >> valCombsMat;
+    cvx::convert<float>(valCombsMat, m_ValCombs);
+    
     int V;
     fs["numViews"] >> V;
-    m_LateFusionScalings.resize(V);
-    for (int v = 0; v < V; v++)
-        fs["lateFusionScalings-" + boost::lexical_cast<std::string>(v)] >> m_LateFusionScalings[v];
     
     if (m_MultiviewStrategy == DETECT_MULTIVIEW)
     {
-        m_InteractionResults.resize(1);
+        m_LateFusionScalings.resize(V);
+        for (int v = 0; v < V; v++)
+            fs["lateFusionScalings-" + boost::lexical_cast<std::string>(v)] >> m_LateFusionScalings[v];
+        
+        m_InteractionResults.resize(1);        
         fs["interactionResults-0"] >> m_InteractionResults[0];
+        
+        cv::Mat Pv;
+        fs["interactionPredictions-0"] >> Pv;
+        m_InteractionPredictions.resize(1);
+        cvx::convert<int>(Pv, m_InteractionPredictions[0]);
     }
     else if (m_MultiviewStrategy == DETECT_MONOCULAR)
     {
         m_InteractionResults.resize(V);
         for (int v = 0; v < V; v++)
             fs["interactionResults-" + boost::lexical_cast<std::string>(v)] >> m_InteractionResults[v];
+ 
+        m_InteractionPredictions.resize(V);
+        for (int v = 0; v < V; v++)
+        {
+            cv::Mat Pv;
+            fs["interactionPredictions-" + boost::lexical_cast<std::string>(v)] >> Pv;
+            cvx::convert<int>(Pv, m_InteractionPredictions[v]);
+        }
     }
     
     fs["valPerf"] >> m_ValPerf;
+    fs["valIdx"] >> m_ValIdx;
+    fs["perf"] >> m_Perf;
     
     fs.release();
     
