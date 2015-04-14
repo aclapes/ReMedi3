@@ -30,12 +30,10 @@ ColorDepthFrame::ColorDepthFrame(cv::Mat colorMat, cv::Mat depthMat, cv::Mat col
 ColorDepthFrame::ColorDepthFrame(const ColorDepthFrame& rhs)
 : ColorFrame(rhs), DepthFrame(rhs)
 {
-    if (this != &rhs)
-    {
-        m_Mask = rhs.m_Mask;
-        m_Path = rhs.m_Path;
-        m_Filename = rhs.m_Filename;
-    }
+    m_Mask = rhs.m_Mask;
+    
+    m_Path = rhs.m_Path;
+    m_Filename = rhs.m_Filename;
 }
 
 ColorDepthFrame& ColorDepthFrame::operator=(const ColorDepthFrame& rhs)

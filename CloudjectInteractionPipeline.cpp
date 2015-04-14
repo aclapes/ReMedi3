@@ -770,12 +770,11 @@ void CloudjectInteractionPipeline::getActorsFromFrames(std::vector<ColorDepthFra
                 interactedActorClouds.push_back(actorClouds[i]);
         }
         
-
-        
-        for (int i = 0; i < cloudjects.size(); i++)
+        for (int i = 0; i < cloudjects[v].size(); i++)
         {
             cloudjects[v][i]->setLeafSize(m_LeafSize);
-            cloudjects[v][i]->setRegistrationTransformation(frames[v]->getRegistrationTransformation());
+            Eigen::Matrix4f T = frames[v]->getRegistrationTransformation();
+            cloudjects[v][i]->setRegistrationTransformation(T);
         }
         
         findInclusions(cloudjects[v], freeActorClouds, m_LeafSize, freeActorCloudjects[v]);
@@ -832,7 +831,10 @@ void CloudjectInteractionPipeline::findInclusions(std::vector<Cloudject::Ptr> cl
         ColorPointCloudPtr cloudjectCloudOut (new ColorPointCloud);
         VoxelGridPtr cloudjectGrid (new VoxelGrid);
         
-        pclx::voxelize(cloudjectsIn[i]->getRegisteredCloud(), leafSize, *cloudjectCloudOut, *cloudjectGrid);
+        ColorPointCloudPtr pCloudIn = cloudjectsIn[i]->getCloud();
+        ColorPointCloudPtr pRegCloudIn = cloudjectsIn[i]->getRegisteredCloud();
+        
+        pclx::voxelize(pRegCloudIn, leafSize, *cloudjectCloudOut, *cloudjectGrid);
         
         bool bIncluded = false;
         for (int j = 0; j < cloudsIn.size() && !bIncluded ; j++)

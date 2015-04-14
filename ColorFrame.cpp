@@ -27,7 +27,7 @@ ColorFrame& ColorFrame::operator=(const ColorFrame& rhs)
 {
     if (this != &rhs)
     {
-        
+        Frame::operator=(rhs);
     }
     return *this;
 }

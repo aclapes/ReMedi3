@@ -56,7 +56,10 @@ public:
     void allocateMask()
     {
         if (Region::getMask().empty())
-            Region::setMask(cv::imread(Region::getFilepath(), CV_LOAD_IMAGE_UNCHANGED));
+        {
+            cv::Mat r = cv::imread(Region::getFilepath(), CV_LOAD_IMAGE_UNCHANGED);
+            Region::setMask(r);
+        }
     }
 
     bool isLabel(std::string l) const

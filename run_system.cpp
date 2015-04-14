@@ -633,12 +633,12 @@ int runInteractionPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFr
                 {
                     if (tt != t)
                     {
-                        pipelinesTr[tt] = CloudjectInteractionPipeline::Ptr(new CloudjectInteractionPipeline);
-                        bool bSuccess = pipelinesTr[tt]->load("interaction_monocular_validation_" + boost::lexical_cast<std::string>(tt) + "-" + boost::lexical_cast<std::string>(r));
+                        CloudjectInteractionPipeline::Ptr pCjInteractionPipeline (new CloudjectInteractionPipeline);
+                        bool bSuccess = pCjInteractionPipeline->load("interaction_monocular_validation_" + boost::lexical_cast<std::string>(tt) + "-" + boost::lexical_cast<std::string>(r));
                         
                         if (bSuccess)
                         {
-                            std::vector<cv::Mat> results = pipelinesTr[tt]->getInteractionResults();
+                            std::vector<cv::Mat> results = pCjInteractionPipeline->getInteractionResults();
                             
                             for (int v = 0; v < pSys->getBackgroundSubtractor()->getNumOfViews(); v++)
                                 resultsTr.push_back( fscore(results[v]) );

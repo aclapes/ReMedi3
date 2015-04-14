@@ -253,7 +253,7 @@ public:
 //        // is undesired - e.g. for a centroid computation - re-set them to 0.
 //        for (int y = 0; y < pCloud->height; ++y) for (int x = 0; x < pCloud->width; ++x)
 //        {
-//            if ( m_Region.getMask().at<unsigned char>(y,x) == 0 )
+//            if ( m_Region.getMask().at<unsigned char>(y,x) == 0 || m_pCloud->at(x,y).z == 0 )
 //                pCloud->at(x,y).x = pCloud->at(x,y).y = pCloud->at(x,y).z = std::numeric_limits<float>::quiet_NaN();
 //            //                pCloud->at(x,y).x = pCloud->at(x,y).y = pCloud->at(x,y).z = 0;
 //        }
@@ -266,7 +266,7 @@ public:
     {
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloudT (new pcl::PointCloud<pcl::PointXYZRGB>);
         pcl::transformPointCloud(*m_pCloud, *pCloudT, m_T);
-        
+
         pcl::PointCloud<pcl::PointXYZRGB>::Ptr pCloud (new pcl::PointCloud<pcl::PointXYZRGB>);
         pCloud->height = 1;
         
@@ -274,7 +274,7 @@ public:
         // is undesired - e.g. for a centroid computation - re-set them to 0.
         for (int y = 0; y < pCloudT->height; ++y) for (int x = 0; x < pCloudT->width; ++x)
         {
-            if ( m_Region.getMask().at<unsigned char>(y,x) > 0 )
+            if ( m_Region.getMask().at<unsigned char>(y,x))
                 pCloud->push_back(pCloudT->at(x,y));
         }
         pCloud->width = pCloud->points.size();

@@ -30,12 +30,9 @@ DepthFrame::DepthFrame(cv::Mat mat, cv::Mat mask) : Frame(mat / 8, mask)//, m_pC
 
 DepthFrame::DepthFrame(const DepthFrame& rhs) : Frame(rhs)
 {
-    if (this != &rhs)
-    {
-        m_UIDMat = rhs.m_UIDMat;
-        m_ReferencePoint = rhs.m_ReferencePoint;
-        m_T = rhs.m_T;
-    }
+    m_UIDMat = rhs.m_UIDMat;
+    m_ReferencePoint = rhs.m_ReferencePoint;
+    m_T = rhs.m_T;
 }
 
 DepthFrame& DepthFrame::operator=(const DepthFrame& rhs)
@@ -71,9 +68,9 @@ void DepthFrame::set(cv::Mat mat, cv::Mat mask)
 void DepthFrame::getPointCloud(pcl::PointCloud<pcl::PointXYZ>& cloud)
 {
     if (m_Mask.empty())
-        MatToPointCloud(m_Mat, cloud);
+        MatToPointCloud(Frame::get(), cloud);
     else
-        MatToPointCloud(m_Mat, m_Mask, cloud);
+        MatToPointCloud(Frame::get(), Frame::getMask(), cloud);
 }
 
 void DepthFrame::getPointCloud(cv::Mat mask, pcl::PointCloud<pcl::PointXYZ>& cloud)
