@@ -604,6 +604,11 @@ int runInteractionPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFr
     mvLateFusionStrategies += CloudjectInteractionPipeline::MULTIVIEW_LF_OR, CloudjectInteractionPipeline::MULTIVIEW_LFSCALE_DEV, CloudjectInteractionPipeline::MULTIVIEW_LF_FURTHEST;
     mvCorrespThreshs += 1.f/objectsLabels.size(); //0.05, 1.f/objectsLabels.size(), 2.f/objectsLabels.size();
     
+    std::vector<std::vector<float> > monocularParameters;
+    monocularParameters += detectionThreshs, correspCriteria, interactionThreshs;
+    std::vector<std::vector<float> > multiviewParameters;
+    multiviewParameters += detectionThreshs, correspCriteria, interactionThreshs, mvLateFusionStrategies, mvCorrespThreshs;
+    
     for (int t = beginFold; t < endFold; t++)
     {
         std::cout << "Interaction validation in fold " << t << " (LOSOCV) .." << std::endl;
@@ -618,34 +623,11 @@ int runInteractionPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFr
         
         if (bSuccess)
         {
-//            std::cout << "Creating the sample of test cloudjects .." << std::endl;
-//            boost::shared_ptr<std::list<MockCloudject::Ptr> > pCloudjectsTe (new std::list<MockCloudject::Ptr>);
-//            remedi::getTestCloudjectsWithDescriptor(sequences, sequencesSids, t, gt, "pfhrgb250", *pCloudjectsTe);
-//            std::cout << "Created a training sample of " << pCloudjectsTe->size() << " cloudjects." << std::endl;
-//            
-//            std::vector<Sequence<ColorDepthFrame>::Ptr> sequencesTe;
-//            remedi::getTestSequences(sequences, sequencesSids, t, sequencesTe);
-//            
-            CloudjectInteractionPipeline::Ptr pCjInteractionPipeline (new CloudjectInteractionPipeline);
-//            pCjInteractionPipeline->setInputSequences(sequencesTe);
-//            pCjInteractionPipeline->setCategories(objectsLabels);
-//            
-//            pCjInteractionPipeline->setLeafSize(Eigen::Vector3f(.02f,.02f,.02f));
-//            pCjInteractionPipeline->setGroundtruth(gt);
-//            pCjInteractionPipeline->setInteractionGroundtruth(iact);
-//            pCjInteractionPipeline->setValidationInteractionOverlapCriterion(CloudjectInteractionPipeline::INTERACTION_OVL_OVERALL); // evaluate the goodness of detection begin-end of interaction
-//
-            pCjInteractionPipeline->setBackgroundSubtractor(pSys->getBackgroundSubtractor());
-//            pCjInteractionPipeline->setInteractiveRegisterer(pSys->getRegisterer());
-//            pCjInteractionPipeline->setTableModeler(pSys->getTableModeler());
-//            
-//            pSys->getBackgroundSubtractor()->model();
-
-            std::vector<std::vector<cv::Mat> > resultsTr (pSys->getBackgroundSubtractor()->getNumOfViews());
+            // Find the best set of parameters from the validation step
+            
+            std::vector<cv::Mat> resultsTr;
             for (int r = 0; r < NUM_REPETITIONS; r++)
             {
-//                pCjInteractionPipeline->setClassificationPipeline(classificationPipelines[r]);
-//
                 std::vector<CloudjectInteractionPipeline::Ptr> pipelinesTr (NUM_OF_SUBJECTS - 1);
                 for (int tt = 0; tt < NUM_OF_SUBJECTS; tt++)
                 {
@@ -659,25 +641,63 @@ int runInteractionPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFr
                             std::vector<cv::Mat> results = pipelinesTr[tt]->getInteractionResults();
                             
                             for (int v = 0; v < pSys->getBackgroundSubtractor()->getNumOfViews(); v++)
-                                resultsTr[v].push_back( fscore(results[v]) );
+                                resultsTr.push_back( fscore(results[v]) );
                         }
                     }
                 }
             }
             
-            std::vector<int> idxBest (pSys->getBackgroundSubtractor()->getNumOfViews());
+            cv::Point bestCombIdx;
             for (int v = 0; v < pSys->getBackgroundSubtractor()->getNumOfViews(); v++)
             {
                 cv::Mat R;
-                cv::hconcat(resultsTr[v], R);
+                cv::hconcat(resultsTr, R);
                 
                 cv::Mat f;
                 cv::reduce(R, f, 1, CV_REDUCE_AVG);
                 
                 double minVal, maxVal;
                 cv::Point minPt, maxPt;
-                cv::minMaxLoc(f, &minVal, &maxVal, &minPt, &maxPt);
-                idxBest[v] = maxPt.y;
+                cv::minMaxLoc(f, &minVal, &maxVal, &minPt, &bestCombIdx);
+            }
+            
+            // Proceed to prediction
+
+            std::cout << "Creating the sample of test cloudjects .." << std::endl;
+            boost::shared_ptr<std::list<MockCloudject::Ptr> > pCloudjectsTe (new std::list<MockCloudject::Ptr>);
+            remedi::getTestCloudjectsWithDescriptor(sequences, sequencesSids, t, gt, "pfhrgb250", *pCloudjectsTe);
+            std::cout << "Created a training sample of " << pCloudjectsTe->size() << " cloudjects." << std::endl;
+
+            std::vector<Sequence<ColorDepthFrame>::Ptr> sequencesTe;
+            remedi::getTestSequences(sequences, sequencesSids, t, sequencesTe);
+
+            CloudjectInteractionPipeline::Ptr pCjInteractionPipeline (new CloudjectInteractionPipeline);
+            pCjInteractionPipeline->setInputSequences(sequencesTe);
+            pCjInteractionPipeline->setCategories(objectsLabels);
+
+            pCjInteractionPipeline->setLeafSize(Eigen::Vector3f(.02f,.02f,.02f));
+            pCjInteractionPipeline->setGroundtruth(gt);
+            pCjInteractionPipeline->setInteractionGroundtruth(iact);
+            
+            // Set the best combination of parameters
+            std::vector<std::vector<float> > monocularCombinations;
+            expandParameters<float>(monocularParameters, monocularCombinations);
+            
+            pCjInteractionPipeline->setCorrespondenceCriterion(monocularCombinations[bestCombIdx.y][0]);
+            pCjInteractionPipeline->setDetectionCorrespondenceThresh(monocularCombinations[bestCombIdx.y][1]);
+            pCjInteractionPipeline->setInteractionThresh(monocularCombinations[bestCombIdx.y][2]);
+
+            pCjInteractionPipeline->setBackgroundSubtractor(pSys->getBackgroundSubtractor());
+            pCjInteractionPipeline->setInteractiveRegisterer(pSys->getRegisterer());
+            pCjInteractionPipeline->setTableModeler(pSys->getTableModeler());
+            
+            pSys->getBackgroundSubtractor()->model();
+            
+            for (int r = 0; r < NUM_REPETITIONS; r++)
+            {
+                pCjInteractionPipeline->setClassificationPipeline(classificationPipelines[r]);
+                
+                pCjInteractionPipeline->predictInteraction();
             }
         }
     }

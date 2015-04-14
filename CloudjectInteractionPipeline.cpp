@@ -277,12 +277,17 @@ std::vector<cv::Mat> CloudjectInteractionPipeline::getInteractionResults()
     return m_InteractionResults;
 }
 
+std::vector<float> CloudjectInteractionPipeline::getValidationParameterCombination(int i)
+{
+    return m_ValCombs[i];
+}
+
 void CloudjectInteractionPipeline::predictInteraction()
 {
     m_InteractionPredictions.clear(); // not used in the validation
     m_InteractionResults.clear();
     
-    expandParameters<float>(m_ValParams, m_ValCombs);
+//    expandParameters<float>(m_ValParams, m_ValCombs);
     
     if (m_MultiviewStrategy == DETECT_MONOCULAR)
     {
@@ -292,7 +297,7 @@ void CloudjectInteractionPipeline::predictInteraction()
         for (int v = 0; v < m_pSubtractor->getNumOfViews(); v++)
             m_InteractionResults[v] = cv::Mat(1, m_Categories.size(), CV_32FC4, cv::Scalar(0,0,0,0));
         
-        predictInteractionMultiview();
+        predictInteractionMonocular();
     }
     else if (m_MultiviewStrategy == DETECT_MULTIVIEW)
     {

@@ -163,6 +163,7 @@ public:
     std::vector<std::vector<Result> > getDetectionResults();
     void detectInteraction();
     std::vector<cv::Mat> getInteractionResults();
+    std::vector<float> getValidationParameterCombination(int i);
     
     typedef boost::shared_ptr<CloudjectInteractionPipeline> Ptr;
     
