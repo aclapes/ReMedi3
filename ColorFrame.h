@@ -16,6 +16,8 @@ public:
     ColorFrame(cv::Mat mat, cv::Mat mask);
 	ColorFrame(const ColorFrame& rhs);
     
+    ColorFrame& operator=(const ColorFrame& rhs);
+    
     typedef boost::shared_ptr<ColorFrame> Ptr;
 };
 

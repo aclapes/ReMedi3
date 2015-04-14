@@ -22,3 +22,12 @@ ColorFrame::ColorFrame(const ColorFrame& rhs)
 {
     *this = rhs;
 }
+
+ColorFrame& ColorFrame::operator=(const ColorFrame& rhs)
+{
+    if (this != &rhs)
+    {
+        
+    }
+    return *this;
+}

@@ -37,10 +37,11 @@ public:
     cv::Mat getMasked();
     void getMasked(cv::Mat& masked);
     
-    void setPath(string path);
-    string getPath();
+    void setPath(std::string path);
+    std::string getPath();
 
-    string getFilename();
+    void setFilename(std::string filename);
+    std::string getFilename();
     
     typedef boost::shared_ptr<Frame> Ptr;
     
@@ -48,5 +49,8 @@ protected:
 	// Members
 	cv::Mat m_Mat;
     cv::Mat m_Mask;
+    
+    std::string m_Path;
+    std::string m_Filename;
 };
 

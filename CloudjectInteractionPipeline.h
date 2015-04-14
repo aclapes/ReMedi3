@@ -162,7 +162,7 @@ public:
     void detect();
     std::vector<std::vector<Result> > getDetectionResults();
     void detectInteraction();
-    std::vector<std::vector<Result> > getInteractionResults();
+    std::vector<cv::Mat> getInteractionResults();
     
     typedef boost::shared_ptr<CloudjectInteractionPipeline> Ptr;
     
@@ -205,11 +205,12 @@ private:
     
     float m_Perf;
     
-    std::vector<std::vector<Result> > m_DetectionResults;
+    std::vector<std::vector<Result> > m_DetectionResults; // sequences x views x objects
+
     std::vector<std::vector<Result> > m_InteractionCombResults;
-    
-    std::vector<std::list<std::vector<int> > > m_InteractionPredictions; // views x frames x Binary interaction outputs
     std::vector<cv::Mat> m_InteractionResults; // as many as views, combinations x categories x 4 (channesls)
+    
+    std::vector<std::vector<cv::Mat> > m_InteractionPredictions; // sequences x views, matrices (of size frames x outputs)
     
     //
     // Private methods
@@ -217,10 +218,11 @@ private:
     
     void setValidationParametersCombination(std::vector<float> combination); // of parameters
     
-    void detectMonocular();
-    void detectMultiview();
-    void detectInteractionMonocular();
-    void detectInteractionMultiview();
+    void predictDetectionMonocular();
+    void predictDetectionMultiview();
+    
+    void predictInteractionMonocular();
+    void predictInteractionMultiview();
     
     void findActors(std::vector<ColorPointCloudPtr> actors, std::vector<ColorPointCloudPtr> interactors, std::vector<ColorPointCloudPtr>& nonInteractedActors, Eigen::Vector3f leafSize, std::vector<ColorPointCloudPtr>& interactedActors);
     void findInteractions(std::vector<ColorPointCloudPtr> candidates, std::vector<ColorPointCloudPtr> interactors, std::vector<bool>& mask, Eigen::Vector3f leafSize);
@@ -249,6 +251,9 @@ private:
     void firstDerivative(std::vector<int> inputPrev, std::vector<int> inputCurr, std::vector<int>& derivative);
     
     void findInclusions(std::vector<Cloudject::Ptr> cloudjectsIn, std::vector<ColorPointCloudPtr> clouds, Eigen::Vector3f leafSize, std::vector<Cloudject::Ptr>& cloudjectsOut);
+    
+    void getActorsFromFrames(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > cloudjects, std::vector<ColorPointCloudPtr>& interactorClouds, std::vector<std::vector<Cloudject::Ptr> >& interactedActorCloudjects, std::vector<std::vector<Cloudject::Ptr> >& freeActorCloudjects);
+    void detectInteractions(std::vector<std::vector<Cloudject::Ptr> > freeActorCloudjects, std::vector<std::vector<int> >& interactions);
 };
 
 #endif /* defined(__remedi3__CloudjectInteractionPipeline__) */

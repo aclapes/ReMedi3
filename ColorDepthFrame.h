@@ -29,6 +29,11 @@ public:
    
     ColorDepthFrame& operator=(const ColorDepthFrame& other);
     
+    void setPath(std::string path);
+    std::string getPath();
+    void setFilename(std::string filename);
+    std::string getFilename();
+    
     void set(cv::Mat color, cv::Mat depth);
     void setColor(cv::Mat color);
     void setDepth(cv::Mat depth);
@@ -63,6 +68,9 @@ public:
     
 private:
     cv::Mat m_Mask;
+    
+    std::string m_Path;
+    std::string m_Filename;
 };
 
 #endif /* defined(__remedi__ColorDepthFrame__) */

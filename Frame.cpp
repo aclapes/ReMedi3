@@ -18,9 +18,9 @@ Frame::~Frame(void)
 {
 }
 
-Frame::Frame(const Frame& other)
+Frame::Frame(const Frame& rhs)
 {
-	*this = other;
+	*this = rhs;
 }
 
 Frame& Frame::operator=(const Frame& rhs)
@@ -29,6 +29,9 @@ Frame& Frame::operator=(const Frame& rhs)
     {
         m_Mat = rhs.m_Mat;
         m_Mask = rhs.m_Mask;
+        
+        m_Path = rhs.m_Path;
+        m_Filename = rhs.m_Filename;
     }
 
 	return *this;
@@ -97,4 +100,24 @@ cv::Mat Frame::getMasked()
 void Frame::getMasked(cv::Mat& masked)
 {
     m_Mat.copyTo(masked, m_Mask);
+}
+
+void Frame::setPath(std::string path)
+{
+    m_Path = path;
+}
+
+std::string Frame::getPath()
+{
+    return m_Path;
+}
+
+void Frame::setFilename(std::string filename)
+{
+    m_Filename = filename;
+}
+
+std::string Frame::getFilename()
+{
+    return m_Filename;
 }

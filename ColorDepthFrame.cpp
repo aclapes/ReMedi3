@@ -30,7 +30,12 @@ ColorDepthFrame::ColorDepthFrame(cv::Mat colorMat, cv::Mat depthMat, cv::Mat col
 ColorDepthFrame::ColorDepthFrame(const ColorDepthFrame& rhs)
 : ColorFrame(rhs), DepthFrame(rhs)
 {
-    *this = rhs;
+    if (this != &rhs)
+    {
+        m_Mask = rhs.m_Mask;
+        m_Path = rhs.m_Path;
+        m_Filename = rhs.m_Filename;
+    }
 }
 
 ColorDepthFrame& ColorDepthFrame::operator=(const ColorDepthFrame& rhs)
@@ -41,9 +46,31 @@ ColorDepthFrame& ColorDepthFrame::operator=(const ColorDepthFrame& rhs)
         DepthFrame::operator=(rhs);
         
         m_Mask = rhs.m_Mask;
+        m_Path = rhs.m_Path;
+        m_Filename = rhs.m_Filename;
     }
     
     return *this;
+}
+
+void ColorDepthFrame::setPath(string path)
+{
+    m_Path = path;
+}
+
+string ColorDepthFrame::getPath()
+{
+    return m_Path;
+}
+
+void ColorDepthFrame::setFilename(std::string filename)
+{
+    m_Filename = filename;
+}
+
+string ColorDepthFrame::getFilename()
+{
+    return m_Filename;
 }
 
 void ColorDepthFrame::set(cv::Mat color, cv::Mat depth)

@@ -232,6 +232,8 @@ vector<typename FrameT::Ptr> SequenceBase<FrameT>::nextFrames(int step)
         else
             readFrame(m_Paths[v], m_FrameIndices[v] + delay, *frame);
         
+        frame->setPath(m_Paths[v][m_FrameIndices[v] + m_Delays[v]]);
+        frame->setFilename( getFilenameFromPath(frame->getPath()) );
         frames.push_back(frame);
     }
 
@@ -252,7 +254,9 @@ vector<typename FrameT::Ptr> SequenceBase<FrameT>::previousFrames(int step)
             frame = m_Streams[v][m_FrameIndices[v] + m_Delays[v]]; // preallocation
         else
             readFrame(m_Paths[v], m_FrameIndices[v] + m_Delays[v], *frame);
-        
+                                  
+        frame->setPath(m_Paths[v][m_FrameIndices[v] + m_Delays[v]]);
+        frame->setFilename( getFilenameFromPath(frame->getPath()) );
         frames.push_back(frame);
     }
     
@@ -857,6 +861,9 @@ vector<ColorDepthFrame::Ptr> Sequence<ColorDepthFrame>::nextFrames(int step)
         else
             readFrame(m_Paths[v], m_FrameIndices[v] + delay, *frame);
         
+        frame->setPath(m_Paths[v][m_FrameIndices[v] + m_Delays[v]].first);
+        frame->setFilename( getFilenameFromPath(frame->getPath()) );
+        
         if (v < m_Transformations.size())
         {
             frame->setReferencePoint(m_ReferencePoints[v]);
@@ -882,6 +889,9 @@ vector<ColorDepthFrame::Ptr> Sequence<ColorDepthFrame>::previousFrames(int step)
             frame = m_Streams[v][m_FrameIndices[v] + m_Delays[v]]; // preallocation
         else
             readFrame(m_Paths[v], m_FrameIndices[v] + m_Delays[v], *frame);
+                                  
+        frame->setPath(m_Paths[v][m_FrameIndices[v] + m_Delays[v]].first);
+        frame->setFilename( getFilenameFromPath(frame->getPath()) );
         
         if (v < m_Transformations.size())
         {
@@ -1106,7 +1116,9 @@ void Sequence<ColorDepthFrame>::readFrame(vector< pair<string,string> > paths, i
     assert (f < paths.size());
     
     int flags = CV_LOAD_IMAGE_ANYDEPTH | CV_LOAD_IMAGE_ANYCOLOR;
-    frame = ColorDepthFrame( cv::imread(paths[f].first, flags), cv::imread(paths[f].second, flags) );
+    cv::Mat color = cv::imread(paths[f].first, flags);
+    cv::Mat depth = cv::imread(paths[f].second, flags);
+    frame.set( color, depth );
 }
 
 //
