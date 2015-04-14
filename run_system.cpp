@@ -589,7 +589,7 @@ int runInteractionPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFr
     interactionThreshs += 0.025, 0.05, 0.10;
     // Multiview parameters
     std::vector<float> mvLateFusionStrategies, mvCorrespThreshs;
-    mvLateFusionStrategies += CloudjectInteractionPipeline::MULTIVIEW_LF_OR, CloudjectInteractionPipeline::MULTIVIEW_LFSCALE_DEV, CloudjectInteractionPipeline::MULTIVIEW_LF_FURTHEST;
+    mvLateFusionStrategies += ((int)CloudjectInteractionPipeline::MULTIVIEW_LF_OR), ((int)CloudjectInteractionPipeline::MULTIVIEW_LFSCALE_DEV), ((int)CloudjectInteractionPipeline::MULTIVIEW_LF_FURTHEST);
     mvCorrespThreshs += 1.f/objectsLabels.size(); //0.05, 1.f/objectsLabels.size(), 2.f/objectsLabels.size();
     
     for (int t = beginFold; t < endFold; t++)
