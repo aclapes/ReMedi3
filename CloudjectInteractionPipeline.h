@@ -152,6 +152,7 @@ public:
     
     void validateDetection();
     void validateInteraction();
+    void predictInteraction();
 
     float getValidationPerformance();
     
@@ -197,11 +198,17 @@ private:
     std::vector<std::vector<float> > m_LateFusionScalings; // in case of multiview
     
     std::vector<std::vector<float> > m_ValParams;
+    std::vector<std::vector<float> > m_ValCombs;
     int m_ValInteractionOvlCriterion;
     float m_ValPerf;
+    int m_ValIdx;
+    
+    float m_Perf;
     
     std::vector<std::vector<Result> > m_DetectionResults;
     std::vector<std::vector<Result> > m_InteractionCombResults;
+    
+    std::vector<std::list<std::vector<int> > > m_InteractionPredictions; // views x frames x Binary interaction outputs
     std::vector<cv::Mat> m_InteractionResults; // as many as views, combinations x categories x 4 (channesls)
     
     //
