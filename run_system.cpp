@@ -242,7 +242,7 @@ int runClassificationTrain(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
         for (int r = beginRep; r < endRep; r++)
         {
             pipelines[r-beginRep] = CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr(new CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>);
-            bSuccess &= pipelines[r-beginRep]->load("training_" + boost::lexical_cast<string>(t) + "-" + boost::lexical_cast<string>(r));
+            bSuccess &= pipelines[r-beginRep]->load("models/training_" + boost::lexical_cast<string>(t) + "-" + boost::lexical_cast<string>(r));
         }
         
         if (bSuccess)
@@ -292,7 +292,7 @@ int runClassificationTrain(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
             for (int r = beginRep; r < endRep; r++)
             {
                 pPipeline->train(); // use the best parameters found in the model selection
-                pPipeline->save("training_" + boost::lexical_cast<string>(t) + "-" + boost::lexical_cast<string>(r));
+                pPipeline->save("models/training_" + boost::lexical_cast<string>(t) + "-" + boost::lexical_cast<string>(r));
             }
             float trTime = trTimer.elapsed();
             
@@ -315,7 +315,7 @@ int runClassificationPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDept
         for (int r = beginRep; r < endRep; r++)
         {
             pipelines[r-beginRep] = CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr(new CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>);
-            bSuccess &= pipelines[r-beginRep]->load("training_" + boost::lexical_cast<string>(t) + "-" + boost::lexical_cast<string>(r));
+            bSuccess &= pipelines[r-beginRep]->load("models/training_" + boost::lexical_cast<string>(t) + "-" + boost::lexical_cast<string>(r));
         }
         
         if (bSuccess)
@@ -337,7 +337,7 @@ int runClassificationPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDept
                 std::cout << std::endl;
                 
                 // to disk
-                cv::FileStorage fs ("testing_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r) + ".yml", cv::FileStorage::WRITE);
+                cv::FileStorage fs ("models/testing_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r) + ".yml", cv::FileStorage::WRITE);
                 fs << "predictions" << cvx::convert<int>(predictions);
                 fs << "distsToMargin" << cvx::convert<float>(distsToMargin);
                 fs.release();
@@ -377,7 +377,7 @@ int runDetectionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
         for (int r = beginRep; r < endRep; r++)
         {
             classificationPipelines[r-beginRep] = CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr(new CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>);
-            bSuccess &= classificationPipelines[r-beginRep]->load("training_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
+            bSuccess &= classificationPipelines[r-beginRep]->load("models/training_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
         }
         
         if (bSuccess)
@@ -438,7 +438,7 @@ int runDetectionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
                         if (tt != t)
                         {
                             cv::FileStorage fs;
-                            fs.open("testing_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r) + ".yml", cv::FileStorage::READ);
+                            fs.open("models/testing_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r) + ".yml", cv::FileStorage::READ);
                             if (fs.isOpened())
                             {
                                 cv::Mat aux;
@@ -509,7 +509,7 @@ int runInteractionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFr
         for (int r = beginRep; r < endRep; r++)
         {
             classificationPipelines[r-beginRep] = CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr(new CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>);
-            bSuccess &= classificationPipelines[r-beginRep]->load("training_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
+            bSuccess &= classificationPipelines[r-beginRep]->load("models/training_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
         }
         
         if (bSuccess)
@@ -575,7 +575,7 @@ int runInteractionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFr
                         if (tt != t)
                         {
                             cv::FileStorage fs;
-                            fs.open("testing_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r) + ".yml", cv::FileStorage::READ);
+                            fs.open("models/testing_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r) + ".yml", cv::FileStorage::READ);
                             if (fs.isOpened())
                             {
                                 cv::Mat aux;
@@ -713,7 +713,7 @@ int runInteractionPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFr
         for (int r = beginRep; r < endRep; r++)
         {
             classificationPipelines[r-beginRep] = CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>::Ptr(new CloudjectSVMClassificationPipeline<pcl::PFHRGBSignature250>);
-            bSuccess &= classificationPipelines[r-beginRep]->load("training_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
+            bSuccess &= classificationPipelines[r-beginRep]->load("models/training_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
         }
         
         if (bSuccess)

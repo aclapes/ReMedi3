@@ -57,6 +57,8 @@ CloudjectInteractionPipeline& CloudjectInteractionPipeline::operator=(const Clou
         m_InteractionResults = rhs.m_InteractionResults;
         m_InteractionPredictions = rhs.m_InteractionPredictions;
         m_InteractionGroundtruth = rhs.m_InteractionGroundtruth;
+        
+        m_Perf = rhs.m_Perf;
     }
     return *this;
 }
@@ -263,6 +265,7 @@ void CloudjectInteractionPipeline::validate()
     
     // Set the parameters finally
     setValidationParametersCombination(m_ValCombs[m_ValIdx]);
+    m_Perf = .0f;
 }
 
 float CloudjectInteractionPipeline::getValidationPerformance()
