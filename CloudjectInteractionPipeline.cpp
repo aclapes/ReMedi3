@@ -1069,17 +1069,10 @@ void CloudjectInteractionPipeline::predictMultiview()
             }
             
 #ifdef DEBUG
-            for (int v = 0; v < frames.size(); v++)
-            {
-                std::copy(aggrGt.begin(), aggrGt.end(), std::ostream_iterator<int>(std::cout, "\t"));
-                std::cout << ", ";
-            } std::cout << endl;
-            
-            for (int v = 0; v < frames.size(); v++)
-            {
-                std::copy(interactions.begin(), interactions.end(), std::ostream_iterator<int>(std::cout, "\t"));
-                std::cout << ", ";
-            } std::cout << std::endl;
+            std::copy(aggrGt.begin(), aggrGt.end(), std::ostream_iterator<int>(std::cout, "\t"));
+            std::cout << std::endl;
+            std::copy(interactions.begin(), interactions.end(), std::ostream_iterator<int>(std::cout, "\t"));
+            std::cout << std::endl << std::endl;
 #endif
             
 #ifdef DEBUG_VISUALIZE_DETECTIONS
