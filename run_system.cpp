@@ -531,7 +531,10 @@ int runInteractionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFr
                 std::cout << "It took " << timer.elapsed() << " secs." << std::endl;
                 
                 pCjInteractionPipeline->save("interaction_monocular_validation_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
-                
+			}
+
+			for (int r = 2; r < NUM_REPETITIONS; r++)
+            {
                 // MULTIVIEW
                 std::cout << "Validating MULTIVIEW .. " << std::endl;
                 pCjInteractionPipeline->setMultiviewStrategy(CloudjectInteractionPipeline::DETECT_MULTIVIEW);
@@ -564,8 +567,13 @@ int runInteractionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFr
                 remedi::computeScalingFactorsOfCategories(predictions, distsToMargin, scalingsMat);
                 pCjInteractionPipeline->setMultiviewLateFusionNormalization(cvx::convert<float>(scalingsMat)); // floats' Mat to vv<float>
                 
+<<<<<<< HEAD
                 timer.restart();
 //                pCjInteractionPipeline->validate();
+=======
+                boost::timer timer;
+                pCjInteractionPipeline->validateInteraction();
+>>>>>>> no clue
                 std::cout << pCjInteractionPipeline->getValidationPerformance() << std::endl;
                 std::cout << "It took " << timer.elapsed() << " secs." << std::endl;
                 
