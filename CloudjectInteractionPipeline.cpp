@@ -1009,8 +1009,11 @@ void CloudjectInteractionPipeline::predictMultiview()
         viz.create(V, m_pRegisterer);
 #endif
         int delay = m_Sequences[s]->getMaxDelay();
-        m_InteractionPredictions[s][0] = cv::Mat(m_Sequences[s]->getMaxNumOfFrames(), m_Categories.size(), cv::DataType<int>::type, cv::Scalar(0));
-        m_InteractionGroundtruth[s][0] = cv::Mat(m_Sequences[s]->getMaxNumOfFrames(), m_Categories.size(), cv::DataType<int>::type, cv::Scalar(0));
+        if (!m_InteractionPredictions.empty())
+        {
+            m_InteractionPredictions[s][0] = cv::Mat(m_Sequences[s]->getMaxNumOfFrames(), m_Categories.size(), cv::DataType<int>::type, cv::Scalar(0));
+            m_InteractionGroundtruth[s][0] = cv::Mat(m_Sequences[s]->getMaxNumOfFrames(), m_Categories.size(), cv::DataType<int>::type, cv::Scalar(0));
+        }
         
         int f = 0;
         m_Sequences[s]->restart();
