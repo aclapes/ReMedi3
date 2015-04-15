@@ -913,12 +913,15 @@ void CloudjectInteractionPipeline::predictMonocular()
         viz.create(V, m_pRegisterer);
 #endif
         // In prediction tiime (not used in validation timem since m_InteractionPredictions is 0)
-        std::vector<int> n;
-        m_Sequences[s]->getNumOfFramesOfViews(n);
-        for (int v = 0; v < n.size(); v++)
+        if (!)m_InteractionPredictions.empty())
         {
-            m_InteractionPredictions[s][v] = cv::Mat(n[v], m_Categories.size(), cv::DataType<int>::type, cv::Scalar(0));
-            m_InteractionGroundtruth[s][v] = cv::Mat(n[v], m_Categories.size(), cv::DataType<int>::type, cv::Scalar(0));
+            std::vector<int> n;
+            m_Sequences[s]->getNumOfFramesOfViews(n);
+            for (int v = 0; v < n.size(); v++)
+            {
+                m_InteractionPredictions[s][v] = cv::Mat(n[v], m_Categories.size(), cv::DataType<int>::type, cv::Scalar(0));
+                m_InteractionGroundtruth[s][v] = cv::Mat(n[v], m_Categories.size(), cv::DataType<int>::type, cv::Scalar(0));
+            }
         }
         
         int f = 0;
