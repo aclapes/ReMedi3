@@ -236,7 +236,7 @@ void CloudjectInteractionPipeline::validate()
         setValidationParametersCombination(m_ValCombs[i]);
         
         if (m_MultiviewStrategy == DETECT_MONOCULAR)
-            predictMultiview();
+            predictMonocular();
         else if (m_MultiviewStrategy == DETECT_MULTIVIEW)
             predictMultiview();
         
