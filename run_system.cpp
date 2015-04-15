@@ -601,6 +601,53 @@ cv::Mat overlap(cv::Mat errors)
     return f;
 }
 
+int getInteractionBestValidationCombination(std::string prefix, int t)
+{
+    bool bSuccess;
+    
+    int numOfViews = 0;
+    std::vector<cv::Mat> resultsTr;
+    for (int r = 0; r < NUM_REPETITIONS; r++)
+    {
+        std::vector<CloudjectInteractionPipeline::Ptr> pipelinesTr (NUM_OF_SUBJECTS - 1);
+        for (int tt = 0; tt < NUM_OF_SUBJECTS; tt++)
+        {
+            if (tt != t)
+            {
+                CloudjectInteractionPipeline::Ptr pCjInteractionPipeline (new CloudjectInteractionPipeline);
+                bSuccess = pCjInteractionPipeline->load(prefix + "_" + boost::lexical_cast<std::string>(tt) + "-" + boost::lexical_cast<std::string>(r));
+                
+                if (bSuccess)
+                {
+                    std::vector<cv::Mat> results = pCjInteractionPipeline->getInteractionResults();
+                    
+                    if (numOfViews < 1) numOfViews = results.size();
+                    else assert(numOfViews == results.size());
+                    
+                    for (int v = 0; v < results.size(); v++)
+                        resultsTr.push_back( overlap(results[v]) );
+                }
+            }
+        }
+    }
+    
+    cv::Point bestCombIdx;
+    for (int v = 0; v < numOfViews; v++)
+    {
+        cv::Mat R;
+        cv::hconcat(resultsTr, R);
+        
+        cv::Mat f;
+        cv::reduce(R, f, 1, CV_REDUCE_AVG);
+        
+        double minVal, maxVal;
+        cv::Point minPt, maxPt;
+        cv::minMaxLoc(f, &minVal, &maxVal, &minPt, &bestCombIdx);
+    }
+    
+    return bestCombIdx.y;
+}
+
 int runInteractionPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> sequencesSids, const Groundtruth& gt, const Interaction& iact, int beginFold = 0, int endFold = 0)
 {
     int numOfObjects = sizeof(g_ObjectsLabels)/sizeof(g_ObjectsLabels[0]);
@@ -620,6 +667,9 @@ int runInteractionPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFr
     monocularParameters += detectionThreshs, correspCriteria, interactionThreshs;
     std::vector<std::vector<float> > multiviewParameters;
     multiviewParameters += detectionThreshs, correspCriteria, interactionThreshs, mvLateFusionStrategies, mvCorrespThreshs;
+    
+    std::string monocularPredictionFilePrefixStr = "interaction_monocular_prediction";
+    std::string multiviewPredictionFilePrefixStr = "interaction_multiview_prediction";
     
     bool bSuccess;
     for (int t = beginFold; t < endFold; t++)
@@ -641,41 +691,7 @@ int runInteractionPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFr
             // Monocular prediction
             //
             
-            std::vector<cv::Mat> resultsTr;
-            for (int r = 0; r < NUM_REPETITIONS; r++)
-            {
-                std::vector<CloudjectInteractionPipeline::Ptr> pipelinesTr (NUM_OF_SUBJECTS - 1);
-                for (int tt = 0; tt < NUM_OF_SUBJECTS; tt++)
-                {
-                    if (tt != t)
-                    {
-                        CloudjectInteractionPipeline::Ptr pCjInteractionPipeline (new CloudjectInteractionPipeline);
-                        bSuccess = pCjInteractionPipeline->load("interaction_monocular_validation_" + boost::lexical_cast<std::string>(tt) + "-" + boost::lexical_cast<std::string>(r));
-                        
-                        if (bSuccess)
-                        {
-                            std::vector<cv::Mat> results = pCjInteractionPipeline->getInteractionResults();
-                            
-                            for (int v = 0; v < pSys->getBackgroundSubtractor()->getNumOfViews(); v++)
-                                resultsTr.push_back( overlap(results[v]) );
-                        }
-                    }
-                }
-            }
-            
-            cv::Point bestCombIdx;
-            for (int v = 0; v < pSys->getBackgroundSubtractor()->getNumOfViews(); v++)
-            {
-                cv::Mat R;
-                cv::hconcat(resultsTr, R);
-                
-                cv::Mat f;
-                cv::reduce(R, f, 1, CV_REDUCE_AVG);
-                
-                double minVal, maxVal;
-                cv::Point minPt, maxPt;
-                cv::minMaxLoc(f, &minVal, &maxVal, &minPt, &bestCombIdx);
-            }
+            int bestCombIdx = getInteractionBestValidationCombination(monocularPredictionFilePrefixStr, t);
             
             // Proceed to prediction
 
@@ -707,56 +723,23 @@ int runInteractionPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFr
 
             std::vector<std::vector<float> > monocularCombinations;
             expandParameters<float>(monocularParameters, monocularCombinations);
-            pCjInteractionPipeline->setCorrespondenceCriterion(monocularCombinations[bestCombIdx.y][0]);
-            pCjInteractionPipeline->setDetectionCorrespondenceThresh(monocularCombinations[bestCombIdx.y][1]);
-            pCjInteractionPipeline->setInteractionThresh(monocularCombinations[bestCombIdx.y][2]);
+            pCjInteractionPipeline->setCorrespondenceCriterion(monocularCombinations[bestCombIdx][0]);
+            pCjInteractionPipeline->setDetectionCorrespondenceThresh(monocularCombinations[bestCombIdx][1]);
+            pCjInteractionPipeline->setInteractionThresh(monocularCombinations[bestCombIdx][2]);
             
-            for (int r = 0; r < 1/* NUM_REPETITIONS*/; r++)
+            for (int r = 0; r < NUM_REPETITIONS; r++)
             {
                 pCjInteractionPipeline->setClassificationPipeline(classificationPipelines[r]);
                 
                 pCjInteractionPipeline->predict();
-                pCjInteractionPipeline->save("interaction_monocular_prediction_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
+                pCjInteractionPipeline->save(monocularPredictionFilePrefixStr + "_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
             }
             
             //
             // Multiview prediction
             //
             
-            resultsTr.clear();
-            for (int r = 0; r < NUM_REPETITIONS; r++)
-            {
-                std::vector<CloudjectInteractionPipeline::Ptr> pipelinesTr (NUM_OF_SUBJECTS - 1);
-                for (int tt = 0; tt < NUM_OF_SUBJECTS; tt++)
-                {
-                    if (tt != t)
-                    {
-                        CloudjectInteractionPipeline::Ptr pCjInteractionPipeline (new CloudjectInteractionPipeline);
-                        bSuccess = pCjInteractionPipeline->load("interaction_multiview_validation_" + boost::lexical_cast<std::string>(tt) + "-" + boost::lexical_cast<std::string>(r));
-                        
-                        if (bSuccess)
-                        {
-                            std::vector<cv::Mat> results = pCjInteractionPipeline->getInteractionResults();
-                            
-                            for (int v = 0; v < results.size(); v++)
-                                resultsTr.push_back( overlap(results[v]) );
-                        }
-                    }
-                }
-            }
-            
-            for (int v = 0; v < pSys->getBackgroundSubtractor()->getNumOfViews(); v++)
-            {
-                cv::Mat R;
-                cv::hconcat(resultsTr, R);
-                
-                cv::Mat f;
-                cv::reduce(R, f, 1, CV_REDUCE_AVG);
-                
-                double minVal, maxVal;
-                cv::Point minPt, maxPt;
-                cv::minMaxLoc(f, &minVal, &maxVal, &minPt, &bestCombIdx);
-            }
+            bestCombIdx = getInteractionBestValidationCombination(multiviewPredictionFilePrefixStr, t);
             
             // Proceed to prediction
             
@@ -766,18 +749,18 @@ int runInteractionPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFr
             
             std::vector<std::vector<float> > multiviewCombinations;
             expandParameters<float>(multiviewParameters, multiviewCombinations);
-            pCjInteractionPipeline->setCorrespondenceCriterion(multiviewCombinations[bestCombIdx.y][0]);
-            pCjInteractionPipeline->setDetectionCorrespondenceThresh(multiviewCombinations[bestCombIdx.y][1]);
-            pCjInteractionPipeline->setInteractionThresh(multiviewCombinations[bestCombIdx.y][2]);
-            pCjInteractionPipeline->setMultiviewLateFusionStrategy(multiviewCombinations[bestCombIdx.y][3]);
-            pCjInteractionPipeline->setMultiviewCorrespondenceThresh(multiviewCombinations[bestCombIdx.y][4]);
+            pCjInteractionPipeline->setCorrespondenceCriterion(multiviewCombinations[bestCombIdx][0]);
+            pCjInteractionPipeline->setDetectionCorrespondenceThresh(multiviewCombinations[bestCombIdx][1]);
+            pCjInteractionPipeline->setInteractionThresh(multiviewCombinations[bestCombIdx][2]);
+            pCjInteractionPipeline->setMultiviewLateFusionStrategy(multiviewCombinations[bestCombIdx][3]);
+            pCjInteractionPipeline->setMultiviewCorrespondenceThresh(multiviewCombinations[bestCombIdx][4]);
             
             for (int r = 0; r < NUM_REPETITIONS; r++)
             {
                 pCjInteractionPipeline->setClassificationPipeline(classificationPipelines[r]);
                 
                 pCjInteractionPipeline->predict();
-                pCjInteractionPipeline->save("interaction_multiview_prediction_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
+                pCjInteractionPipeline->save(multiviewPredictionFilePrefixStr + "_" + boost::lexical_cast<std::string>(t) + "-" + boost::lexical_cast<std::string>(r));
             }
 
         }
