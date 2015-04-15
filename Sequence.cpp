@@ -355,6 +355,32 @@ int SequenceBase<FrameT>::getMinNumOfFrames()
 }
 
 template<typename FrameT>
+int SequenceBase<FrameT>::getMaxNumOfFrames()
+{
+    int max = std::numeric_limits<int>::lowest();
+    for (int v = 0; v < getNumOfViews(); v++)
+    {
+        int numOfFramesOfView = m_Paths[v].size() - m_Delays[v];
+        if (numOfFramesOfView > max)
+            max = numOfFramesOfView;
+    }
+    
+    return max;
+}
+
+
+template<typename FrameT>
+int SequenceBase<FrameT>::getMaxDelay()
+{
+    int max = std::numeric_limits<int>::lowest();
+    for (int v = 0; v < getNumOfViews(); v++)
+        if (m_Delays[v] > max)
+            max = m_Delays[v];
+    
+    return max;
+}
+
+template<typename FrameT>
 void SequenceBase<FrameT>::getNumOfFramesOfViews(vector<int>& numOfFrames)
 {
     for (int v = 0; v < getNumOfViews(); v++)
@@ -991,7 +1017,7 @@ vector<string> Sequence<ColorDepthFrame>::getFramesFilenames()
 
 int Sequence<ColorDepthFrame>::getMinNumOfFrames()
 {
-    int min = INT_MAX;
+    int min = std::numeric_limits<int>::max();
     for (int v = 0; v < getNumOfViews(); v++)
     {
         int numOfFramesOfView = m_Paths[v].size() - m_Delays[v];
@@ -1000,6 +1026,29 @@ int Sequence<ColorDepthFrame>::getMinNumOfFrames()
     }
     
     return min;
+}
+
+int Sequence<ColorDepthFrame>::getMaxNumOfFrames()
+{
+    int max = std::numeric_limits<int>::lowest();
+    for (int v = 0; v < getNumOfViews(); v++)
+    {
+        int numOfFramesOfView = m_Paths[v].size() - m_Delays[v];
+        if (numOfFramesOfView > max)
+            max = numOfFramesOfView;
+    }
+    
+    return max;
+}
+
+int Sequence<ColorDepthFrame>::getMaxDelay()
+{
+    int max = std::numeric_limits<int>::lowest();
+    for (int v = 0; v < getNumOfViews(); v++)
+        if (m_Delays[v] > max)
+            max = m_Delays[v];
+    
+    return max;
 }
 
 void Sequence<ColorDepthFrame>::getNumOfFramesOfViews(vector<int>& numOfFrames)

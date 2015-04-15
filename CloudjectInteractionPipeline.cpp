@@ -56,6 +56,7 @@ CloudjectInteractionPipeline& CloudjectInteractionPipeline::operator=(const Clou
         m_DetectionResults = rhs.m_DetectionResults;
         m_InteractionResults = rhs.m_InteractionResults;
         m_InteractionPredictions = rhs.m_InteractionPredictions;
+        m_InteractionGroundtruth = rhs.m_InteractionGroundtruth;
     }
     return *this;
 }
@@ -208,9 +209,8 @@ void CloudjectInteractionPipeline::validateDetection()
     m_ValPerf = valPerf;
 }
 
-void CloudjectInteractionPipeline::validateInteraction()
+void CloudjectInteractionPipeline::validate()
 {
-    m_InteractionPredictions.clear(); // not used in the validation
     m_InteractionResults.clear();
     
     expandParameters<float>(m_ValParams, m_ValCombs);
@@ -219,13 +219,11 @@ void CloudjectInteractionPipeline::validateInteraction()
     {
         m_InteractionResults.resize(m_pSubtractor->getNumOfViews());
         for (int v = 0; v < m_pSubtractor->getNumOfViews(); v++)
-            m_InteractionResults[v] = cv::Mat(m_ValCombs.size(), m_Categories.size(),
-                                              CV_32FC4, cv::Scalar(0,0,0,0));
+            m_InteractionResults[v] = cv::Mat(m_ValCombs.size(), m_Categories.size(), CV_32FC4);
     }
     else if (m_MultiviewStrategy == DETECT_MULTIVIEW)
     {
-        m_InteractionResults.push_back(cv::Mat(m_ValCombs.size(), m_Categories.size(),
-                                               CV_32FC4, cv::Scalar(0,0,0,0)));
+        m_InteractionResults.push_back(cv::Mat(m_ValCombs.size(), m_Categories.size(), CV_32FC4));
     }
     
     m_ValPerf = 0.f;
@@ -236,9 +234,9 @@ void CloudjectInteractionPipeline::validateInteraction()
         setValidationParametersCombination(m_ValCombs[i]);
         
         if (m_MultiviewStrategy == DETECT_MONOCULAR)
-            predictInteractionMultiview();
+            predictMultiview();
         else if (m_MultiviewStrategy == DETECT_MULTIVIEW)
-            predictInteractionMultiview();
+            predictMultiview();
         
         float ovl = .0f;
         for (int v = 0; v < m_InteractionCombResults.size(); v++)
@@ -282,30 +280,34 @@ std::vector<float> CloudjectInteractionPipeline::getValidationParameterCombinati
     return m_ValCombs[i];
 }
 
-void CloudjectInteractionPipeline::predictInteraction()
+void CloudjectInteractionPipeline::predict()
 {
-    m_InteractionPredictions.clear(); // not used in the validation
     m_InteractionResults.clear();
+    
+    m_InteractionPredictions.clear();
+    m_InteractionGroundtruth.clear();
     
 //    expandParameters<float>(m_ValParams, m_ValCombs);
     
     if (m_MultiviewStrategy == DETECT_MONOCULAR)
     {
-        m_InteractionPredictions.resize(m_pSubtractor->getNumOfViews());
-        
         m_InteractionResults.resize(m_pSubtractor->getNumOfViews());
         for (int v = 0; v < m_pSubtractor->getNumOfViews(); v++)
             m_InteractionResults[v] = cv::Mat(1, m_Categories.size(), CV_32FC4, cv::Scalar(0,0,0,0));
         
-        predictInteractionMonocular();
+        m_InteractionPredictions.resize(m_Sequences.size(), std::vector<cv::Mat>(m_pSubtractor->getNumOfViews()));
+        m_InteractionGroundtruth.resize(m_Sequences.size(), std::vector<cv::Mat>(m_pSubtractor->getNumOfViews()));
+
+        predictMonocular();
     }
     else if (m_MultiviewStrategy == DETECT_MULTIVIEW)
     {
-        m_InteractionPredictions.resize(1);
-        
         m_InteractionResults.push_back(cv::Mat(1, m_Categories.size(), CV_32FC4, cv::Scalar(0,0,0,0)));
         
-        predictInteractionMultiview();
+        m_InteractionPredictions.resize(m_Sequences.size(), std::vector<cv::Mat>(1));
+        m_InteractionGroundtruth.resize(m_Sequences.size(), std::vector<cv::Mat>(1));
+            
+        predictMultiview();
     }
     
     m_Perf = .0f;
@@ -360,12 +362,20 @@ void CloudjectInteractionPipeline::save(std::string filename, std::string extens
     for (int v = 0; v < m_InteractionResults.size(); v++)
         fs << ("interactionResults-" + boost::lexical_cast<std::string>(v)) << m_InteractionResults[v];
     
+    assert (m_InteractionPredictions.size() == m_InteractionGroundtruth.size());
     for (int s = 0; s < m_InteractionPredictions.size(); s++)
+    {
         for (int v = 0; v < m_InteractionPredictions[s].size(); v++)
+        {
             fs << ("interactionPredictions-" + boost::lexical_cast<std::string>(s) + "-" + boost::lexical_cast<std::string>(v)) << m_InteractionPredictions[s][v];
+
+            fs << ("interactionGroundtruth-" + boost::lexical_cast<std::string>(s) + "-" + boost::lexical_cast<std::string>(v)) << m_InteractionGroundtruth[s][v];
+        }
+    }
     
     fs << "valPerf" << m_ValPerf;
     fs << "valIdx" << m_ValIdx;
+    
     fs << "perf" << m_Perf;
     
     fs.release();
@@ -410,6 +420,9 @@ bool CloudjectInteractionPipeline::load(std::string filename, std::string extens
     fs["numSequences"] >> S;
     if (S == 0) S = m_Sequences.size();
     
+    m_InteractionPredictions.resize(S);
+    m_InteractionGroundtruth.resize(S);
+    
     if (m_MultiviewStrategy == DETECT_MULTIVIEW)
     {
         m_LateFusionScalings.resize(V);
@@ -419,13 +432,10 @@ bool CloudjectInteractionPipeline::load(std::string filename, std::string extens
         m_InteractionResults.resize(1);        
         fs["interactionResults-0"] >> m_InteractionResults[0];
         
-        m_InteractionPredictions.resize(S);
         for (int s = 0; s < S; s++)
         {
-            cv::Mat P;
-            fs["interactionPredictions-" + boost::lexical_cast<std::string>(s) + "-0"] >> P;
-            m_InteractionPredictions[s].resize(1);
-            cvx::convert<int>(P, m_InteractionPredictions[s][0]);
+            fs["interactionPredictions-" + boost::lexical_cast<std::string>(s) + "-0"] >> m_InteractionPredictions[s][0];
+            fs["interactionGroundtruth-" + boost::lexical_cast<std::string>(s) + "-0"] >> m_InteractionGroundtruth[s][0];
         }
     }
     else if (m_MultiviewStrategy == DETECT_MONOCULAR)
@@ -434,12 +444,15 @@ bool CloudjectInteractionPipeline::load(std::string filename, std::string extens
         for (int v = 0; v < V; v++)
             fs["interactionResults-" + boost::lexical_cast<std::string>(v)] >> m_InteractionResults[v];
  
-        m_InteractionPredictions.resize(S);
         for (int s = 0; s < S; s++)
         {
             m_InteractionPredictions[s].resize(V);
+            m_InteractionGroundtruth[s].resize(V);
             for (int v = 0; v < V; v++)
+            {
                 fs["interactionPredictions-" + boost::lexical_cast<std::string>(s) + "-" + boost::lexical_cast<std::string>(v)] >> m_InteractionPredictions[s][v];
+                fs["interactionGroundtruth-" + boost::lexical_cast<std::string>(s) + "-" + boost::lexical_cast<std::string>(v)] >> m_InteractionGroundtruth[s][v];
+            }
         }
     }
     
@@ -681,7 +694,7 @@ void CloudjectInteractionPipeline::predictDetectionMultiview()
             fuseCorrespondences(correspondences);
             
             std::vector<int> indices;
-            maxPooling(correspondences, indices);
+            maxMultiviewPooling(correspondences, indices);
             
             // Evaluation
             
@@ -706,7 +719,7 @@ void CloudjectInteractionPipeline::predictDetectionMultiview()
 // Interaction
 //
 
-void CloudjectInteractionPipeline::getActorsFromFrames(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > cloudjects, std::vector<ColorPointCloudPtr>& interactorClouds, std::vector<std::vector<Cloudject::Ptr> >& interactedActorCloudjects, std::vector<std::vector<Cloudject::Ptr> >& freeActorCloudjects)
+void CloudjectInteractionPipeline::getActorsFromFrames(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > cloudjects, std::vector<ColorPointCloudPtr>& interactorClouds, std::vector<std::vector<Cloudject::Ptr> >& interactedActorCloudjects, std::vector<std::vector<Cloudject::Ptr> >& freeActorCloudjects, bool bMultiview)
 {
     interactorClouds.clear();
     interactedActorCloudjects.clear();
@@ -763,11 +776,19 @@ void CloudjectInteractionPipeline::getActorsFromFrames(std::vector<ColorDepthFra
         std::vector<ColorPointCloudPtr> freeActorClouds, interactedActorClouds;
         for (int i = 0; i < actorClouds.size(); i++)
         {
-            bool bIsInteractive = isInteractive(actorClouds[i], interactorClouds[v], m_InteractionThresh);
-            if (!bIsInteractive)
-                freeActorClouds.push_back(actorClouds[i]);
+            bool bIsInteractive = false;
+            if (!bMultiview)
+                // only check in the corresponding view
+                bIsInteractive = isInteractive(actorClouds[i], interactorClouds[v], m_InteractionThresh);
             else
-                interactedActorClouds.push_back(actorClouds[i]);
+            {
+                // or iterate over all the views
+                for (int j = 0; j < interactorClouds.size() && !bIsInteractive; j++)
+                    bIsInteractive = isInteractive(actorClouds[i], interactorClouds[j], m_InteractionThresh);
+            }
+            
+            if (!bIsInteractive) freeActorClouds.push_back(actorClouds[i]);
+            else interactedActorClouds.push_back(actorClouds[i]);
         }
         
         for (int i = 0; i < cloudjects[v].size(); i++)
@@ -792,13 +813,12 @@ void CloudjectInteractionPipeline::detectInteractions(std::vector<std::vector<Cl
         std::vector<std::vector<float> > margins (freeActorCloudjects[v].size());
         for (int i = 0; i < freeActorCloudjects[v].size(); i++)
         {
-            std::vector<int> predictions;
             std::vector<float> distsToMargin;
-            predictions = m_ClassificationPipeline->predict(freeActorCloudjects[v][i], distsToMargin);
+            m_ClassificationPipeline->predict(freeActorCloudjects[v][i], distsToMargin);
             freeActorCloudjects[v][i]->setLikelihoods(distsToMargin);
             
-            for (int j = 0; j < predictions.size(); j++)
-                if (predictions[j] > 0)
+            for (int j = 0; j < m_Categories.size(); j++)
+                if (distsToMargin[j] < 0)
                     freeActorCloudjects[v][i]->addRegionLabel(m_Categories[j]);
             
             margins[i] = distsToMargin;
@@ -807,9 +827,33 @@ void CloudjectInteractionPipeline::detectInteractions(std::vector<std::vector<Cl
         std::vector<int> indices;
         maxPooling(freeActorCloudjects[v], indices);
         
-        std::vector<int> interactionsPr;
         interactionFromNegativeDetections(indices, interactions[v]);
     }
+}
+
+void CloudjectInteractionPipeline::detectMultiviewInteractions(std::vector<std::vector<std::pair<int, Cloudject::Ptr> > > correspondences, std::vector<int>& interactions)
+{
+    interactions.clear();
+    
+    for (int i = 0; i < correspondences.size(); i++)
+    {
+        for (int j = 0; j < correspondences[i].size(); j++)
+        {
+            std::vector<float> distsToMargin;
+            m_ClassificationPipeline->predict(correspondences[i][j].second, distsToMargin);
+            correspondences[i][j].second->setLikelihoods(distsToMargin);
+            
+            for (int k = 0; k < m_Categories.size(); k++)
+                if (distsToMargin[k] < 0) correspondences[i][j].second->addRegionLabel(m_Categories[k]);
+        }
+    }
+    
+    fuseCorrespondences(correspondences);
+    
+    std::vector<int> indices;
+    maxMultiviewPooling(correspondences, indices);
+    
+    interactionFromNegativeDetections(indices, interactions);
 }
 
 void CloudjectInteractionPipeline::findInclusions(std::vector<Cloudject::Ptr> cloudjectsIn, std::vector<ColorPointCloudPtr> cloudsIn, Eigen::Vector3f leafSize, std::vector<Cloudject::Ptr>& cloudjectsOut)
@@ -851,7 +895,7 @@ void CloudjectInteractionPipeline::findInclusions(std::vector<Cloudject::Ptr> cl
     }
 }
 
-void CloudjectInteractionPipeline::predictInteractionMonocular()
+void CloudjectInteractionPipeline::predictMonocular()
 {
     m_InteractionCombResults.clear();
     m_InteractionCombResults.resize(m_pSubtractor->getNumOfViews(), std::vector<Result>(m_Categories.size()));
@@ -868,15 +912,18 @@ void CloudjectInteractionPipeline::predictInteractionMonocular()
         // In prediction tiime (not used in validation timem since m_InteractionPredictions is 0)
         std::vector<int> n;
         m_Sequences[s]->getNumOfFramesOfViews(n);
-        for (int v = 0; v < m_InteractionPredictions[s].size(); v++)
+        for (int v = 0; v < n.size(); v++)
+        {
             m_InteractionPredictions[s][v] = cv::Mat(n[v], m_Categories.size(), cv::DataType<int>::type, cv::Scalar(0));
+            m_InteractionGroundtruth[s][v] = cv::Mat(n[v], m_Categories.size(), cv::DataType<int>::type, cv::Scalar(0));
+        }
         
         int f = 0;
         m_Sequences[s]->restart();
         while (m_Sequences[s]->hasNextFrames())
         {
             vector<ColorDepthFrame::Ptr> frames = m_Sequences[s]->nextFrames();
-
+            
             std::vector<std::vector<Cloudject::Ptr> > cloudjectsF (frames.size());
             for (int v = 0; v < frames.size(); v++)
             {
@@ -895,30 +942,39 @@ void CloudjectInteractionPipeline::predictInteractionMonocular()
             std::vector<std::vector<int> > interactions;
             detectInteractions(freeActorCloudjects, interactions);
             
-            // Output the predictions if m_InteractionPredictions has been initialized outside of this method calling
-            // (this only happens when predicting, not validating)
+            // Evaluation in separate views
+            std::vector<std::vector<Result> > results (frames.size());
+            for (int v = 0; v < frames.size(); v++)
+            {
+                evaluateInteractionInFrame(interactions[v],
+                                           m_IAct.at(m_Sequences[s]->getName()).at(m_Sequences[s]->getViewName(v)).at(frames[v]->getFilename()),
+                                           results[v]);
+            }
+            
+            // Keep track of the results (and if prediction time -- not validation --, store the output and associated gt)
+            for (int v = 0; v < frames.size(); v++)
+                for (int i = 0; i < results[v].size(); i++)
+                    m_InteractionCombResults[v][i] += results[v][i];
+            
             if (!m_InteractionPredictions.empty())
             {
                 std::vector<int> delays = m_Sequences[s]->getDelays();
                 
                 for (int v = 0; v < m_InteractionPredictions[s].size(); v++)
+                {
                     for (int k = 0; k < m_Categories.size(); k++)
+                    {
                         m_InteractionPredictions[s][v].at<int>(f+delays[v], k) = interactions[v][k];
+                        m_InteractionGroundtruth[s][v].at<int>(f+delays[v], k) = m_IAct.at(m_Sequences[s]->getName()).at(m_Sequences[s]->getViewName(v)).at(frames[v]->getFilename())[k];
+                    }
+                }
             }
             
-            // Evaluation in separate views
-            for (int v = 0; v < frames.size(); v++)
-            {
-                std::vector<Result> results;
-                evaluateInteractionInFrame(interactions[v], m_IAct.at(m_Sequences[s]->getName()).at(m_Sequences[s]->getViewName(v)).at(frames[v]->getFilename()), results);
-                for (int i = 0; i < results.size(); i++)
-                    m_InteractionCombResults[v][i] += results[i];
-            }
 #ifdef DEBUG
             for (int v = 0; v < frames.size(); v++)
             {
                 std::vector<int> gt = m_IAct.at(m_Sequences[s]->getName()).at(m_Sequences[s]->getViewName(v)).at(fids[v]);
-                std::copy(gt[f].begin(), gt[f].end(), std::ostream_iterator<int>(std::cout, "\t"));
+                std::copy(gt.begin(), gt.end(), std::ostream_iterator<int>(std::cout, "\t"));
                 std::cout << ", ";
             } std::cout << endl;
             
@@ -928,7 +984,7 @@ void CloudjectInteractionPipeline::predictInteractionMonocular()
                 std::cout << ", ";
             } std::cout << std::endl;
 #endif
-
+            
 #ifdef DEBUG_VISUALIZE_DETECTIONS
             viz.visualize(interactorClouds, interactedActorCloudjects, freeActorCloudjects);
 #endif //DEBUG_VISUALIZE_DETECTIONS
@@ -938,7 +994,7 @@ void CloudjectInteractionPipeline::predictInteractionMonocular()
     }
 }
 
-void CloudjectInteractionPipeline::predictInteractionMultiview()
+void CloudjectInteractionPipeline::predictMultiview()
 {
     m_InteractionCombResults.clear();
     m_InteractionCombResults.resize(1, std::vector<Result>(m_Categories.size()));
@@ -948,18 +1004,13 @@ void CloudjectInteractionPipeline::predictInteractionMultiview()
         std::string resultsParent = string(PARENT_PATH) + string(RESULTS_SUBDIR)
         + m_Sequences[s]->getName() + "/" + string(KINECT_SUBSUBDIR);
         
-        int V = m_Sequences[s]->getNumOfViews();
 #ifdef DEBUG_VISUALIZE_DETECTIONS
         MultiviewVisualizer viz;
         viz.create(V, m_pRegisterer);
-        std::cout << "[" << std::endl;
 #endif
-        
-        std::vector<std::vector<int> > P (m_Sequences[s]->getMinNumOfFrames());
-        std::vector<std::vector<int> > G (m_Sequences[s]->getMinNumOfFrames());
-        
-        std::vector<int> interactionsPrPrev (m_Categories.size(), 0);
-        std::vector<int> interactionsGtPrev (m_Categories.size(), 0);
+        int delay = m_Sequences[s]->getMaxDelay();
+        m_InteractionPredictions[s][0] = cv::Mat(m_Sequences[s]->getMaxNumOfFrames(), m_Categories.size(), cv::DataType<int>::type, cv::Scalar(0));
+        m_InteractionGroundtruth[s][0] = cv::Mat(m_Sequences[s]->getMaxNumOfFrames(), m_Categories.size(), cv::DataType<int>::type, cv::Scalar(0));
         
         int f = 0;
         m_Sequences[s]->restart();
@@ -967,160 +1018,234 @@ void CloudjectInteractionPipeline::predictInteractionMultiview()
         {
             vector<ColorDepthFrame::Ptr> frames = m_Sequences[s]->nextFrames();
             
-            std::vector<cv::Mat> foregroundMasks;
-            m_pSubtractor->setInputFrames(frames);
-            m_pSubtractor->subtract(foregroundMasks);
-            
-            m_pRegisterer->setInputFrames(frames);
-            m_pRegisterer->registrate(frames);
-            
-            std::vector<cv::Mat> tabletopMasks;
-            std::vector<cv::Mat> interactionMasks;
-            m_pTableModeler->getTabletopMask(frames, tabletopMasks);
-            m_pTableModeler->getInteractionMask(frames, interactionMasks);
-            
-            vector<string> fids = m_Sequences[s]->getFramesFilenames();
-            
-            // Prepare the interactors from the different views
-            
-            std::vector<ColorPointCloudPtr> outerInteractionScenes (m_Sequences[s]->getNumOfViews());
-            std::vector<ColorPointCloudPtr> actorScenes (m_Sequences[s]->getNumOfViews());
-            for (int v = 0; v < m_Sequences[s]->getNumOfViews(); v++)
+            std::vector<std::vector<Cloudject::Ptr> > cloudjectsF (frames.size());
+            for (int v = 0; v < frames.size(); v++)
             {
-                cv::Mat outerInteractionMask = interactionMasks[v] & ~tabletopMasks[v];
-                cv::Mat actorsMask = tabletopMasks[v] & foregroundMasks[v];
-                
-                outerInteractionScenes[v] = ColorPointCloudPtr(new ColorPointCloud);
-                actorScenes[v] = ColorPointCloudPtr(new ColorPointCloud);
-                frames[v]->getRegisteredColoredPointCloud(outerInteractionMask, *(outerInteractionScenes[v]));
-                frames[v]->getRegisteredColoredPointCloud(actorsMask, *(actorScenes[v]));
-            }
-            
-            // Distinguish actors from interactors
-            std::vector<ColorPointCloudPtr> interactorClouds (m_Sequences[s]->getNumOfViews());
-            for (int v = 0; v < V; v++)
-            {
-                ColorPointCloudPtr downsampledInteractionScene (new ColorPointCloud);
-                pclx::downsample(outerInteractionScenes[v], Eigen::Vector3f(.01f,.01f,.01f), *downsampledInteractionScene);
-                
-                interactorClouds[v] = ColorPointCloudPtr(new ColorPointCloud);
-                pclx::biggestEuclideanCluster(downsampledInteractionScene, m_InteractionThresh, 100, *(interactorClouds[v]));
-            }
-            
-            std::vector<std::vector<Cloudject::Ptr> > interactedActorCloudjects (m_Sequences[s]->getNumOfViews());
-            std::vector<std::vector<Cloudject::Ptr> > freeActorCloudjects (m_Sequences[s]->getNumOfViews());
-            for (int v = 0; v < V; v++)
-            {
-                ColorPointCloudPtr downsampledActorScene (new ColorPointCloud);
-                pclx::downsample(actorScenes[v], Eigen::Vector3f(.01f,.01f,.01f), *downsampledActorScene);
-                
-                std::vector<ColorPointCloudPtr> actorClouds;
-                pclx::clusterize<pcl::PointXYZRGB>(downsampledActorScene, 2 * .01f, 1, actorClouds);
-                
-                std::vector<ColorPointCloudPtr> freeActorClouds, interactedActorClouds;
-                for (int i = 0; i < actorClouds.size(); i++)
-                {
-                    bool bIsInteractive = false;
-                    for (int j = 0; j < interactorClouds.size() && !bIsInteractive; j++)
-                        bIsInteractive = isInteractive(actorClouds[i], interactorClouds[v], m_InteractionThresh);
-                    
-                    if (!bIsInteractive)
-                        freeActorClouds.push_back(actorClouds[i]);
-                    else
-                        interactedActorClouds.push_back(actorClouds[i]);
-                }
-                
                 // Load cloudjects from disk and set leaf size and registration
                 std::vector<ForegroundRegion> regionsF;
                 remedi::io::readPredictionRegions(resultsParent + string(CLOUDJECTS_DIRNAME)
-                                                  + m_Sequences[s]->getViewName(v), fids[v], regionsF, true);
+                                                  + m_Sequences[s]->getViewName(v), frames[v]->getFilename(), regionsF, true);
                 
-                std::vector<Cloudject::Ptr> cloudjects;
-                remedi::io::readCloudjectsWithDescriptor(resultsParent + string(CLOUDJECTS_DIRNAME) + m_Sequences[s]->getViewName(v), fids[v], regionsF, "pfhrgb250", cloudjects, true);
-                
-                for (int i = 0; i < cloudjects.size(); i++)
-                {
-                    cloudjects[i]->setLeafSize(m_LeafSize);
-                    cloudjects[i]->setRegistrationTransformation(frames[v]->getRegistrationTransformation());
-                }
-                
-                findInclusions(cloudjects, freeActorClouds, m_LeafSize, freeActorCloudjects[v]);
-                findInclusions(cloudjects, interactedActorClouds, m_LeafSize, interactedActorCloudjects[v]);
+                remedi::io::readCloudjectsWithDescriptor(resultsParent + string(CLOUDJECTS_DIRNAME) + m_Sequences[s]->getViewName(v), frames[v]->getFilename(), regionsF, "pfhrgb250", cloudjectsF[v], true);
             }
+            
+            std::vector<ColorPointCloudPtr> interactorClouds;
+            std::vector<std::vector<Cloudject::Ptr> > interactedActorCloudjects, freeActorCloudjects;
+            getActorsFromFrames(frames, cloudjectsF, interactorClouds, interactedActorCloudjects, freeActorCloudjects, true); // true is bMultiview
             
             // Find the correspondences among actor clouds
             std::vector<std::vector<std::pair<int, Cloudject::Ptr> > > correspondences;
-            // Using grids
             std::vector<std::vector<VoxelGridPtr> > grids;
             findCorrespondences(frames, freeActorCloudjects, m_MultiviewCorrespThresh, correspondences, grids); // false (not to registrate)
             
-            for (int i = 0; i < correspondences.size(); i++)
-            {
-                for (int j = 0; j < correspondences[i].size(); j++)
-                {
-                    std::vector<float> distsToMargin;
-                    m_ClassificationPipeline->predict(correspondences[i][j].second, distsToMargin);
-                    correspondences[i][j].second->setLikelihoods(distsToMargin);
-                    
-                    for (int k = 0; k < m_Categories.size(); k++)
-                        if (distsToMargin[k] < 0) correspondences[i][j].second->addRegionLabel(m_Categories[k]);
-                }
-            }
+            std::vector<int> interactions;
+            detectMultiviewInteractions(correspondences, interactions);
             
-            fuseCorrespondences(correspondences);
+            // Evaluation in separate views
             
-            std::vector<int> indices;
-            maxPooling(correspondences, indices);
-            
-            std::vector<int> interactionsPr;
-            interactionFromNegativeDetections(indices, interactionsPr);
-            
-            // Evaluation
-            
-            std::vector<int> interactionsGt (m_Categories.size(), 0);
+            std::vector<int> aggrGt (m_Categories.size(), 0);
             for (int v = 0; v < m_Sequences[s]->getNumOfViews(); v++)
-            {
-                std::vector<int> interactionsViewGt = m_IAct.at(m_Sequences[s]->getName()).at(m_Sequences[s]->getViewName(v)).at(fids[v]);
                 for (int k = 0; k < m_Categories.size(); k++)
-                    interactionsGt[k] = interactionsViewGt[k];
-            }
+                    aggrGt[k] = m_IAct.at(m_Sequences[s]->getName()).at(m_Sequences[s]->getViewName(v)).at(frames[v]->getFilename())[k];
             
             std::vector<Result> results;
-            evaluateInteractionInFrame(interactionsPr, interactionsGt, results);
+            evaluateInteractionInFrame(interactions, aggrGt, results);
+            
+            // Keep track of the results (and if prediction time -- not validation --, store the output and associated gt)
+            
             for (int i = 0; i < results.size(); i++)
                 m_InteractionCombResults[0][i] += results[i];
             
-            cv::Mat interactionsPrBE, interactionsGtBE;
-            if (m_ValInteractionOvlCriterion == INTERACTION_OVL_BEGINEND)
+            if (!m_InteractionPredictions.empty())
             {
-                firstDerivative(interactionsPrPrev, interactionsPr, P[f]);
-                firstDerivative(interactionsGtPrev, interactionsGt, G[f]);
-            }
-            else
-            {
-                P[f] = interactionsPr;
-                G[f] = interactionsGt;
+                for (int k = 0; k < m_Categories.size(); k++)
+                {
+                    m_InteractionPredictions[s][0].at<int>(f+delay, k) = interactions[k];
+                    m_InteractionGroundtruth[s][0].at<int>(f+delay, k) = aggrGt[k];
+                }
             }
             
-            // debug
-            // -----
-//            std::copy(P[f].begin(), P[f].end(), std::ostream_iterator<int>(std::cout, "\t"));
-//            std::cout << ";" << std::endl;
-//            std::copy(G[f].begin(), G[f].end(), std::ostream_iterator<int>(std::cout, "\t"));
-//            std::cout << ";" << std::endl;
-//            std::cout << std::endl;
-            //
+#ifdef DEBUG
+            for (int v = 0; v < frames.size(); v++)
+            {
+                std::copy(aggrGt.begin(), aggrGt.end(), std::ostream_iterator<int>(std::cout, "\t"));
+                std::cout << ", ";
+            } std::cout << endl;
+            
+            for (int v = 0; v < frames.size(); v++)
+            {
+                std::copy(interactions.begin(), interactions.end(), std::ostream_iterator<int>(std::cout, "\t"));
+                std::cout << ", ";
+            } std::cout << std::endl;
+#endif
             
 #ifdef DEBUG_VISUALIZE_DETECTIONS
-            viz.visualize(interactorClouds, interactedActorCloudjects, correspondences);
+            viz.visualize(interactorClouds, interactedActorCloudjects, freeActorCloudjects);
 #endif //DEBUG_VISUALIZE_DETECTIONS
             
-            interactionsPrPrev = interactionsPr;
-            interactionsGtPrev = interactionsGt;
             f++;
         }
     }
 }
+
+//void CloudjectInteractionPipeline::_predictMultiview()
+//{
+//    m_InteractionCombResults.clear();
+//    m_InteractionCombResults.resize(1, std::vector<Result>(m_Categories.size()));
+//    
+//    for (int s = 0; s < m_Sequences.size(); s++)
+//    {
+//        std::string resultsParent = string(PARENT_PATH) + string(RESULTS_SUBDIR)
+//        + m_Sequences[s]->getName() + "/" + string(KINECT_SUBSUBDIR);
+//        
+//        int V = m_Sequences[s]->getNumOfViews();
+//#ifdef DEBUG_VISUALIZE_DETECTIONS
+//        MultiviewVisualizer viz;
+//        viz.create(V, m_pRegisterer);
+//        std::cout << "[" << std::endl;
+//#endif
+//        
+//        std::vector<std::vector<int> > P (m_Sequences[s]->getMinNumOfFrames());
+//        std::vector<std::vector<int> > G (m_Sequences[s]->getMinNumOfFrames());
+//        
+//        std::vector<int> interactionsPrPrev (m_Categories.size(), 0);
+//        std::vector<int> interactionsGtPrev (m_Categories.size(), 0);
+//        
+//        int f = 0;
+//        m_Sequences[s]->restart();
+//        while (m_Sequences[s]->hasNextFrames())
+//        {
+//            vector<ColorDepthFrame::Ptr> frames = m_Sequences[s]->nextFrames();
+//            
+//            std::vector<cv::Mat> foregroundMasks;
+//            m_pSubtractor->setInputFrames(frames);
+//            m_pSubtractor->subtract(foregroundMasks);
+//            
+//            m_pRegisterer->setInputFrames(frames);
+//            m_pRegisterer->registrate(frames);
+//            
+//            std::vector<cv::Mat> tabletopMasks;
+//            std::vector<cv::Mat> interactionMasks;
+//            m_pTableModeler->getTabletopMask(frames, tabletopMasks);
+//            m_pTableModeler->getInteractionMask(frames, interactionMasks);
+//            
+//            vector<string> fids = m_Sequences[s]->getFramesFilenames();
+//            
+//            // Prepare the interactors from the different views
+//            
+//            std::vector<ColorPointCloudPtr> outerInteractionScenes (m_Sequences[s]->getNumOfViews());
+//            std::vector<ColorPointCloudPtr> actorScenes (m_Sequences[s]->getNumOfViews());
+//            for (int v = 0; v < m_Sequences[s]->getNumOfViews(); v++)
+//            {
+//                cv::Mat outerInteractionMask = interactionMasks[v] & ~tabletopMasks[v];
+//                cv::Mat actorsMask = tabletopMasks[v] & foregroundMasks[v];
+//                
+//                outerInteractionScenes[v] = ColorPointCloudPtr(new ColorPointCloud);
+//                actorScenes[v] = ColorPointCloudPtr(new ColorPointCloud);
+//                frames[v]->getRegisteredColoredPointCloud(outerInteractionMask, *(outerInteractionScenes[v]));
+//                frames[v]->getRegisteredColoredPointCloud(actorsMask, *(actorScenes[v]));
+//            }
+//            
+//            // Distinguish actors from interactors
+//            std::vector<ColorPointCloudPtr> interactorClouds (m_Sequences[s]->getNumOfViews());
+//            for (int v = 0; v < V; v++)
+//            {
+//                ColorPointCloudPtr downsampledInteractionScene (new ColorPointCloud);
+//                pclx::downsample(outerInteractionScenes[v], Eigen::Vector3f(.01f,.01f,.01f), *downsampledInteractionScene);
+//                
+//                interactorClouds[v] = ColorPointCloudPtr(new ColorPointCloud);
+//                pclx::biggestEuclideanCluster(downsampledInteractionScene, m_InteractionThresh, 100, *(interactorClouds[v]));
+//            }
+//            
+//            std::vector<std::vector<Cloudject::Ptr> > interactedActorCloudjects (m_Sequences[s]->getNumOfViews());
+//            std::vector<std::vector<Cloudject::Ptr> > freeActorCloudjects (m_Sequences[s]->getNumOfViews());
+//            for (int v = 0; v < V; v++)
+//            {
+//                ColorPointCloudPtr downsampledActorScene (new ColorPointCloud);
+//                pclx::downsample(actorScenes[v], Eigen::Vector3f(.01f,.01f,.01f), *downsampledActorScene);
+//                
+//                std::vector<ColorPointCloudPtr> actorClouds;
+//                pclx::clusterize<pcl::PointXYZRGB>(downsampledActorScene, 2 * .01f, 1, actorClouds);
+//                
+//                std::vector<ColorPointCloudPtr> freeActorClouds, interactedActorClouds;
+//                for (int i = 0; i < actorClouds.size(); i++)
+//                {
+//                    bool bIsInteractive = false;
+//                    for (int j = 0; j < interactorClouds.size() && !bIsInteractive; j++)
+//                        bIsInteractive = isInteractive(actorClouds[i], interactorClouds[v], m_InteractionThresh);
+//                    
+//                    if (!bIsInteractive)
+//                        freeActorClouds.push_back(actorClouds[i]);
+//                    else
+//                        interactedActorClouds.push_back(actorClouds[i]);
+//                }
+//                
+//                // Load cloudjects from disk and set leaf size and registration
+//                std::vector<ForegroundRegion> regionsF;
+//                remedi::io::readPredictionRegions(resultsParent + string(CLOUDJECTS_DIRNAME)
+//                                                  + m_Sequences[s]->getViewName(v), fids[v], regionsF, true);
+//                
+//                std::vector<Cloudject::Ptr> cloudjects;
+//                remedi::io::readCloudjectsWithDescriptor(resultsParent + string(CLOUDJECTS_DIRNAME) + m_Sequences[s]->getViewName(v), fids[v], regionsF, "pfhrgb250", cloudjects, true);
+//                
+//                for (int i = 0; i < cloudjects.size(); i++)
+//                {
+//                    cloudjects[i]->setLeafSize(m_LeafSize);
+//                    cloudjects[i]->setRegistrationTransformation(frames[v]->getRegistrationTransformation());
+//                }
+//                
+//                findInclusions(cloudjects, freeActorClouds, m_LeafSize, freeActorCloudjects[v]);
+//                findInclusions(cloudjects, interactedActorClouds, m_LeafSize, interactedActorCloudjects[v]);
+//            }
+//            
+//            
+//            
+//            // Evaluation
+//            
+//            std::vector<int> interactionsGt (m_Categories.size(), 0);
+//            for (int v = 0; v < m_Sequences[s]->getNumOfViews(); v++)
+//            {
+//                std::vector<int> interactionsViewGt = m_IAct.at(m_Sequences[s]->getName()).at(m_Sequences[s]->getViewName(v)).at(fids[v]);
+//                for (int k = 0; k < m_Categories.size(); k++)
+//                    interactionsGt[k] = interactionsViewGt[k];
+//            }
+//            
+//            std::vector<Result> results;
+//            evaluateInteractionInFrame(interactionsPr, interactionsGt, results);
+//            for (int i = 0; i < results.size(); i++)
+//                m_InteractionCombResults[0][i] += results[i];
+//            
+//            cv::Mat interactionsPrBE, interactionsGtBE;
+//            if (m_ValInteractionOvlCriterion == INTERACTION_OVL_BEGINEND)
+//            {
+//                firstDerivative(interactionsPrPrev, interactionsPr, P[f]);
+//                firstDerivative(interactionsGtPrev, interactionsGt, G[f]);
+//            }
+//            else
+//            {
+//                P[f] = interactionsPr;
+//                G[f] = interactionsGt;
+//            }
+//            
+//            // debug
+//            // -----
+////            std::copy(P[f].begin(), P[f].end(), std::ostream_iterator<int>(std::cout, "\t"));
+////            std::cout << ";" << std::endl;
+////            std::copy(G[f].begin(), G[f].end(), std::ostream_iterator<int>(std::cout, "\t"));
+////            std::cout << ";" << std::endl;
+////            std::cout << std::endl;
+//            //
+//            
+//#ifdef DEBUG_VISUALIZE_DETECTIONS
+//            viz.visualize(interactorClouds, interactedActorCloudjects, correspondences);
+//#endif //DEBUG_VISUALIZE_DETECTIONS
+//            
+//            interactionsPrPrev = interactionsPr;
+//            interactionsGtPrev = interactionsGt;
+//            f++;
+//        }
+//    }
+//}
 
 void downsample(ColorPointCloudPtr pCloud, float leafSize, ColorPointCloud& cloudFiltered)
 {
@@ -1376,7 +1501,7 @@ void CloudjectInteractionPipeline::fuseCorrespondences(const std::vector<std::ve
     }
 }
 
-void CloudjectInteractionPipeline::maxPooling(std::vector<std::vector<std::pair<int, Cloudject::Ptr> > > correspondences, std::vector<int>& indices)
+void CloudjectInteractionPipeline::maxMultiviewPooling(std::vector<std::vector<std::pair<int, Cloudject::Ptr> > > correspondences, std::vector<int>& indices)
 {
     // This functions assumes the likelihoods of correspondences are homongenous
     indices.clear();

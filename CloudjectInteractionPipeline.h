@@ -151,8 +151,8 @@ public:
     void setValidationInteractionOverlapCriterion(int crit);
     
     void validateDetection();
-    void validateInteraction();
-    void predictInteraction();
+    void validate();
+    void predict();
 
     float getValidationPerformance();
     
@@ -212,7 +212,8 @@ private:
     std::vector<cv::Mat> m_InteractionResults; // as many as views, combinations x categories x 4 (channesls)
     
     std::vector<std::vector<cv::Mat> > m_InteractionPredictions; // sequences x views, matrices (of size frames x outputs)
-    
+    std::vector<std::vector<cv::Mat> > m_InteractionGroundtruth; // sequences x views, matrices (of size frames x outputs)
+
     //
     // Private methods
     //
@@ -222,8 +223,8 @@ private:
     void predictDetectionMonocular();
     void predictDetectionMultiview();
     
-    void predictInteractionMonocular();
-    void predictInteractionMultiview();
+    void predictMonocular();
+    void predictMultiview();
     
     void findActors(std::vector<ColorPointCloudPtr> actors, std::vector<ColorPointCloudPtr> interactors, std::vector<ColorPointCloudPtr>& nonInteractedActors, Eigen::Vector3f leafSize, std::vector<ColorPointCloudPtr>& interactedActors);
     void findInteractions(std::vector<ColorPointCloudPtr> candidates, std::vector<ColorPointCloudPtr> interactors, std::vector<bool>& mask, Eigen::Vector3f leafSize);
@@ -233,7 +234,7 @@ private:
     void getDetectionGrids(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > detections, bool bRegistrate, std::vector<std::vector<VoxelGridPtr> >& grids);
     
     void maxPooling(std::vector<Cloudject::Ptr> correspondences, std::vector<int>& indices);
-    void maxPooling(std::vector<std::vector<std::pair<int, Cloudject::Ptr> > > correspondences, std::vector<int>& indices);
+    void maxMultiviewPooling(std::vector<std::vector<std::pair<int, Cloudject::Ptr> > > correspondences, std::vector<int>& indices);
     
     void interactionFromNegativeDetections(std::vector<int> negatives, std::vector<int>& interaction);
     
@@ -253,8 +254,11 @@ private:
     
     void findInclusions(std::vector<Cloudject::Ptr> cloudjectsIn, std::vector<ColorPointCloudPtr> clouds, Eigen::Vector3f leafSize, std::vector<Cloudject::Ptr>& cloudjectsOut);
     
-    void getActorsFromFrames(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > cloudjects, std::vector<ColorPointCloudPtr>& interactorClouds, std::vector<std::vector<Cloudject::Ptr> >& interactedActorCloudjects, std::vector<std::vector<Cloudject::Ptr> >& freeActorCloudjects);
+    void getActorsFromFrames(std::vector<ColorDepthFrame::Ptr> frames, std::vector<std::vector<Cloudject::Ptr> > cloudjects, std::vector<ColorPointCloudPtr>& interactorClouds, std::vector<std::vector<Cloudject::Ptr> >& interactedActorCloudjects, std::vector<std::vector<Cloudject::Ptr> >& freeActorCloudjects, bool bMultiview = false);
+    
     void detectInteractions(std::vector<std::vector<Cloudject::Ptr> > freeActorCloudjects, std::vector<std::vector<int> >& interactions);
+    void detectMultiviewInteractions(std::vector<std::vector<std::pair<int, Cloudject::Ptr> > > correspondences, std::vector<int>& interactions);
+
 };
 
 #endif /* defined(__remedi3__CloudjectInteractionPipeline__) */

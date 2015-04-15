@@ -71,7 +71,10 @@ public:
     vector<typename FrameT::Ptr> getFrames(vector<string> filenames, vector<int>& indices);
     vector<string> getFramesFilenames();
     
+    int getMaxDelay();
     int getMinNumOfFrames();
+    int getMaxNumOfFrames();
+    
     void getNumOfFramesOfViews(vector<int>& numOfFrames);
     int getTotalNumOfFrames();
     vector<int> getCurrentFramesID();
@@ -233,7 +236,10 @@ public:
     vector<ColorDepthFrame::Ptr> getFrames(vector<string> filenames, vector<int>& indices);
     vector<string> getFramesFilenames();
     
+    int getMaxDelay();
     int getMinNumOfFrames();
+    int getMaxNumOfFrames();
+    
     void getNumOfFramesOfViews(vector<int>& numOfFrames);
     vector<int> getCurrentFramesID();
     vector<float> getProgress();
