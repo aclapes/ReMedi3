@@ -921,14 +921,14 @@ int main(int argc, char** argv)
                                (beginFold < endFold) ? endFold : NUM_OF_SUBJECTS,
                                (beginRep < endRep) ? beginRep : 0,
                                (beginRep < endRep) ? endRep : NUM_REPETITIONS,
-                               multiviewStrategy.empty() == 0 ? "all" : multiviewStrategy);
+                               multiviewStrategy.empty() ? "all" : multiviewStrategy);
     if (bDetectionPrediction)
         runDetectionPrediction(pSys, sequences, sequencesSids, gt,
                                (beginFold < endFold) ? beginFold : 0,
                                (beginFold < endFold) ? endFold : NUM_OF_SUBJECTS,
                                (beginRep < endRep) ? beginRep : 0,
                                (beginRep < endRep) ? endRep : NUM_REPETITIONS,
-                               multiviewStrategy.empty() == 0 ? "all" : multiviewStrategy);
+                               multiviewStrategy.empty() ? "all" : multiviewStrategy);
     
     Interaction iact;
     remedi::loadInteraction(sequences, objectsLabels, iact); // interaction groundtruth indicating just the begin-end of interactions
@@ -939,14 +939,14 @@ int main(int argc, char** argv)
                                  (beginFold < endFold) ? endFold : NUM_OF_SUBJECTS,
                                  (beginRep < endRep) ? beginRep : 0,
                                  (beginRep < endRep) ? endRep : NUM_REPETITIONS,
-                                 multiviewStrategy.empty() == 0 ? "all" : multiviewStrategy);
+                                 multiviewStrategy.empty() ? "all" : multiviewStrategy);
     if (bInteractionPrediction)
         runInteractionPrediction(pSys, sequences, sequencesSids, gt, iact,
                                  (beginFold < endFold) ? beginFold : 0,
                                  (beginFold < endFold) ? endFold : NUM_OF_SUBJECTS,
                                  (beginRep < endRep) ? beginRep : 0,
                                  (beginRep < endRep) ? endRep : NUM_REPETITIONS,
-                                 multiviewStrategy.empty() == 0 ? "all" : multiviewStrategy);
+                                 multiviewStrategy.empty() ? "all" : multiviewStrategy);
     
     return 0;
 }
