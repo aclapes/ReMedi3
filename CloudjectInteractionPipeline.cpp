@@ -913,7 +913,7 @@ void CloudjectInteractionPipeline::predictMonocular()
         viz.create(V, m_pRegisterer);
 #endif
         // In prediction tiime (not used in validation timem since m_InteractionPredictions is 0)
-        if (!)m_InteractionPredictions.empty())
+        if (!m_InteractionPredictions.empty())
         {
             std::vector<int> n;
             m_Sequences[s]->getNumOfFramesOfViews(n);
