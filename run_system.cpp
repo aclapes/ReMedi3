@@ -876,6 +876,7 @@ int runFilteringValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
 
 int runFilteringPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> sequencesSids, const Groundtruth& gt, const Interaction& iact)
 {
+	return 0;
 }
 
 int main(int argc, char** argv)
