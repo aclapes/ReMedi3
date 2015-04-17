@@ -495,8 +495,8 @@ int runInteractionValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFr
     mvLateFusionStrategies += ((int)CloudjectInteractionPipeline::MULTIVIEW_LF_OR), ((int)CloudjectInteractionPipeline::MULTIVIEW_LFSCALE_DEV), ((int)CloudjectInteractionPipeline::MULTIVIEW_LF_FURTHEST);
     mvCorrespThreshs += 1.f/objectsLabels.size(); //0.05, 1.f/objectsLabels.size(), 2.f/objectsLabels.size();
     
-    std::string monocularValidationFilePrefixStr = "interaction_monocular_validation";
-    std::string multiviewValidationFilePrefixStr = "interaction_multiview_validation";
+    std::string monocularValidationFilePrefixStr = "interaction_validations/interaction_monocular_validation";
+    std::string multiviewValidationFilePrefixStr = "interaction_validations/interaction_multiview_validation";
     
     boost::timer timer;
     
@@ -699,8 +699,8 @@ int runInteractionPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFr
     std::vector<std::vector<float> > multiviewParameters;
     multiviewParameters += detectionThreshs, correspCriteria, interactionThreshs, mvLateFusionStrategies, mvCorrespThreshs;
     
-    std::string monocularPredictionFilePrefixStr = "interaction_monocular_prediction";
-    std::string multiviewPredictionFilePrefixStr = "interaction_multiview_prediction";
+    std::string monocularPredictionFilePrefixStr = "interaction_predictions/interaction_monocular_prediction";
+    std::string multiviewPredictionFilePrefixStr = "interaction_predictions/interaction_multiview_prediction";
     
     bool bSuccess;
     for (int t = beginFold; t < endFold; t++)
@@ -804,6 +804,72 @@ int runInteractionPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFr
     return 0;
 }
 
+int runFilteringValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> sequencesSids, const Groundtruth& gt, const Interaction& iact)
+{
+    std::vector<float> positiveBridgeFiltering, negativeBridgeFiltering, medianSizes, openCloseSizes;
+    positiveBridgeFiltering += 0, 1;
+    negativeBridgeFiltering += 0, 1;
+    medianSizes += 3, 5, 7;
+    openCloseSizes += 0, -2, -1, 1, 2; // negative is closing, and positive for opening sizes
+    
+    std::vector<std::vector<float> > filteringParameters;
+    filteringParameters += positiveBridgeFiltering, negativeBridgeFiltering, medianSizes, openCloseSizes;
+    
+    std::string monocularPredictionFilePrefixStr = "interaction_predictions/interaction_monocular_prediction";
+    std::string multiviewPredictionFilePrefixStr = "interaction_predictions/interaction_multiview_prediction";
+    
+    cv::FileStorage fs;
+
+    for (int t = 0; t < NUM_OF_SUBJECTS; t++)
+    {
+        std::cout << "Interaction filtering in fold " << t << " (LOSOCV) .." << std::endl;
+        
+        // Monocular
+        
+        std::vector<std::vector<std::vector<cv::Mat> > > predictionsTr; // #{folds*reps} x #{fold's sequences} x #{views}
+        std::vector<std::vector<std::vector<cv::Mat> > > groundtruthTr;
+        
+        for (int tt = 0; tt < NUM_OF_SUBJECTS; tt++)
+        {
+            if (tt != t)
+            {
+                for (int r = 0; r < NUM_REPETITIONS; r++)
+                {
+                    std::string path = monocularPredictionFilePrefixStr + "_" + boost::lexical_cast<std::string>(tt) + "-" + boost::lexical_cast<std::string>(r) + ".yml";
+                    fs.open(path, cv::FileStorage::READ);
+
+                    int numOfSequencesInFold;
+                    fs["numSequences"] >> numOfSequencesInFold;
+                    
+                    if (!fs.isOpened())
+                    {
+                        std::cerr << path << " not found" << std::endl;
+                    }
+                    else
+                    {
+                        std::vector<std::vector<cv::Mat> > predictionsFoldRepTr (numOfSequencesInFold, std::vector<cv::Mat>(pSys->getBackgroundSubtractor()->getNumOfViews()));
+                        for (int s = 0; s < numOfSequencesInFold; s++)
+                            for (int v = 0; v < pSys->getBackgroundSubtractor()->getNumOfViews(); v++)
+                                fs[ "interactionPredictions_"
+                                    + boost::lexical_cast<std::string>(s) + "-"
+                                    + boost::lexical_cast<std::string>(v) ] >> predictionsFoldRepTr[s][v];
+                        predictionsTr.push_back(predictionsFoldRepTr);
+                    }
+                    fs.release();
+                }
+            }
+        }
+        
+        // Multiview
+    }
+    
+    return 0;
+}
+
+int runFilteringPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> sequencesSids, const Groundtruth& gt, const Interaction& iact)
+{
+}
+
 int main(int argc, char** argv)
 {
     std::cout.precision(3);
@@ -814,7 +880,8 @@ int main(int argc, char** argv)
     
     bool bClassificationTrain, bClassificationPrediction,
         bDetectionValidation, bDetectionPrediction,
-        bInteractionValidation, bInteractionPrediction;
+        bInteractionValidation, bInteractionPrediction,
+        bFilteringValidation, bFilteringPrediction;
     
     bClassificationTrain      = (pcl::console::find_argument(argc, argv, "-Ct") >= 0);
     bClassificationPrediction = (pcl::console::find_argument(argc, argv, "-Cp") >= 0);
@@ -822,6 +889,8 @@ int main(int argc, char** argv)
     bDetectionPrediction      = (pcl::console::find_argument(argc, argv, "-Dp") >= 0);
     bInteractionValidation    = (pcl::console::find_argument(argc, argv, "-Iv") >= 0);
     bInteractionPrediction    = (pcl::console::find_argument(argc, argv, "-Ip") >= 0);
+    bFilteringValidation      = (pcl::console::find_argument(argc, argv, "-Lv") >= 0);
+    bFilteringPrediction      = (pcl::console::find_argument(argc, argv, "-Lp") >= 0);
     
     int beginFold = 0, endFold = 0;
     pcl::console::parse_2x_arguments(argc, argv, "-F", beginFold, endFold);
@@ -947,6 +1016,12 @@ int main(int argc, char** argv)
                                  (beginRep < endRep) ? beginRep : 0,
                                  (beginRep < endRep) ? endRep : NUM_REPETITIONS,
                                  multiviewStrategy.empty() ? "all" : multiviewStrategy);
+    
+    if (bFilteringValidation)
+        runFilteringValidation(pSys, sequences, sequencesSids, gt, iact);
+
+    if (bFilteringPrediction)
+        runFilteringPrediction(pSys, sequences, sequencesSids, gt, iact);
     
     return 0;
 }
