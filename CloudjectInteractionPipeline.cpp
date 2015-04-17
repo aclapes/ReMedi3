@@ -437,6 +437,9 @@ bool CloudjectInteractionPipeline::load(std::string filename, std::string extens
         
         for (int s = 0; s < S; s++)
         {
+            m_InteractionPredictions[s].resize(1);
+            m_InteractionGroundtruth[s].resize(1);
+            
             fs["interactionPredictions-" + boost::lexical_cast<std::string>(s) + "-0"] >> m_InteractionPredictions[s][0];
             fs["interactionGroundtruth-" + boost::lexical_cast<std::string>(s) + "-0"] >> m_InteractionGroundtruth[s][0];
         }

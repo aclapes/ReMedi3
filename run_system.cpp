@@ -848,12 +848,20 @@ int runFilteringValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
                     else
                     {
                         std::vector<std::vector<cv::Mat> > predictionsFoldRepTr (numOfSequencesInFold, std::vector<cv::Mat>(pSys->getBackgroundSubtractor()->getNumOfViews()));
+                        std::vector<std::vector<cv::Mat> > groundtruthFoldRepTr (numOfSequencesInFold, std::vector<cv::Mat>(pSys->getBackgroundSubtractor()->getNumOfViews()));
+
                         for (int s = 0; s < numOfSequencesInFold; s++)
+                        {
                             for (int v = 0; v < pSys->getBackgroundSubtractor()->getNumOfViews(); v++)
-                                fs[ "interactionPredictions_"
-                                    + boost::lexical_cast<std::string>(s) + "-"
+                            {
+                                fs[ "interactionPredictions-" + boost::lexical_cast<std::string>(s) + "-"
                                     + boost::lexical_cast<std::string>(v) ] >> predictionsFoldRepTr[s][v];
+                                fs[ "interactionGroundtruth-" + boost::lexical_cast<std::string>(s) + "-"
+                                   + boost::lexical_cast<std::string>(v) ] >> groundtruthFoldRepTr[s][v];
+                            }
+                        }
                         predictionsTr.push_back(predictionsFoldRepTr);
+                        groundtruthTr.push_back(groundtruthFoldRepTr);
                     }
                     fs.release();
                 }
