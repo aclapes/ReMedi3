@@ -713,6 +713,11 @@ void computeConfidenceInterval(cv::Mat values, float* mean, float* confidence, f
 //    }
 //}
 
+float computeOverlap(int tp, int fn, int fp)
+{
+    return ((float) tp) / (tp + fp + fn);
+}
+
 float computeF1Score(int tp, int fn, int fp)
 {
     return (2.f * tp) / (2.f * tp + fp + fn);

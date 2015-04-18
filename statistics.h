@@ -90,6 +90,7 @@ void narrow(cv::Mat coarse, cv::Mat goodnesses, int steps, int* discrete, cv::Ma
 void computeConfidenceInterval(cv::Mat values, float* mean, float* confidence, float alpha = 0.05);
 //void computeConfidenceInterval(GridMat values, cv::Mat& mean, cv::Mat& confidence, float alpha = 0.05);
 
+float computeOverlap(int tp, int fn, int fp);
 float computeF1Score(int tp, int fn, int fp);
 void computeF1Score(cv::Mat tp, cv::Mat fn, cv::Mat fp, cv::Mat& fscore);
 

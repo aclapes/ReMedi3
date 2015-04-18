@@ -19,6 +19,7 @@
 #include "features.h"
 #include "CloudjectSVMClassificationPipeline.h"
 #include "CloudjectInteractionPipeline.h"
+#include "InteractionFilteringPipeline.h"
 
 #include <pcl/console/parse.h>
 
@@ -806,14 +807,11 @@ int runInteractionPrediction(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFr
 
 int runFilteringValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFrame>::Ptr> sequences, std::vector<int> sequencesSids, const Groundtruth& gt, const Interaction& iact)
 {
-    std::vector<float> positiveBridgeFiltering, negativeBridgeFiltering, medianSizes, openCloseSizes;
-    positiveBridgeFiltering += 0, 1;
-    negativeBridgeFiltering += 0, 1;
-    medianSizes += 3, 5, 7;
+    std::vector<float> bridges, cleans, medianSizes, openCloseSizes;
+    bridges += 0, 1;
+    cleans += 0, 1;
+    medianSizes += 0, 1, 2, 3;
     openCloseSizes += 0, -2, -1, 1, 2; // negative is closing, and positive for opening sizes
-    
-    std::vector<std::vector<float> > filteringParameters;
-    filteringParameters += positiveBridgeFiltering, negativeBridgeFiltering, medianSizes, openCloseSizes;
     
     std::string monocularPredictionFilePrefixStr = "interaction_predictions/interaction_monocular_prediction";
     std::string multiviewPredictionFilePrefixStr = "interaction_predictions/interaction_multiview_prediction";
@@ -826,8 +824,10 @@ int runFilteringValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
         
         // Monocular
         
-        std::vector<std::vector<std::vector<cv::Mat> > > predictionsTr; // #{folds*reps} x #{fold's sequences} x #{views}
-        std::vector<std::vector<std::vector<cv::Mat> > > groundtruthTr;
+        int bestCombIdx;
+        
+        std::vector<std::vector<cv::Mat> > predictionsFoldRepTr (pSys->getBackgroundSubtractor()->getNumOfViews());
+        std::vector<std::vector<cv::Mat> > groundtruthFoldRepTr (pSys->getBackgroundSubtractor()->getNumOfViews());
         
         for (int tt = 0; tt < NUM_OF_SUBJECTS; tt++)
         {
@@ -847,26 +847,47 @@ int runFilteringValidation(ReMedi::Ptr pSys, std::vector<Sequence<ColorDepthFram
                     }
                     else
                     {
-                        std::vector<std::vector<cv::Mat> > predictionsFoldRepTr (numOfSequencesInFold, std::vector<cv::Mat>(pSys->getBackgroundSubtractor()->getNumOfViews()));
-                        std::vector<std::vector<cv::Mat> > groundtruthFoldRepTr (numOfSequencesInFold, std::vector<cv::Mat>(pSys->getBackgroundSubtractor()->getNumOfViews()));
-
                         for (int s = 0; s < numOfSequencesInFold; s++)
                         {
                             for (int v = 0; v < pSys->getBackgroundSubtractor()->getNumOfViews(); v++)
                             {
+                                cv::Mat p, g;
                                 fs[ "interactionPredictions-" + boost::lexical_cast<std::string>(s) + "-"
-                                    + boost::lexical_cast<std::string>(v) ] >> predictionsFoldRepTr[s][v];
+                                   + boost::lexical_cast<std::string>(v) ] >> p;
                                 fs[ "interactionGroundtruth-" + boost::lexical_cast<std::string>(s) + "-"
-                                   + boost::lexical_cast<std::string>(v) ] >> groundtruthFoldRepTr[s][v];
+                                   + boost::lexical_cast<std::string>(v) ] >> g;
+                                
+                                predictionsFoldRepTr[v].push_back(p);
+                                groundtruthFoldRepTr[v].push_back(g);
                             }
                         }
-                        predictionsTr.push_back(predictionsFoldRepTr);
-                        groundtruthTr.push_back(groundtruthFoldRepTr);
                     }
+                    
                     fs.release();
                 }
             }
         }
+        
+        InteractionFilteringPipeline::Ptr pFilteringPipeline (new InteractionFilteringPipeline);
+        pFilteringPipeline->setInputData(predictionsFoldRepTr);
+        pFilteringPipeline->setInputGroundtruth(groundtruthFoldRepTr);
+        pFilteringPipeline->setEvaluationMetric(InteractionFilteringPipeline::EVALUATE_OVERLAP);
+        pFilteringPipeline->setValidationParameters(bridges, cleans, medianSizes, openCloseSizes);
+        pFilteringPipeline->validate();
+        
+        // Results
+        std::vector<std::vector<float> > combinations;
+        std::vector<float> performances;
+        pFilteringPipeline->getValidationResults(combinations, performances);
+        
+        std::cout << cv::Mat(performances) << std::endl;
+        
+        double minVal, maxVal;
+        cv::Point minPt, maxPt;
+        cv::minMaxLoc(performances, &minVal, &maxVal, &minPt, &maxPt);
+        
+        bestCombIdx = maxPt.y;
+
         
         // Multiview
     }
